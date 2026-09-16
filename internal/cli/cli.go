@@ -1,4 +1,4 @@
-// Package cli implementa la interfaz de línea de comandos de taskd.
+// Package cli implementa la interfaz de línea de comandos de tsk.
 // Todos los comandos devuelven JSON en stdout y errores en stderr.
 package cli
 
@@ -33,42 +33,42 @@ func Run(args []string) bool {
 		cmdList(args[1:])
 	case "show":
 		if len(args) < 2 {
-			outputError("usage: taskd show <id>")
+			outputError("usage: tsk show <id>")
 		}
 		cmdShow(args[1])
 	case "update":
 		if len(args) < 2 {
-			outputError("usage: taskd update <id> [--title ...] [--description ...] [--priority N] [--assignee @name]")
+			outputError("usage: tsk update <id> [--title ...] [--description ...] [--priority N] [--assignee @name]")
 		}
 		cmdUpdate(args[1:])
 	case "move":
 		if len(args) < 3 {
-			outputError("usage: taskd move <id> <status>")
+			outputError("usage: tsk move <id> <status>")
 		}
 		cmdMove(args[1], args[2])
 	case "start":
 		if len(args) < 2 {
-			outputError("usage: taskd start <id>")
+			outputError("usage: tsk start <id>")
 		}
 		cmdStart(args[1])
 	case "review":
 		if len(args) < 2 {
-			outputError("usage: taskd review <id>")
+			outputError("usage: tsk review <id>")
 		}
 		cmdReview(args[1])
 	case "done":
 		if len(args) < 2 {
-			outputError("usage: taskd done <id>")
+			outputError("usage: tsk done <id>")
 		}
 		cmdDone(args[1])
 	case "cancel":
 		if len(args) < 2 {
-			outputError("usage: taskd cancel <id>")
+			outputError("usage: tsk cancel <id>")
 		}
 		cmdCancel(args[1])
 	case "reorder":
 		if len(args) < 3 {
-			outputError("usage: taskd reorder <id> <position>")
+			outputError("usage: tsk reorder <id> <position>")
 		}
 		cmdReorder(args[1], args[2])
 	case "stats":
@@ -126,7 +126,7 @@ func openDB() *db.DB {
 
 func cmdProject(args []string) {
 	if len(args) == 0 {
-		outputError("usage: taskd project (add|list|show|update|remove) ...")
+		outputError("usage: tsk project (add|list|show|update|remove) ...")
 	}
 	switch args[0] {
 	case "add":
@@ -135,17 +135,17 @@ func cmdProject(args []string) {
 		cmdProjectList(args[1:])
 	case "show":
 		if len(args) < 2 {
-			outputError("usage: taskd project show <name> [--json]")
+			outputError("usage: tsk project show <name> [--json]")
 		}
 		cmdProjectShow(args[1:])
 	case "update":
 		if len(args) < 2 {
-			outputError("usage: taskd project update <name> [--workflow ...] [--path ...]")
+			outputError("usage: tsk project update <name> [--workflow ...] [--path ...]")
 		}
 		cmdProjectUpdate(args[1:])
 	case "remove":
 		if len(args) < 2 {
-			outputError("usage: taskd project remove <name>")
+			outputError("usage: tsk project remove <name>")
 		}
 		cmdProjectRemove(args[1])
 	default:
@@ -155,7 +155,7 @@ func cmdProject(args []string) {
 
 func cmdProjectAdd(args []string) {
 	if len(args) == 0 {
-		outputError("usage: taskd project add <name> [--path ...] [--workflow ...]")
+		outputError("usage: tsk project add <name> [--path ...] [--workflow ...]")
 	}
 	name := args[0]
 	var path, workflow string
@@ -338,7 +338,7 @@ func cmdProjectRemove(name string) {
 
 func cmdAdd(args []string) {
 	if len(args) == 0 {
-		outputError("usage: taskd add <title> --project X [--priority N] [--assignee @name] [--status S]")
+		outputError("usage: tsk add <title> --project X [--priority N] [--assignee @name] [--status S]")
 	}
 
 	title := args[0]
@@ -674,12 +674,12 @@ func cmdCompletion(args []string) {
 	case "fish":
 		fmt.Print(fishCompletion)
 	default:
-		outputError("usage: taskd completion (bash|zsh|fish)")
+		outputError("usage: tsk completion (bash|zsh|fish)")
 	}
 }
 
 const bashCompletion = `#!/bin/bash
-_taskd_completions() {
+_tsk_completions() {
     local cur prev commands
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
@@ -704,77 +704,77 @@ _taskd_completions() {
     COMPREPLY=( $(compgen -W "${commands}" -- ${cur}) )
     return 0
 }
-complete -F _taskd_completions taskd
+complete -F _tsk_completions tsk
 `
 
-const zshCompletion = `#compdef taskd
+const zshCompletion = `#compdef tsk
 
-_taskd() {
+_tsk() {
     _arguments \
         '1:command:(project add list show update move start review done cancel reorder stats migrate completion help)' \
         '*::arg:->args'
 }
 
-_taskd "$@"
+_tsk "$@"
 `
 
-const fishCompletion = `complete -c taskd -f
-complete -c taskd -n '__fish_use_subcommand' -a project -d 'Manage projects'
-complete -c taskd -n '__fish_use_subcommand' -a add -d 'Create a task'
-complete -c taskd -n '__fish_use_subcommand' -a list -d 'List tasks'
-complete -c taskd -n '__fish_use_subcommand' -a show -d 'Show task detail'
-complete -c taskd -n '__fish_use_subcommand' -a update -d 'Update task metadata'
-complete -c taskd -n '__fish_use_subcommand' -a move -d 'Move task to status'
-complete -c taskd -n '__fish_use_subcommand' -a start -d 'Start a task'
-complete -c taskd -n '__fish_use_subcommand' -a review -d 'Move to review'
-complete -c taskd -n '__fish_use_subcommand' -a done -d 'Complete a task'
-complete -c taskd -n '__fish_use_subcommand' -a cancel -d 'Cancel a task'
-complete -c taskd -n '__fish_use_subcommand' -a reorder -d 'Reorder task'
-complete -c taskd -n '__fish_use_subcommand' -a stats -d 'Show statistics'
-complete -c taskd -n '__fish_use_subcommand' -a migrate -d 'Run migrations'
-complete -c taskd -n '__fish_use_subcommand' -a completion -d 'Generate shell completions'
-complete -c taskd -n '__fish_use_subcommand' -a help -d 'Show help'
-complete -c taskd -l json -d 'Output as JSON'
-complete -c taskd -l project -d 'Filter by project'
-complete -c taskd -l priority -d 'Set priority (0-3)'
-complete -c taskd -l assignee -d 'Set assignee'
-complete -c taskd -l status -d 'Filter by status'
+const fishCompletion = `complete -c tsk -f
+complete -c tsk -n '__fish_use_subcommand' -a project -d 'Manage projects'
+complete -c tsk -n '__fish_use_subcommand' -a add -d 'Create a task'
+complete -c tsk -n '__fish_use_subcommand' -a list -d 'List tasks'
+complete -c tsk -n '__fish_use_subcommand' -a show -d 'Show task detail'
+complete -c tsk -n '__fish_use_subcommand' -a update -d 'Update task metadata'
+complete -c tsk -n '__fish_use_subcommand' -a move -d 'Move task to status'
+complete -c tsk -n '__fish_use_subcommand' -a start -d 'Start a task'
+complete -c tsk -n '__fish_use_subcommand' -a review -d 'Move to review'
+complete -c tsk -n '__fish_use_subcommand' -a done -d 'Complete a task'
+complete -c tsk -n '__fish_use_subcommand' -a cancel -d 'Cancel a task'
+complete -c tsk -n '__fish_use_subcommand' -a reorder -d 'Reorder task'
+complete -c tsk -n '__fish_use_subcommand' -a stats -d 'Show statistics'
+complete -c tsk -n '__fish_use_subcommand' -a migrate -d 'Run migrations'
+complete -c tsk -n '__fish_use_subcommand' -a completion -d 'Generate shell completions'
+complete -c tsk -n '__fish_use_subcommand' -a help -d 'Show help'
+complete -c tsk -l json -d 'Output as JSON'
+complete -c tsk -l project -d 'Filter by project'
+complete -c tsk -l priority -d 'Set priority (0-3)'
+complete -c tsk -l assignee -d 'Set assignee'
+complete -c tsk -l status -d 'Filter by status'
 `
 
 func cmdHelp() {
 	commands := map[string]string{
-		"taskd":                                         "launch the TUI (default when no arguments)",
-		"taskd project add <name> [--path] [--workflow]": "register a project",
-		"taskd project list":                            "list all projects",
-		"taskd project show <name>":                     "show project detail + workflow",
-		"taskd project update <name> [--workflow]":      "update project",
-		"taskd project remove <name>":                   "delete project + tasks",
-		"taskd add <title> --project X [--priority N] [--assignee @name]": "create a task",
-		"taskd list [--project X] [--status S] [--assignee A]":           "list tasks",
-		"taskd show <id>":                               "show task detail",
-		"taskd update <id> [--title] [--description] [--priority N] [--assignee @name]": "update task metadata",
-		"taskd move <id> <status>":                      "move task to a specific status",
-		"taskd start <id>":                              "move task to 2nd workflow status",
-		"taskd review <id>":                             "move task to review status",
-		"taskd done <id>":                               "move task to terminal status",
-		"taskd cancel <id>":                             "cancel a task",
-		"taskd reorder <id> <position>":                 "reorder task within column",
-		"taskd stats [--project X]":                     "show statistics",
-		"taskd migrate":                                 "run pending migrations",
+		"tsk":                                         "launch the TUI (default when no arguments)",
+		"tsk project add <name> [--path] [--workflow]": "register a project",
+		"tsk project list":                            "list all projects",
+		"tsk project show <name>":                     "show project detail + workflow",
+		"tsk project update <name> [--workflow]":      "update project",
+		"tsk project remove <name>":                   "delete project + tasks",
+		"tsk add <title> --project X [--priority N] [--assignee @name]": "create a task",
+		"tsk list [--project X] [--status S] [--assignee A]":           "list tasks",
+		"tsk show <id>":                               "show task detail",
+		"tsk update <id> [--title] [--description] [--priority N] [--assignee @name]": "update task metadata",
+		"tsk move <id> <status>":                      "move task to a specific status",
+		"tsk start <id>":                              "move task to 2nd workflow status",
+		"tsk review <id>":                             "move task to review status",
+		"tsk done <id>":                               "move task to terminal status",
+		"tsk cancel <id>":                             "cancel a task",
+		"tsk reorder <id> <position>":                 "reorder task within column",
+		"tsk stats [--project X]":                     "show statistics",
+		"tsk migrate":                                 "run pending migrations",
 	}
 
 	// Group by category
 	projectCmds := []string{}
 	taskCmds := []string{}
 	for cmd := range commands {
-		if strings.HasPrefix(cmd, "taskd project") {
+		if strings.HasPrefix(cmd, "tsk project") {
 			projectCmds = append(projectCmds, cmd)
 		} else {
 			taskCmds = append(taskCmds, cmd)
 		}
 	}
 
-	fmt.Println("taskd — Task Manager TUI + CLI")
+	fmt.Println("tsk — Task Manager TUI + CLI")
 	fmt.Println("")
 	fmt.Println("Projects:")
 	for _, cmd := range projectCmds {

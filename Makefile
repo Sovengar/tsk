@@ -1,6 +1,6 @@
 BINARY  := tsk
 BINDIR  := $(HOME)/.local/bin
-PKG     := ./cmd/taskd
+PKG     := ./cmd/tsk
 
 .PHONY: all test build install clean
 

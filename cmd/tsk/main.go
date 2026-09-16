@@ -1,4 +1,4 @@
-// taskd — Task Manager TUI + CLI para IA.
+// tsk — Task Manager TUI + CLI para IA.
 //
 // Gestor de tareas diseñado para programadores que trabajan en 1-3
 // proyectos simultáneamente, con integración total vía CLI para agentes IA.
