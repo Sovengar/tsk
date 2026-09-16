@@ -1,0 +1,45 @@
+package db
+
+// schemaV1 es el schema inicial de la base de datos.
+const schemaV1 = `
+CREATE TABLE IF NOT EXISTS _meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS projects (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    path       TEXT NOT NULL,
+    workflow   TEXT NOT NULL DEFAULT '["backlog","todo","in_progress","review","done"]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS tasks (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id   INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    title        TEXT NOT NULL,
+    description  TEXT NOT NULL DEFAULT '',
+    status       TEXT NOT NULL DEFAULT 'backlog',
+    priority     INTEGER NOT NULL DEFAULT 0,
+    assignee     TEXT NOT NULL DEFAULT '',
+    position     INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_project ON tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_project_status ON tasks(project_id, status);
+CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority DESC);
+`
+
+// migrations es la lista de migraciones en orden.
+var migrations = []struct {
+	version string
+	query   string
+}{
+	{"001", schemaV1},
+}
