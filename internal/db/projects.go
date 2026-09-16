@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"taskd/internal/model"
+	"tsk/internal/model"
 )
 
 // CreateProject registra un proyecto nuevo.

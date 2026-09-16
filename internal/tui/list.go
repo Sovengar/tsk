@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"taskd/internal/model"
+	"tsk/internal/model"
 )
 
 // renderList renderiza la vista List.

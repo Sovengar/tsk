@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"taskd/internal/tui/bordered"
+	"tsk/internal/tui/bordered"
 )
 
 // StatusBar renderiza los keybinds en un pane con bordes.

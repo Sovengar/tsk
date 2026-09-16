@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"taskd/internal/model"
+	"tsk/internal/model"
 )
 
 // renderDetail renderiza el modal de detalle de tarea.

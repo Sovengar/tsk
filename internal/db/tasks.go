@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"taskd/internal/model"
+	"tsk/internal/model"
 )
 
 // CreateTask crea una tarea nueva.

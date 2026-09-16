@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Project representa un proyecto registrado en taskd.
+// Project representa un proyecto registrado en tsk.
 type Project struct {
 	ID        int64  `json:"id"`
 	Name      string `json:"name"`

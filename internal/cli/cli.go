@@ -10,9 +10,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"taskd/internal/config"
-	"taskd/internal/db"
-	"taskd/internal/model"
+	"tsk/internal/config"
+	"tsk/internal/db"
+	"tsk/internal/model"
 )
 
 // Run es el punto de entrada del CLI. Devuelve true si manejó un

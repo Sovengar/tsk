@@ -69,16 +69,16 @@ func (db *DB) Conn() *sql.DB {
 	return db.conn
 }
 
-// DefaultPath devuelve la ruta por defecto de la base de datos: ~/.local/share/taskd/taskd.db
+// DefaultPath devuelve la ruta por defecto de la base de datos: ~/.local/share/tsk/tsk.db
 func DefaultPath() (string, error) {
 	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
-		return filepath.Join(x, "taskd", "taskd.db"), nil
+		return filepath.Join(x, "tsk", "tsk.db"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".local", "share", "taskd", "taskd.db"), nil
+	return filepath.Join(home, ".local", "share", "tsk", "tsk.db"), nil
 }
 
 // migrate ejecuta las migraciones pendientes.

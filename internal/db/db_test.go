@@ -3,7 +3,7 @@ package db
 import (
 	"testing"
 
-	"taskd/internal/model"
+	"tsk/internal/model"
 )
 
 // --- Projects ---

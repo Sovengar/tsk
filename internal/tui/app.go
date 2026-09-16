@@ -2,9 +2,9 @@ package tui
 
 import (
 	tea "charm.land/bubbletea/v2"
-	"taskd/internal/config"
-	"taskd/internal/db"
-	"taskd/internal/model"
+	"tsk/internal/config"
+	"tsk/internal/db"
+	"tsk/internal/model"
 )
 
 // Model es el modelo principal de la TUI.

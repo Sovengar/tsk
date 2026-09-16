@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"taskd/internal/model"
+	"tsk/internal/model"
 )
 
 // editorFinishedMsg se envía cuando el editor termina (edición).

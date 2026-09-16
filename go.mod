@@ -1,4 +1,4 @@
-module taskd
+module tsk
 
 go 1.26.3
 

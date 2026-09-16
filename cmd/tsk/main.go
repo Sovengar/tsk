@@ -10,10 +10,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"taskd/internal/cli"
-	"taskd/internal/config"
-	"taskd/internal/db"
-	"taskd/internal/tui"
+	"tsk/internal/cli"
+	"tsk/internal/config"
+	"tsk/internal/db"
+	"tsk/internal/tui"
 )
 
 func main() {
@@ -28,21 +28,21 @@ func main() {
 		var err error
 		dbPath, err = db.DefaultPath()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "taskd:", err)
+			fmt.Fprintln(os.Stderr, "tsk:", err)
 			os.Exit(1)
 		}
 	}
 
 	database, err := db.Open(dbPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "taskd:", err)
+		fmt.Fprintln(os.Stderr, "tsk:", err)
 		os.Exit(1)
 	}
 	defer database.Close()
 
 	model := tui.New(database, cfg)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "taskd:", err)
+		fmt.Fprintln(os.Stderr, "tsk:", err)
 		os.Exit(1)
 	}
 }
