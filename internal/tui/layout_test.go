@@ -1,6 +1,12 @@
 package tui
 
-import "testing"
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/charmbracelet/x/ansi"
+)
 
 func TestVisibleRange(t *testing.T) {
 	tests := []struct {
@@ -97,5 +103,31 @@ func TestLineCount(t *testing.T) {
 func TestSingleLineCollapsesNewlines(t *testing.T) {
 	if got := singleLine("hola\nque tal"); got != "hola que tal" {
 		t.Errorf("singleLine = %q, want %q", got, "hola que tal")
+	}
+}
+
+// TestCellWidthIgnoresAnsi verifica que el relleno se mida en columnas de
+// pantalla y no en bytes: una celda con color mide igual que una sin color.
+// Este es el bug que desalineaba la tabla de la List.
+func TestCellWidthIgnoresAnsi(t *testing.T) {
+	styled := stylePriorityHigh.Render("●") + " H"
+
+	if got := ansi.StringWidth(cellWidth(styled, 10)); got != 10 {
+		t.Errorf("cellWidth → ancho %d, want 10", got)
+	}
+	if got := ansi.Strip(cellWidth(styled, 10)); !strings.HasPrefix(got, "● H") {
+		t.Errorf("cellWidth alteró el contenido: %q", got)
+	}
+
+	// Premisa del bug: %-Ns de fmt cuenta bytes, así que la celda coloreada no
+	// llega a las 10 columnas y corre todo lo que viene después.
+	if got := ansi.StringWidth(fmt.Sprintf("%-10s", styled)); got != 3 {
+		t.Errorf("premisa inválida: %%-10s midió %d columnas, se esperaba 3", got)
+	}
+}
+
+func TestCellWidthTruncates(t *testing.T) {
+	if got := cellWidth("una palabra larga", 8); got != "una pa.." {
+		t.Errorf("cellWidth = %q, want %q", got, "una pa..")
 	}
 }

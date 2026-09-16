@@ -34,6 +34,21 @@ func truncateLines(s string, width int) string {
 	return strings.Join(lines, "\n")
 }
 
+// cellWidth ajusta un texto al ancho de display indicado: lo trunca con ".." si
+// sobra y lo rellena con espacios si falta. Mide columnas de pantalla, no bytes,
+// así que las celdas con color (ANSI) quedan alineadas con las que no. Es lo que
+// reemplaza a %-Ns de fmt, que cuenta bytes y desalinea las celdas coloreadas.
+func cellWidth(s string, width int) string {
+	if width < 1 {
+		return ""
+	}
+	s = ansi.Truncate(s, width, "..")
+	if pad := width - ansi.StringWidth(s); pad > 0 {
+		s += strings.Repeat(" ", pad)
+	}
+	return s
+}
+
 // contentBudget calcula las filas disponibles para el contenido de la vista
 // descontando el preview y la barra de keybinds.
 func contentBudget(total, previewH, keybindsH int) int {

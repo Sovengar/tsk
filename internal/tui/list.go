@@ -15,6 +15,54 @@ import (
 // de columnas.
 const listFixedRows = 6
 
+// listColumn es una columna de la tabla de la List. Los anchos son de display
+// (columnas de pantalla), no bytes.
+type listColumn struct {
+	header string
+	width  int
+}
+
+// listColumns define las columnas en orden. Cuando el ancho no alcanza para
+// todas se descartan desde el final, así que Description es la primera en caer.
+var listColumns = []listColumn{
+	{"Priority", 10},
+	{"Status", 12},
+	{"Assignee", 12},
+	{"Title", 24},
+	{"Description", 40},
+}
+
+// visibleListColumns devuelve cuántas columnas entran en el ancho disponible.
+// Siempre deja al menos una para no dejar la tabla vacía.
+func visibleListColumns(avail int) int {
+	used := 0
+	count := 0
+	for i, col := range listColumns {
+		need := col.width
+		if i > 0 {
+			need++ // espacio separador
+		}
+		if used+need > avail {
+			break
+		}
+		used += need
+		count++
+	}
+	if count < 1 {
+		count = 1
+	}
+	return count
+}
+
+// formatListRow alinea las celdas de una fila a los anchos de cada columna.
+func formatListRow(cells []string, count int) string {
+	parts := make([]string, count)
+	for i := 0; i < count; i++ {
+		parts[i] = cellWidth(cells[i], listColumns[i].width)
+	}
+	return strings.Join(parts, " ")
+}
+
 // renderList renderiza la vista List dentro del alto disponible.
 func (m *Model) renderList(maxHeight int) string {
 	w := m.width
@@ -25,9 +73,15 @@ func (m *Model) renderList(maxHeight int) string {
 	// Filter bar
 	filterBar := m.renderFilterBar()
 
-	// Column headers (el ID no se muestra como columna)
-	headers := fmt.Sprintf("%-10s %-12s %-12s %-24s %-40s", "Priority", "Status", "Assignee", "Title", "Description")
-	headerLine := styleColumnHeader.Render(headers)
+	// Columnas que entran en el ancho disponible. Si no alcanza para todas, las
+	// últimas se descartan (Description primero) en vez de cortarse a la mitad.
+	cols := visibleListColumns(innerW - 2) // -2 por el prefijo "> " / "  "
+
+	headerCells := make([]string, len(listColumns))
+	for i, col := range listColumns {
+		headerCells[i] = col.header
+	}
+	headerLine := styleColumnHeader.Render("  " + formatListRow(headerCells, cols))
 
 	sep2 := styleSep.Render(strings.Repeat("─", innerW-2))
 
@@ -48,9 +102,14 @@ func (m *Model) renderList(maxHeight int) string {
 	for i := start; i < end; i++ {
 		t := tasks[i]
 		prio := priorityChar(t.Priority) + " " + model.PriorityShortLabel(t.Priority)
-		desc := truncate(singleLine(t.Description), 40)
-		title := truncate(singleLine(t.Title), 24)
-		line := fmt.Sprintf("%-10s %-12s %-12s %-24s %-40s", prio, t.Status, t.Assignee, title, desc)
+		cells := []string{
+			prio,
+			t.Status,
+			t.Assignee,
+			singleLine(t.Title),
+			singleLine(t.Description),
+		}
+		line := formatListRow(cells, cols)
 
 		if i == m.cursor {
 			line = styleSelected.Render("> " + line)

@@ -12,7 +12,7 @@ import (
 
 const (
 	// previewMaxLines es el máximo de líneas de descripción que muestra el preview.
-	previewMaxLines = 6
+	previewMaxLines = 25
 	// previewIndent es la indentación del contenido dentro de la caja.
 	previewIndent = 2
 )

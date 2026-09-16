@@ -105,3 +105,106 @@ func TestRenderListFitsNarrowWidth(t *testing.T) {
 		}
 	}
 }
+
+// TestVisibleListColumns verifica cuántas columnas entran según el ancho
+// disponible: las últimas se descartan primero.
+func TestVisibleListColumns(t *testing.T) {
+	tests := []struct {
+		name  string
+		avail int
+		want  int
+	}{
+		{name: "entran todas", avail: 126, want: 5},
+		{name: "borde exacto con Description", avail: 102, want: 5},
+		{name: "se cae Description", avail: 101, want: 4},
+		{name: "borde exacto sin Description", avail: 61, want: 4},
+		{name: "se cae Title", avail: 60, want: 3},
+		{name: "muy angosto", avail: 10, want: 1},
+		{name: "más angosto que la primera", avail: 5, want: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := visibleListColumns(tt.avail); got != tt.want {
+				t.Errorf("visibleListColumns(%d) = %d, want %d", tt.avail, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestRenderListHidesDescriptionWhenNarrow verifica que la columna Description
+// se omita entera cuando no entra, en vez de cortarse a la mitad.
+func TestRenderListHidesDescriptionWhenNarrow(t *testing.T) {
+	m := newTestModel(t)
+	m, _ = press(m, "2")
+
+	wide := ansi.Strip(m.renderList(m.height))
+	if !strings.Contains(wide, "Description") {
+		t.Fatalf("con ancho %d debería verse Description:\n%s", m.width, wide)
+	}
+
+	m.width = 80
+	narrow := ansi.Strip(m.renderList(m.height))
+	if strings.Contains(narrow, "Descr") {
+		t.Errorf("con ancho 80 Description debería estar oculta:\n%s", narrow)
+	}
+	if !strings.Contains(narrow, "Title") {
+		t.Errorf("con ancho 80 Title debería seguir visible:\n%s", narrow)
+	}
+}
+
+// TestRenderListColumnsAligned verifica que el valor de cada fila arranque en la
+// misma columna de pantalla que su header. Acá se sumaban dos bugs: el padding
+// de fmt cuenta bytes (y la celda de prioridad lleva ANSI), y el header no
+// llevaba el prefijo de 2 columnas que sí llevan las filas.
+func TestRenderListColumnsAligned(t *testing.T) {
+	m := newTestModel(t)
+	m, _ = press(m, "2")
+	m.width = 130 // entran todas las columnas
+
+	lines := strings.Split(ansi.Strip(m.renderList(m.height)), "\n")
+
+	headerIdx := -1
+	for i, l := range lines {
+		if strings.Contains(l, "Description") {
+			headerIdx = i
+			break
+		}
+	}
+	if headerIdx < 0 {
+		t.Fatal("no se encontró la cabecera de la tabla")
+	}
+	header := lines[headerIdx]
+
+	// Columnas con valor no vacío en todas las tareas del fixture.
+	columns := []string{"Priority", "Status", "Assignee", "Title"}
+
+	rows := 0
+	for _, l := range lines[headerIdx+1:] {
+		if strings.HasPrefix(l, "╰") {
+			break
+		}
+		if strings.Contains(l, "─") {
+			continue // separador
+		}
+		rows++
+		for _, col := range columns {
+			off := displayColumn(header, col)
+			if cell := ansi.Cut(l, off, off+1); cell == " " || cell == "" {
+				t.Errorf("columna %s desalineada (vacía en la columna %d):\n%s", col, off, l)
+			}
+		}
+	}
+	if rows == 0 {
+		t.Fatal("no se renderizó ninguna fila de tarea")
+	}
+}
+
+// displayColumn devuelve la columna de pantalla donde arranca substr en line.
+func displayColumn(line, substr string) int {
+	idx := strings.Index(line, substr)
+	if idx < 0 {
+		return -1
+	}
+	return ansi.StringWidth(line[:idx])
+}

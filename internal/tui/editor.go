@@ -184,7 +184,11 @@ func (m *Model) updateTaskFromEdit(taskID int64, content string) tea.Cmd {
 		if err != nil {
 			return nil
 		}
-		return m.loadTasks()
+		tasks, err := m.database.ListTasks("", "", "")
+		if err != nil {
+			return nil
+		}
+		return tasksLoadedMsg{tasks: tasks}
 	}
 }
 
@@ -210,7 +214,11 @@ func (m *Model) createTaskFromEdit(projectName, content string) tea.Cmd {
 		if err != nil {
 			return nil
 		}
-		return m.loadTasks()
+		tasks, err := m.database.ListTasks("", "", "")
+		if err != nil {
+			return nil
+		}
+		return tasksLoadedMsg{tasks: tasks}
 	}
 }
 

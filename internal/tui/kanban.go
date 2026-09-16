@@ -211,9 +211,9 @@ func (m *Model) renderKanbanColumn(col kanbanColumn, width int, headerText strin
 		t := col.tasks[j]
 		var card string
 		if col.showPriority {
-			card = fmt.Sprintf("  %d  %s %s\n     %s", t.ID, priorityChar(t.Priority), t.Title, t.Assignee)
+			card = fmt.Sprintf("  %s %s\n     %s", priorityChar(t.Priority), t.Title, t.Assignee)
 		} else {
-			card = fmt.Sprintf("  %d  %s\n     %s", t.ID, t.Title, t.Assignee)
+			card = fmt.Sprintf("  %s\n     %s", t.Title, t.Assignee)
 		}
 		// Recortar a width-4 (bordes + prefijo) para que ninguna línea de la
 		// tarjeta exceda el ancho interior: si lo hiciera, lipgloss la
