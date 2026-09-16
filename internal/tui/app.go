@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	tea "charm.land/bubbletea/v2"
 	"tsk/internal/config"
 	"tsk/internal/db"
@@ -11,22 +13,23 @@ import (
 type Model struct {
 	width, height int
 
-	database   *db.DB
-	config     config.Config
-	projects   []model.Project
-	tasks      []model.Task
-	filteredT  []model.Task // cached filtered tasks
+	database  *db.DB
+	config    config.Config
+	projects  []model.Project
+	tasks     []model.Task
+	filteredT []model.Task // cached filtered tasks
 
 	currentView viewKind
 	cursor      int
+	pageSize    int // tareas por página en la vista List
 
 	// Filters
-	filterProject   string
-	filterStatus    string
-	filterAssignee  string
-	filterPriority  int // -1 = all
-	filterActive    bool
-	filterText      string
+	filterProject    string
+	filterStatus     string
+	filterAssignee   string
+	filterPriority   int // -1 = all
+	filterActive     bool
+	filterText       string
 	filterActiveOnly bool // ocultar done/cancelled por defecto
 
 	// Kanban state
@@ -44,33 +47,42 @@ type Model struct {
 	helpOpen bool
 
 	// Filter modal
-	filterOpen    bool
+	filterOpen     bool
 	filterFieldIdx int // 0=project, 1=status, 2=assignee, 3=priority
 
 	// New task modal
-	newTaskOpen             bool
-	newTaskTitle            string
-	newTaskPriority         int
-	newTaskAssignee         string
-	newTaskAssigneeSuggIdx  int // -1 = none selected
-	newTaskProject          string
-	newTaskFieldIdx         int // 0=title, 1=priority, 2=assignee
+	newTaskOpen            bool
+	newTaskTitle           string
+	newTaskPriority        int
+	newTaskAssignee        string
+	newTaskAssigneeSuggIdx int // -1 = none selected
+	newTaskProject         string
+	newTaskFieldIdx        int // 0=title, 1=priority, 2=assignee
 
-	// StatusBar
-	statusbar StatusBar
+	// KeybindsBar
+	statusbar KeybindsBar
+
+	// Preview de la tarea seleccionada
+	preview PreviewBar
 }
 
 // New construye el modelo con la base de datos.
 func New(database *db.DB, cfg config.Config) Model {
+	pageSize := cfg.ListPageSize
+	if pageSize <= 0 {
+		pageSize = config.DefaultPageSize
+	}
 	return Model{
 		database:         database,
 		config:           cfg,
 		currentView:      viewList,
 		filterPriority:   -1,
 		filterActiveOnly: true,
+		pageSize:         pageSize,
 		width:            80,
 		height:           24,
-		statusbar:        NewStatusBar(80),
+		statusbar:        NewKeybindsBar(80),
+		preview:          NewPreviewBar(80),
 	}
 }
 
@@ -102,6 +114,17 @@ func (m *Model) loadTasks() tea.Cmd {
 		if err != nil {
 			return tasksLoadedMsg{}
 		}
+		return tasksLoadedMsg{tasks: tasks}
+	}
+}
+
+// taskActionCmd ejecuta una acción sobre una tarea y recarga el listado.
+func (m Model) taskActionCmd(id int64, action func(int64) (*model.Task, error)) tea.Cmd {
+	return func() tea.Msg {
+		if _, err := action(id); err != nil {
+			return nil
+		}
+		tasks, _ := m.database.ListTasks("", "", "")
 		return tasksLoadedMsg{tasks: tasks}
 	}
 }
@@ -159,6 +182,73 @@ func (m *Model) filteredTasks() []model.Task {
 
 func (m *Model) invalidateFilterCache() {
 	m.filteredT = nil
+	m.clampListCursor()
+}
+
+// listPageSize devuelve el tamaño de página efectivo de la vista List.
+func (m *Model) listPageSize() int {
+	if m.pageSize <= 0 {
+		return config.DefaultPageSize
+	}
+	return m.pageSize
+}
+
+// totalPages devuelve el número de páginas (mínimo 1, aunque no haya tareas).
+func (m *Model) totalPages() int {
+	size := m.listPageSize()
+	total := len(m.filteredTasks())
+	pages := (total + size - 1) / size
+	if pages < 1 {
+		pages = 1
+	}
+	return pages
+}
+
+// currentPage devuelve el índice de página (0-based) que contiene al cursor.
+func (m *Model) currentPage() int {
+	return m.cursor / m.listPageSize()
+}
+
+// pageBounds devuelve el rango [start, end) de tareas que forman la página actual.
+func (m *Model) pageBounds() (int, int) {
+	size := m.listPageSize()
+	total := len(m.filteredTasks())
+	start := m.currentPage() * size
+	if start > total {
+		start = total
+	}
+	end := start + size
+	if end > total {
+		end = total
+	}
+	return start, end
+}
+
+// pageLegend describe el rango de la página: "1-10 of 306 · Page 1/31".
+func (m *Model) pageLegend() string {
+	total := len(m.filteredTasks())
+	start, end := m.pageBounds()
+	first := 0
+	if total > 0 {
+		first = start + 1
+	}
+	return fmt.Sprintf("%d-%d of %d · Page %d/%d",
+		first, end, total, m.currentPage()+1, m.totalPages())
+}
+
+// clampListCursor mantiene el cursor dentro de las tareas filtradas.
+func (m *Model) clampListCursor() {
+	total := len(m.filteredTasks())
+	if total == 0 {
+		m.cursor = 0
+		return
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+	if m.cursor >= total {
+		m.cursor = total - 1
+	}
 }
 
 // ---- Init / Update / View ----
@@ -173,6 +263,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.statusbar.SetWidth(msg.Width)
+		m.preview.SetWidth(msg.Width)
 		return m, nil
 
 	case projectsLoadedMsg:
@@ -267,6 +358,7 @@ func (m Model) handleDashboardKey(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
+	m.clampListCursor()
 	tasks := m.filteredTasks()
 
 	switch key {
@@ -275,12 +367,23 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		m.currentView = m.currentView.next()
 		return m, m.loadTasks()
 	case "j", "down":
-		if len(tasks) > 0 {
-			m.cursor = (m.cursor + 1) % len(tasks)
+		if _, end := m.pageBounds(); m.cursor < end-1 {
+			m.cursor++
 		}
 	case "k", "up":
-		if len(tasks) > 0 {
-			m.cursor = (m.cursor - 1 + len(tasks)) % len(tasks)
+		if start, _ := m.pageBounds(); m.cursor > start {
+			m.cursor--
+		}
+	case "N":
+		// Página siguiente: saltar al primer elemento de la próxima página.
+		start := m.currentPage() * m.listPageSize()
+		if next := start + m.listPageSize(); next < len(tasks) {
+			m.cursor = next
+		}
+	case "P":
+		// Página anterior: saltar al primer elemento de la página previa.
+		if start := m.currentPage() * m.listPageSize(); start > 0 {
+			m.cursor = start - m.listPageSize()
 		}
 	case "e":
 		// Edit task in nvim
@@ -296,42 +399,18 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		}
 	case "s":
 		// Start: move to next status
-		if len(tasks) > 0 && m.cursor < len(tasks) {
-			t := tasks[m.cursor]
-			return m, func() tea.Msg {
-				_, err := m.database.StartTask(t.ID)
-				if err != nil {
-					return nil
-				}
-				tasks, _ := m.database.ListTasks("", "", "")
-				return tasksLoadedMsg{tasks: tasks}
-			}
+		if m.cursor < len(tasks) {
+			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.StartTask)
 		}
 	case "d":
 		// Done
-		if len(tasks) > 0 && m.cursor < len(tasks) {
-			t := tasks[m.cursor]
-			return m, func() tea.Msg {
-				_, err := m.database.DoneTask(t.ID)
-				if err != nil {
-					return nil
-				}
-				tasks, _ := m.database.ListTasks("", "", "")
-				return tasksLoadedMsg{tasks: tasks}
-			}
+		if m.cursor < len(tasks) {
+			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.DoneTask)
 		}
 	case "x":
 		// Cancel
-		if len(tasks) > 0 && m.cursor < len(tasks) {
-			t := tasks[m.cursor]
-			return m, func() tea.Msg {
-				_, err := m.database.CancelTask(t.ID)
-				if err != nil {
-					return nil
-				}
-				tasks, _ := m.database.ListTasks("", "", "")
-				return tasksLoadedMsg{tasks: tasks}
-			}
+		if m.cursor < len(tasks) {
+			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.CancelTask)
 		}
 	case "/":
 		// Open filter modal
@@ -343,12 +422,18 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
-	workflow := m.mergedWorkflow()
+	m.clampKanbanCursor()
+
+	cols := m.kanbanColumns()
+	if len(cols) == 0 {
+		return m, nil
+	}
+	colTasks := cols[m.kanbanCol].tasks
 
 	switch key {
 	case "tab":
 		// Cycle through columns
-		m.kanbanCol = (m.kanbanCol + 1) % len(workflow)
+		m.kanbanCol = (m.kanbanCol + 1) % len(cols)
 		m.kanbanRow = 0
 	case "h", "left":
 		if m.kanbanCol > 0 {
@@ -356,83 +441,47 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 			m.kanbanRow = 0
 		}
 	case "l", "right":
-		if m.kanbanCol < len(workflow)-1 {
+		if m.kanbanCol < len(cols)-1 {
 			m.kanbanCol++
 			m.kanbanRow = 0
 		}
 	case "j", "down":
-		colTasks := m.tasksInColumn(workflow[m.kanbanCol])
 		if len(colTasks) > 0 {
 			m.kanbanRow = (m.kanbanRow + 1) % len(colTasks)
 		}
 	case "k", "up":
-		colTasks := m.tasksInColumn(workflow[m.kanbanCol])
 		if len(colTasks) > 0 {
 			m.kanbanRow = (m.kanbanRow - 1 + len(colTasks)) % len(colTasks)
 		}
 	case "s":
 		// Move task right (advance status)
-		colTasks := m.tasksInColumn(workflow[m.kanbanCol])
-		if len(colTasks) > 0 && m.kanbanRow < len(colTasks) {
+		if m.kanbanRow < len(colTasks) {
 			t := colTasks[m.kanbanRow]
-			nextStatus, ok := model.NextStatus(workflow, t.Status)
-			if ok {
-				return m, func() tea.Msg {
-					_, err := m.database.MoveTask(t.ID, nextStatus)
-					if err != nil {
-						return nil
-					}
-					tasks, _ := m.database.ListTasks("", "", "")
-					return tasksLoadedMsg{tasks: tasks}
-				}
+			if nextStatus, ok := model.NextStatus(m.mergedWorkflow(), t.Status); ok {
+				return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
+					return m.database.MoveTask(id, nextStatus)
+				})
 			}
 		}
 	case "S":
 		// Move task left (retreat status)
-		colTasks := m.tasksInColumn(workflow[m.kanbanCol])
-		if len(colTasks) > 0 && m.kanbanRow < len(colTasks) {
+		if m.kanbanRow < len(colTasks) {
 			t := colTasks[m.kanbanRow]
-			prevStatus, ok := model.PrevStatus(workflow, t.Status)
-			if ok {
-				return m, func() tea.Msg {
-					_, err := m.database.MoveTask(t.ID, prevStatus)
-					if err != nil {
-						return nil
-					}
-					tasks, _ := m.database.ListTasks("", "", "")
-					return tasksLoadedMsg{tasks: tasks}
-				}
+			if prevStatus, ok := model.PrevStatus(m.mergedWorkflow(), t.Status); ok {
+				return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
+					return m.database.MoveTask(id, prevStatus)
+				})
 			}
 		}
 	case "d":
 		// Done
-		colTasks := m.tasksInColumn(workflow[m.kanbanCol])
-		if len(colTasks) > 0 && m.kanbanRow < len(colTasks) {
-			t := colTasks[m.kanbanRow]
-			return m, tea.Batch(
-				func() tea.Msg {
-					_, err := m.database.DoneTask(t.ID)
-					if err != nil {
-						return nil
-					}
-					return m.loadTasks()
-				},
-			)
+		if m.kanbanRow < len(colTasks) {
+			return m, m.taskActionCmd(colTasks[m.kanbanRow].ID, m.database.DoneTask)
 		}
 	case "x":
 		// Cancel
-		colTasks := m.tasksInColumn(workflow[m.kanbanCol])
-		if len(colTasks) > 0 && m.kanbanRow < len(colTasks) {
-			t := colTasks[m.kanbanRow]
-			return m, tea.Batch(
-				func() tea.Msg {
-					_, err := m.database.CancelTask(t.ID)
-					if err != nil {
-						return nil
-					}
-					return m.loadTasks()
-				},
-			)
+		if m.kanbanRow < len(colTasks) {
+			return m, m.taskActionCmd(colTasks[m.kanbanRow].ID, m.database.CancelTask)
 		}
 	case "e":
 		// Edit task in nvim
@@ -441,8 +490,7 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 		// New task
 		return m, m.newTask()
 	case "enter":
-		colTasks := m.tasksInColumn(workflow[m.kanbanCol])
-		if len(colTasks) > 0 && m.kanbanRow < len(colTasks) {
+		if m.kanbanRow < len(colTasks) {
 			t := colTasks[m.kanbanRow]
 			m.detailOpen = true
 			m.detailTask = &t
@@ -489,42 +537,21 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 			id := m.detailTask.ID
 			m.detailOpen = false
 			m.detailTask = nil
-			return m, func() tea.Msg {
-				_, err := m.database.StartTask(id)
-				if err != nil {
-					return nil
-				}
-				tasks, _ := m.database.ListTasks("", "", "")
-				return tasksLoadedMsg{tasks: tasks}
-			}
+			return m, m.taskActionCmd(id, m.database.StartTask)
 		}
 	case "d":
 		if m.detailTask != nil {
 			id := m.detailTask.ID
 			m.detailOpen = false
 			m.detailTask = nil
-			return m, func() tea.Msg {
-				_, err := m.database.DoneTask(id)
-				if err != nil {
-					return nil
-				}
-				tasks, _ := m.database.ListTasks("", "", "")
-				return tasksLoadedMsg{tasks: tasks}
-			}
+			return m, m.taskActionCmd(id, m.database.DoneTask)
 		}
 	case "x":
 		if m.detailTask != nil {
 			id := m.detailTask.ID
 			m.detailOpen = false
 			m.detailTask = nil
-			return m, func() tea.Msg {
-				_, err := m.database.CancelTask(id)
-				if err != nil {
-					return nil
-				}
-				tasks, _ := m.database.ListTasks("", "", "")
-				return tasksLoadedMsg{tasks: tasks}
-			}
+			return m, m.taskActionCmd(id, m.database.CancelTask)
 		}
 	}
 	return m, nil
@@ -542,21 +569,67 @@ func (m Model) uniqueAssignees() []string {
 	return result
 }
 
+// selectedTask devuelve la tarea seleccionada en la vista actual, o nil si no hay.
+func (m *Model) selectedTask() *model.Task {
+	switch m.currentView {
+	case viewList:
+		tasks := m.filteredTasks()
+		if m.cursor >= 0 && m.cursor < len(tasks) {
+			return &tasks[m.cursor]
+		}
+	case viewKanban:
+		cols := m.kanbanColumns()
+		if m.kanbanCol < 0 || m.kanbanCol >= len(cols) {
+			break
+		}
+		tasks := cols[m.kanbanCol].tasks
+		if m.kanbanRow >= 0 && m.kanbanRow < len(tasks) {
+			return &tasks[m.kanbanRow]
+		}
+	}
+	return nil
+}
+
+// previewBudget calcula cuántas líneas de descripción puede mostrar el preview
+// sin empujar el contenido ni los keybinds fuera de la pantalla.
+func (m Model) previewBudget(keybindsHeight int) int {
+	budget := m.height - keybindsHeight - minContentHeight - 2 // 2 = bordes de la caja
+	if budget < 1 {
+		budget = 1
+	}
+	if budget > previewMaxLines {
+		budget = previewMaxLines
+	}
+	return budget
+}
+
 func (m Model) View() tea.View {
+	// KeybindsBar siempre al fondo.
+	m.statusbar.SetView(m.currentView)
+	keybinds := m.statusbar.View()
+	keybindsHeight := lineCount(keybinds)
+
+	// El preview se ajusta al alto sobrante para no empujar los keybinds.
+	m.preview.SetTask(m.selectedTask())
+	m.preview.SetMaxLines(m.previewBudget(keybindsHeight))
+	preview := m.preview.View()
+
+	budget := contentBudget(m.height, lineCount(preview), keybindsHeight)
+
 	var content string
 	switch m.currentView {
 	case viewDashboard:
-		content = m.renderDashboard()
-	case viewList:
-		content = m.renderList()
+		content = m.renderDashboard(budget)
 	case viewKanban:
-		content = m.renderKanban()
+		content = m.renderKanban(budget)
+	case viewList:
+		content = m.renderList(budget)
 	default:
-		content = m.renderDashboard()
+		content = m.renderDashboard(budget)
 	}
 
 	if m.detailOpen && m.detailTask != nil {
-		content = m.renderDetail(m.detailTask)
+		content = m.renderDetail(m.detailTask, budget)
 	}
 
 	if m.filterOpen {
@@ -571,11 +644,7 @@ func (m Model) View() tea.View {
 		content = m.renderHelpModal(content)
 	}
 
-	// StatusBar always at the bottom
-	m.statusbar.SetView(m.currentView)
-	statusBar := m.statusbar.View()
-
-	v := tea.NewView(content + "\n" + statusBar)
+	v := tea.NewView(joinSections(content, preview, keybinds))
 	v.AltScreen = true
 	return v
 }

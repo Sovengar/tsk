@@ -16,7 +16,7 @@ func (v viewKind) String() string {
 	case viewDashboard:
 		return "Dashboard"
 	case viewList:
-		return "List"
+		return "Tasklist"
 	case viewKanban:
 		return "Kanban"
 	}
@@ -68,6 +68,7 @@ func handleGlobalKeys(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	case "H":
 		m.filterActiveOnly = !m.filterActiveOnly
 		m.invalidateFilterCache()
+		m.clampKanbanCursor()
 		return m, nil, true
 	case "?":
 		m.helpOpen = !m.helpOpen

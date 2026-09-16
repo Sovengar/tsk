@@ -33,6 +33,7 @@ func (m *Model) viewKeybinds() []keybind {
 	case viewList:
 		return []keybind{
 			{"j/k", "Move cursor"},
+			{"P/N", "Previous / next page"},
 			{"Enter", "Open detail"},
 			{"n", "New task"},
 			{"e", "Edit task in $EDITOR"},
@@ -118,6 +119,11 @@ func (m *Model) renderHelpModal(content string) string {
 		startY = 0
 	}
 
+	// Pad background if modal is taller (like dbx does)
+	for len(lines) < startY+modalH {
+		lines = append(lines, strings.Repeat(" ", w))
+	}
+
 	// Center horizontally — account for border (2 chars total)
 	totalModalW := modalWidth + 2
 	startX := (w - totalModalW) / 2
@@ -127,28 +133,7 @@ func (m *Model) renderHelpModal(content string) string {
 
 	for i, ml := range modalLines {
 		y := startY + i
-		if y >= totalLines {
-			break
-		}
-		lineRunes := []rune(lines[y])
-		modalRunes := []rune(ml)
-
-		// How many chars can we write starting at startX
-		room := len(lineRunes) - startX
-		if room <= 0 {
-			// Line too short — pad it
-			pad := startX + len(modalRunes) - len(lineRunes)
-			if pad > 0 {
-				lineRunes = append(lineRunes, make([]rune, pad)...)
-			}
-			room = len(modalRunes)
-		}
-		if len(modalRunes) > room {
-			modalRunes = modalRunes[:room]
-		}
-
-		copy(lineRunes[startX:startX+len(modalRunes)], modalRunes)
-		lines[y] = string(lineRunes)
+		lines[y] = OverlayLine(lines[y], ml, startX)
 	}
 
 	return strings.Join(lines, "\n")

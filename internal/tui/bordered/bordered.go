@@ -15,6 +15,13 @@ const (
 )
 
 func RenderWithTitleEx(border lipgloss.Border, borderFg color.Color, align int, title, content string, width int) string {
+	return RenderWithTitlesEx(border, borderFg, title, align, "", AlignLeft, content, width)
+}
+
+// RenderWithTitlesEx renderiza un borde con un título en la línea superior y
+// otro texto en la línea inferior, cada uno con su propia alineación. Un título
+// vacío no se dibuja (la línea queda rellena por completo).
+func RenderWithTitlesEx(border lipgloss.Border, borderFg color.Color, topTitle string, topAlign int, bottomTitle string, bottomAlign int, content string, width int) string {
 	if width < 2 {
 		width = 2
 	}
@@ -55,9 +62,9 @@ func RenderWithTitleEx(border lipgloss.Border, borderFg color.Color, align int, 
 		borderStyle = &s
 	}
 
-	topLine := buildTopLine(borderStyle, topLeft, topChar, topRight, tlW, trW, innerWidth, align, title)
+	topLine := buildBorderLine(borderStyle, topLeft, topChar, topRight, innerWidth, topAlign, topTitle)
 	contentLines := buildContentLines(borderStyle, leftChar, rightChar, content, innerWidth)
-	bottomLine := buildBottomLine(borderStyle, bottomLeft, bottomChar, bottomRight, innerWidth)
+	bottomLine := buildBorderLine(borderStyle, bottomLeft, bottomChar, bottomRight, innerWidth, bottomAlign, bottomTitle)
 
 	var b strings.Builder
 	b.WriteString(topLine)
@@ -89,7 +96,7 @@ func styledChar(style *ansi.Style, char string) string {
 	return char
 }
 
-func buildTopLine(style *ansi.Style, topLeft, topChar, topRight string, tlW, trW, innerWidth, align int, title string) string {
+func buildBorderLine(style *ansi.Style, left, fill, right string, innerWidth, align int, title string) string {
 	titleDisplay := ansi.Strip(title)
 	titleWidth := ansi.StringWidth(string(titleDisplay))
 
@@ -113,16 +120,11 @@ func buildTopLine(style *ansi.Style, topLeft, topChar, topRight string, tlW, trW
 		rightPad = remaining - leftPad
 	}
 
-	leftPadStr := repeatStyled(style, topChar, leftPad)
-	rightPadStr := repeatStyled(style, topChar, rightPad)
+	leftPadStr := repeatStyled(style, fill, leftPad)
+	rightPadStr := repeatStyled(style, fill, rightPad)
 	titleStyled := styledChar(style, title)
 
-	return styledChar(style, topLeft) + leftPadStr + titleStyled + rightPadStr + styledChar(style, topRight)
-}
-
-func buildBottomLine(style *ansi.Style, bottomLeft, bottomChar, bottomRight string, innerWidth int) string {
-	bottomFill := repeatStyled(style, bottomChar, innerWidth)
-	return styledChar(style, bottomLeft) + bottomFill + styledChar(style, bottomRight)
+	return styledChar(style, left) + leftPadStr + titleStyled + rightPadStr + styledChar(style, right)
 }
 
 func buildContentLines(style *ansi.Style, leftChar, rightChar, content string, innerWidth int) []string {

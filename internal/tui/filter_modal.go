@@ -189,21 +189,33 @@ func (m *Model) renderFilterModal(content string) string {
 		current := m.filterCurrentValue(field)
 		opts := m.filterFieldOptions(field)
 
-		// Build option display: ← value →
-		optDisplay := fmt.Sprintf("%-12s ← %s →", label, current)
+		// Build option display: Label ← Value →
+		optPrefix := fmt.Sprintf("%-12s ← ", label)
+		optSuffix := " →"
+		valueStr := styleStatusKey.Render(current)
+		optDisplay := styleFilterDim.Render(optPrefix) + valueStr + styleFilterDim.Render(optSuffix)
 		if field == m.filterFieldIdx {
-			lines = append(lines, styleSelected.Render("  > "+optDisplay))
+			lines = append(lines, styleSelected.Render("  > ")+" "+optDisplay)
 		} else {
-			lines = append(lines, "    "+optDisplay)
+			lines = append(lines, "      "+optDisplay)
 		}
 
-		// Show options hint on selected field
+		// Show options as vertical list on selected field
 		if field == m.filterFieldIdx && len(opts) > 2 {
-			hint := strings.Join(opts, "  ")
-			if len(hint) > 40 {
-				hint = hint[:37] + "..."
+			maxShow := 5
+			if len(opts) < maxShow {
+				maxShow = len(opts)
 			}
-			lines = append(lines, styleDim.Render("      "+hint))
+			for _, opt := range opts[:maxShow] {
+				if opt == current {
+					lines = append(lines, styleSelected.Render("        > "+opt))
+				} else {
+					lines = append(lines, "          "+opt)
+				}
+			}
+			if len(opts) > maxShow {
+				lines = append(lines, styleDim.Render(fmt.Sprintf("          ... %d more", len(opts)-maxShow)))
+			}
 		}
 	}
 
@@ -234,6 +246,11 @@ func (m *Model) renderFilterModal(content string) string {
 		startY = 0
 	}
 
+	// Pad background if modal is taller (like dbx does)
+	for len(bgLines) < startY+modalH {
+		bgLines = append(bgLines, strings.Repeat(" ", w))
+	}
+
 	totalModalW := modalWidth + 2
 	startX := (w - totalModalW) / 2
 	if startX < 0 {
@@ -242,26 +259,7 @@ func (m *Model) renderFilterModal(content string) string {
 
 	for i, ml := range modalLines {
 		y := startY + i
-		if y >= totalLines {
-			break
-		}
-		lineRunes := []rune(bgLines[y])
-		modalRunes := []rune(ml)
-
-		room := len(lineRunes) - startX
-		if room <= 0 {
-			pad := startX + len(modalRunes) - len(lineRunes)
-			if pad > 0 {
-				lineRunes = append(lineRunes, make([]rune, pad)...)
-			}
-			room = len(modalRunes)
-		}
-		if len(modalRunes) > room {
-			modalRunes = modalRunes[:room]
-		}
-
-		copy(lineRunes[startX:startX+len(modalRunes)], modalRunes)
-		bgLines[y] = string(lineRunes)
+		bgLines[y] = OverlayLine(bgLines[y], ml, startX)
 	}
 
 	return strings.Join(bgLines, "\n")

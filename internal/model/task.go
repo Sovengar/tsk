@@ -38,6 +38,20 @@ func PriorityLabel(p int) string {
 	}
 }
 
+// PriorityShortLabel devuelve la etiqueta abreviada (H/M/L).
+func PriorityShortLabel(p int) string {
+	switch p {
+	case PriorityLow:
+		return "L"
+	case PriorityMedium:
+		return "M"
+	case PriorityHigh:
+		return "H"
+	default:
+		return "-"
+	}
+}
+
 // PriorityBar devuelve un caracter visual de prioridad.
 func PriorityBar(p int) string {
 	switch p {

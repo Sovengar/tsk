@@ -2,50 +2,55 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"tsk/internal/model"
+	"tsk/internal/tui/bordered"
 )
 
-// renderList renderiza la vista List.
-func (m *Model) renderList() string {
+// listFixedRows es el alto de la caja de la lista que no son filas de tareas:
+// bordes superior e inferior, barra de filtros, dos separadores y la cabecera
+// de columnas.
+const listFixedRows = 6
+
+// renderList renderiza la vista List dentro del alto disponible.
+func (m *Model) renderList(maxHeight int) string {
 	w := m.width
+	innerW := w - 2 // ancho interior para el contenido dentro del borde
 
-	// Header
-	title := styleTitle.Render("tsk") + " — List"
-	projectNames := []string{}
-	for _, p := range m.projects {
-		projectNames = append(projectNames, p.Name)
-	}
-	if len(projectNames) > 0 {
-		title += " — " + strings.Join(projectNames, " + ")
-	}
-
-	sep := styleSep.Render(strings.Repeat("─", w-2))
+	sep := styleSep.Render(strings.Repeat("─", innerW-2))
 
 	// Filter bar
 	filterBar := m.renderFilterBar()
 
-	// Column headers
-	headers := fmt.Sprintf("%-6s %-10s %-12s %-12s %-24s %-40s", "ID", "Priority", "Status", "Assignee", "Title", "Description")
+	// Column headers (el ID no se muestra como columna)
+	headers := fmt.Sprintf("%-10s %-12s %-12s %-24s %-40s", "Priority", "Status", "Assignee", "Title", "Description")
 	headerLine := styleColumnHeader.Render(headers)
 
-	sep2 := styleSep.Render(strings.Repeat("─", w-2))
+	sep2 := styleSep.Render(strings.Repeat("─", innerW-2))
+
+	tasks := m.filteredTasks()
+	pageStart, pageEnd := m.pageBounds()
+
+	// Solo se pinta la página actual. Si la página no entra en el alto
+	// disponible, se recorta la ventana manteniendo el cursor visible
+	// (fallback para terminales chicas).
+	start, end := pageStart, pageEnd
+	if visible := maxHeight - listFixedRows; visible > 0 && end-start > visible {
+		relStart, relEnd := visibleRange(m.cursor-pageStart, end-pageStart, visible)
+		start, end = pageStart+relStart, pageStart+relEnd
+	}
 
 	// Tasks
 	taskLines := []string{}
-	for i, t := range m.filteredTasks() {
-		prio := priorityChar(t.Priority) + " " + model.PriorityLabel(t.Priority)
-		desc := t.Description
-		if len(desc) > 40 {
-			desc = desc[:40]
-		}
-		title := t.Title
-		if len(title) > 24 {
-			title = title[:24]
-		}
-		line := fmt.Sprintf("%-6d %-10s %-12s %-12s %-24s %-40s", t.ID, prio, t.Status, t.Assignee, title, desc)
+	for i := start; i < end; i++ {
+		t := tasks[i]
+		prio := priorityChar(t.Priority) + " " + model.PriorityShortLabel(t.Priority)
+		desc := truncate(singleLine(t.Description), 40)
+		title := truncate(singleLine(t.Title), 24)
+		line := fmt.Sprintf("%-10s %-12s %-12s %-24s %-40s", prio, t.Status, t.Assignee, title, desc)
 
 		if i == m.cursor {
 			line = styleSelected.Render("> " + line)
@@ -59,47 +64,54 @@ func (m *Model) renderList() string {
 		taskLines = append(taskLines, styleDim.Render("  No tasks found."))
 	}
 
-	// Status line (just below filters)
-	total := len(m.filteredTasks())
-	selLine := ""
-	if total > 0 && m.cursor >= 0 && m.cursor < total {
-		t := m.filteredTasks()[m.cursor]
-		selLine = fmt.Sprintf("Selected: #%d — %s", t.ID, t.Title)
-	}
-	statusLine := styleDim.Render(fmt.Sprintf("  Total: %d tasks    %s", total, selLine))
-
-	return lipgloss.JoinVertical(lipgloss.Left,
-		title,
+	content := lipgloss.JoinVertical(lipgloss.Left,
 		filterBar,
-		statusLine,
 		sep,
 		headerLine,
 		sep2,
 		strings.Join(taskLines, "\n"),
 	)
+
+	// Ninguna fila debe exceder el ancho interior: si lo hiciera, el borde la
+	// re-wrapéaría y la caja crecería más allá del alto calculado, empujando el
+	// preview y el KeybindsBar fuera de la pantalla.
+	content = truncateLines(content, innerW)
+
+	// Envolver con borde redondeado. La leyenda de paginación va incrustada en
+	// el borde inferior, alineada a la derecha.
+	var borderFg color.Color = lipgloss.Color("8") // gris por defecto
+	return bordered.RenderWithTitlesEx(
+		lipgloss.RoundedBorder(),
+		borderFg,
+		" "+m.currentView.String()+" ",
+		bordered.AlignLeft,
+		" "+m.pageLegend()+" ",
+		bordered.AlignRight,
+		content,
+		w,
+	)
 }
 
 func (m *Model) renderFilterBar() string {
-	parts := []string{}
-	if m.filterProject != "" {
-		parts = append(parts, "Project: "+m.filterProject)
-	} else {
-		parts = append(parts, "Project: all")
-	}
-	if m.filterStatus != "" {
-		parts = append(parts, "Status: "+m.filterStatus)
-	} else {
-		parts = append(parts, "Status: all")
-	}
-	if m.filterAssignee != "" {
-		parts = append(parts, "Assignee: "+m.filterAssignee)
-	} else {
-		parts = append(parts, "Assignee: all")
-	}
+	var parts []string
+
+	parts = append(parts, m.renderFilterPart("Project", m.filterProject))
+	parts = append(parts, m.renderFilterPart("Status", m.filterStatus))
+	parts = append(parts, m.renderFilterPart("Assignee", m.filterAssignee))
+
 	if m.filterPriority >= 0 {
-		parts = append(parts, fmt.Sprintf("Priority: %d", m.filterPriority))
+		parts = append(parts, styleFilterDim.Render("Priority: ")+styleStatusKey.Render(fmt.Sprintf("%d", m.filterPriority)))
 	} else {
-		parts = append(parts, "Priority: all")
+		parts = append(parts, styleFilterDim.Render("Priority: ")+styleStatusKey.Render("all"))
 	}
-	return styleFilterDim.Render("  " + strings.Join(parts, "    "))
+
+	return "  " + strings.Join(parts, "    ")
+}
+
+// renderFilterPart renderiza una parte del filtro: label en gris, valor en azul.
+func (m *Model) renderFilterPart(label, value string) string {
+	if value == "" {
+		value = "all"
+	}
+	return styleFilterDim.Render(label+": ") + styleStatusKey.Render(value)
 }

@@ -145,17 +145,25 @@ func TestListNavigation(t *testing.T) {
 		t.Errorf("after k: cursor = %d, want 0", m.cursor)
 	}
 
-	// k at top wraps to bottom
+	// k en el tope de la página no hace nada (clamp, sin wrap)
 	m, _ = press(m, "k")
-	tasks := m.filteredTasks()
-	if m.cursor != len(tasks)-1 {
-		t.Errorf("wrap up: cursor = %d, want %d", m.cursor, len(tasks)-1)
+	if m.cursor != 0 {
+		t.Errorf("k at top: cursor = %d, want 0", m.cursor)
 	}
 
-	// j at bottom wraps to top
+	// Llevar el cursor al final de la página
+	tasks := m.filteredTasks()
+	for m.cursor < len(tasks)-1 {
+		m, _ = press(m, "j")
+	}
+	if m.cursor != len(tasks)-1 {
+		t.Fatalf("cursor = %d, want %d", m.cursor, len(tasks)-1)
+	}
+
+	// j en el final de la página no hace nada (clamp, sin wrap)
 	m, _ = press(m, "j")
-	if m.cursor != 0 {
-		t.Errorf("wrap down: cursor = %d, want 0", m.cursor)
+	if m.cursor != len(tasks)-1 {
+		t.Errorf("j at bottom: cursor = %d, want %d", m.cursor, len(tasks)-1)
 	}
 }
 
@@ -186,6 +194,119 @@ func TestListCancelTask(t *testing.T) {
 	_, cmd := press(m, "x")
 	if cmd == nil {
 		t.Error("x should produce a command")
+	}
+}
+
+// --- List pagination ---
+
+func TestListPageNavigation(t *testing.T) {
+	m := newTestModel(t)
+	m.pageSize = 2
+	addTasks(t, m, 5) // 4 fixtures + 5 = 9 tareas activas
+	m, _ = press(m, "2")
+
+	// N: salta al primer elemento de la próxima página
+	m, _ = press(m, "N")
+	if m.cursor != 2 {
+		t.Errorf("after N: cursor = %d, want 2", m.cursor)
+	}
+	m, _ = press(m, "N")
+	if m.cursor != 4 {
+		t.Errorf("after 2x N: cursor = %d, want 4", m.cursor)
+	}
+
+	// P: salta al primer elemento de la página previa
+	m, _ = press(m, "P")
+	if m.cursor != 2 {
+		t.Errorf("after P: cursor = %d, want 2", m.cursor)
+	}
+	m, _ = press(m, "P")
+	if m.cursor != 0 {
+		t.Errorf("after 2x P: cursor = %d, want 0", m.cursor)
+	}
+
+	// P en la primera página no hace nada
+	m, _ = press(m, "P")
+	if m.cursor != 0 {
+		t.Errorf("P at first page: cursor = %d, want 0", m.cursor)
+	}
+
+	// N en la última página no hace nada
+	tasks := m.filteredTasks()
+	m.cursor = len(tasks) - 1
+	last := m.cursor
+	m, _ = press(m, "N")
+	if m.cursor != last {
+		t.Errorf("N at last page: cursor = %d, want %d", m.cursor, last)
+	}
+}
+
+func TestListPageCursorClamp(t *testing.T) {
+	m := newTestModel(t)
+	m.pageSize = 2
+	addTasks(t, m, 5)
+	m, _ = press(m, "2")
+
+	// Página 0 = [0, 2): j se detiene en 1
+	m, _ = press(m, "j")
+	if m.cursor != 1 {
+		t.Fatalf("after j: cursor = %d, want 1", m.cursor)
+	}
+	m, _ = press(m, "j")
+	if m.cursor != 1 {
+		t.Errorf("j at page end: cursor = %d, want 1", m.cursor)
+	}
+
+	// k se detiene en 0
+	m, _ = press(m, "k")
+	if m.cursor != 0 {
+		t.Errorf("after k: cursor = %d, want 0", m.cursor)
+	}
+	m, _ = press(m, "k")
+	if m.cursor != 0 {
+		t.Errorf("k at page start: cursor = %d, want 0", m.cursor)
+	}
+}
+
+func TestPageLegend(t *testing.T) {
+	tests := []struct {
+		name     string
+		total    int
+		pageSize int
+		cursor   int
+		want     string
+	}{
+		{"primera de varias", 4, 3, 0, "1-3 of 4 · Page 1/2"},
+		{"última parcial", 4, 3, 3, "4-4 of 4 · Page 2/2"},
+		{"una sola página", 4, 10, 2, "1-4 of 4 · Page 1/1"},
+		{"sin tareas", 0, 10, 0, "0-0 of 0 · Page 1/1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestModel(t)
+			m.tasks = make([]model.Task, tt.total)
+			m.invalidateFilterCache()
+			m.pageSize = tt.pageSize
+			m.cursor = tt.cursor
+
+			if got := m.pageLegend(); got != tt.want {
+				t.Errorf("pageLegend() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCursorClampedWhenTasksShrink(t *testing.T) {
+	m := newTestModel(t)
+	addTasks(t, m, 20) // 24 tareas
+	m.cursor = 20
+
+	m.tasks = m.tasks[:2]
+	m.invalidateFilterCache()
+
+	if m.cursor != 1 {
+		t.Errorf("cursor = %d, want 1", m.cursor)
 	}
 }
 
@@ -422,7 +543,7 @@ func TestTasksInColumn(t *testing.T) {
 
 func TestRenderDashboard(t *testing.T) {
 	m := newTestModel(t)
-	out := m.renderDashboard()
+	out := m.renderDashboard(m.height)
 	if out == "" {
 		t.Error("dashboard should not be empty")
 	}
@@ -431,7 +552,7 @@ func TestRenderDashboard(t *testing.T) {
 func TestRenderList(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "2")
-	out := m.renderList()
+	out := m.renderList(m.height)
 	if out == "" {
 		t.Error("list should not be empty")
 	}
@@ -440,7 +561,7 @@ func TestRenderList(t *testing.T) {
 func TestRenderKanban(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "3")
-	out := m.renderKanban()
+	out := m.renderKanban(m.height)
 	if out == "" {
 		t.Error("kanban should not be empty")
 	}

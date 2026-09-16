@@ -8,10 +8,10 @@ import (
 	"tsk/internal/model"
 )
 
-// renderDetail renderiza el modal de detalle de tarea.
-func (m *Model) renderDetail(t *model.Task) string {
+// renderDetail renderiza el modal de detalle de tarea dentro del alto disponible.
+func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 	w := m.width
-	h := m.height
+	h := maxHeight
 
 	// Priority with colored character
 	prio := priorityChar(t.Priority) + " " + model.PriorityLabel(t.Priority)

@@ -10,10 +10,14 @@ import (
 
 const FileName = "config.toml"
 
+// DefaultPageSize es el número de tareas por página por defecto en la vista List.
+const DefaultPageSize = 10
+
 // Config es la configuración global de tsk.
 type Config struct {
-	Database DatabaseConfig `toml:"database"`
-	Editor   EditorConfig   `toml:"editor"`
+	Database     DatabaseConfig `toml:"database"`
+	Editor       EditorConfig   `toml:"editor"`
+	ListPageSize int            `toml:"list_page_size"`
 }
 
 // DatabaseConfig configura la base de datos.
@@ -35,6 +39,7 @@ func Defaults() Config {
 		Editor: EditorConfig{
 			Command: "nvim",
 		},
+		ListPageSize: DefaultPageSize,
 	}
 }
 
@@ -66,6 +71,9 @@ func Load() Config {
 	}
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
 		return Defaults() // fichero malformado: defaults
+	}
+	if cfg.ListPageSize <= 0 {
+		cfg.ListPageSize = DefaultPageSize
 	}
 	return cfg
 }

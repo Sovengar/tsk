@@ -8,30 +8,30 @@ import (
 	"tsk/internal/tui/bordered"
 )
 
-// StatusBar renderiza los keybinds en un pane con bordes.
-type StatusBar struct {
+// KeybindsBar renderiza los keybinds en un pane con bordes.
+type KeybindsBar struct {
 	width   int
 	view    viewKind
 	focused bool
 }
 
-// NewStatusBar crea un nuevo StatusBar.
-func NewStatusBar(width int) StatusBar {
-	return StatusBar{width: width}
+// NewKeybindsBar crea un nuevo KeybindsBar.
+func NewKeybindsBar(width int) KeybindsBar {
+	return KeybindsBar{width: width}
 }
 
 // SetView actualiza la vista activa.
-func (s *StatusBar) SetView(v viewKind) {
+func (s *KeybindsBar) SetView(v viewKind) {
 	s.view = v
 }
 
 // SetWidth actualiza el ancho.
-func (s *StatusBar) SetWidth(w int) {
+func (s *KeybindsBar) SetWidth(w int) {
 	s.width = w
 }
 
-// View renderiza el StatusBar con dos filas de keybinds.
-func (s StatusBar) View() string {
+// View renderiza el KeybindsBar con dos filas de keybinds.
+func (s KeybindsBar) View() string {
 	// Row 1: global keybinds
 	global := s.renderGlobal()
 
@@ -59,7 +59,7 @@ func (s StatusBar) View() string {
 }
 
 // renderGlobal formatea los keybinds globales.
-func (s StatusBar) renderGlobal() string {
+func (s KeybindsBar) renderGlobal() string {
 	parts := []string{
 		s.renderKey("1", "Dash"),
 		s.renderKey("2", "List"),
@@ -73,7 +73,7 @@ func (s StatusBar) renderGlobal() string {
 }
 
 // renderViewSpecific formatea los keybinds de la vista actual.
-func (s StatusBar) renderViewSpecific() string {
+func (s KeybindsBar) renderViewSpecific() string {
 	var parts []string
 
 	switch s.view {
@@ -85,13 +85,14 @@ func (s StatusBar) renderViewSpecific() string {
 	case viewList:
 		parts = []string{
 			s.renderKey("j/k", "move"),
+			s.renderKey("P/N", "page"),
 			s.renderKey("Enter", "detail"),
 			s.renderKey("e", "edit"),
 			s.renderKey("s", "start"),
 			s.renderKey("d", "done"),
 			s.renderKey("x", "cancel"),
 			s.renderKey("n", "new"),
-			s.renderKey("S/A/F", "filter"),
+			s.renderKey("/", "filter"),
 		}
 	case viewKanban:
 		parts = []string{
@@ -110,6 +111,6 @@ func (s StatusBar) renderViewSpecific() string {
 }
 
 // renderKey renderiza un par key+desc.
-func (s StatusBar) renderKey(key, desc string) string {
+func (s KeybindsBar) renderKey(key, desc string) string {
 	return styleStatusKey.Render(key) + " " + styleStatusDesc.Render(desc)
 }
