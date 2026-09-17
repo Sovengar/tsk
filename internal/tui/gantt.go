@@ -31,8 +31,10 @@ type ganttRow struct {
 	entry    *model.ScheduleEntry
 }
 
-// ganttSchedule proyecta la cola de cada persona a partir de las tareas y
-// off-days cargados. El punto de partida es hoy.
+// ganttSchedule proyecta la cola de cada persona a partir de TODAS las tareas
+// y off-days cargados. El punto de partida es hoy. La cola es global: la
+// capacidad de una persona se reparte entre todos sus proyectos, así que las
+// fechas no dependen de qué proyecto estés mirando.
 func (m *Model) ganttSchedule() *model.Schedule {
 	now := time.Now()
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
@@ -41,6 +43,15 @@ func (m *Model) ganttSchedule() *model.Schedule {
 		estimate = 1
 	}
 	return model.BuildSchedule(m.tasks, m.offdays, start, estimate)
+}
+
+// ganttDisplay aplica los filtros activos como filtro de VISTA sobre la
+// proyección global: sólo decide qué filas se ven, sin recalcular fechas.
+func (m *Model) ganttDisplay() *model.Schedule {
+	return model.FilterSchedule(m.ganttSchedule(), func(t model.Task) bool {
+		// En el Gantt no se ocultan done/cancelled: BuildSchedule ya los excluye.
+		return m.taskMatchesFilter(t, false)
+	})
 }
 
 // ganttRows aplana un schedule en filas navegables: cabecera por persona y una
@@ -56,41 +67,89 @@ func ganttRows(s *model.Schedule) []ganttRow {
 	return rows
 }
 
-// ganttRows devuelve las filas del schedule actual.
+// ganttRows devuelve las filas del schedule actual, ya filtradas para la vista.
 func (m *Model) ganttRows() []ganttRow {
-	return ganttRows(m.ganttSchedule())
+	return ganttRows(m.ganttDisplay())
 }
 
-// clampGanttCursor mantiene el cursor dentro de las filas actuales.
-func (m *Model) clampGanttCursor() {
-	n := len(m.ganttRows())
-	if n == 0 {
+// snapGanttCursor reencuadra el cursor dentro de las filas actuales y lo apoya
+// siempre sobre una fila de tarea: las cabeceras de persona no son navegables.
+func (m *Model) snapGanttCursor() {
+	rows := m.ganttRows()
+	if len(rows) == 0 {
 		m.ganttCursor = 0
 		return
 	}
 	if m.ganttCursor < 0 {
 		m.ganttCursor = 0
 	}
-	if m.ganttCursor >= n {
-		m.ganttCursor = n - 1
+	if m.ganttCursor >= len(rows) {
+		m.ganttCursor = len(rows) - 1
+	}
+	if rows[m.ganttCursor].kind == ganttTaskRow {
+		return
+	}
+	// Cabecera: saltar a la primera tarea posterior; si no hay, a la anterior.
+	for i := m.ganttCursor + 1; i < len(rows); i++ {
+		if rows[i].kind == ganttTaskRow {
+			m.ganttCursor = i
+			return
+		}
+	}
+	for i := m.ganttCursor - 1; i >= 0; i-- {
+		if rows[i].kind == ganttTaskRow {
+			m.ganttCursor = i
+			return
+		}
+	}
+	m.ganttCursor = 0
+}
+
+// ganttTaskRange devuelve el índice de la primera y última fila de tarea del
+// Gantt, o -1/-1 si no hay ninguna.
+func ganttTaskRange(rows []ganttRow) (first, last int) {
+	first, last = -1, -1
+	for i, r := range rows {
+		if r.kind == ganttTaskRow {
+			if first < 0 {
+				first = i
+			}
+			last = i
+		}
+	}
+	return first, last
+}
+
+// moveGanttCursor salta a la siguiente/anterior fila de tarea en la dirección
+// dir (+1 baja, -1 sube), ignorando las cabeceras de persona.
+func moveGanttCursor(m *Model, rows []ganttRow, dir int) {
+	for i := m.ganttCursor + dir; i >= 0 && i < len(rows); i += dir {
+		if rows[i].kind == ganttTaskRow {
+			m.ganttCursor = i
+			return
+		}
 	}
 }
 
 // handleGanttKey navega el Gantt: j/k sobre filas, h/l desplaza la ventana de
 // días, g/G va al inicio/fin, Enter abre el detalle de la tarea.
 func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
-	m.clampGanttCursor()
+	m.snapGanttCursor()
 	rows := m.ganttRows()
 
 	switch key {
+	case "/":
+		m.filterOpen = true
+		m.filterFieldIdx = 0
+	case "tab":
+		// Cambiar de proyecto ciclando el filtro Project, como en el Dashboard.
+		m.cycleProjectFilter(1)
+		m.ganttCursor = 0
+		m.snapGanttCursor()
 	case "j", "down":
-		if m.ganttCursor < len(rows)-1 {
-			m.ganttCursor++
-		}
+		moveGanttCursor(&m, rows, 1)
 	case "k", "up":
-		if m.ganttCursor > 0 {
-			m.ganttCursor--
-		}
+		moveGanttCursor(&m, rows, -1)
 	case "h", "left":
 		if m.ganttOffsetDays > 0 {
 			m.ganttOffsetDays--
@@ -98,10 +157,12 @@ func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 	case "l", "right":
 		m.ganttOffsetDays++
 	case "g":
-		m.ganttCursor = 0
+		if first, _ := ganttTaskRange(rows); first >= 0 {
+			m.ganttCursor = first
+		}
 	case "G":
-		if len(rows) > 0 {
-			m.ganttCursor = len(rows) - 1
+		if _, last := ganttTaskRange(rows); last >= 0 {
+			m.ganttCursor = last
 		}
 	case "enter":
 		if m.ganttCursor >= 0 && m.ganttCursor < len(rows) && rows[m.ganttCursor].kind == ganttTaskRow {
@@ -119,10 +180,13 @@ func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 // renderGantt dibuja el Gantt dentro del alto disponible: una fila por tarea,
 // una columna por día, agrupadas por persona.
 func (m *Model) renderGantt(maxHeight int) string {
+	// Los filtros pueden haber dejado menos filas: reencuadrar el cursor.
+	m.snapGanttCursor()
+
 	w := m.width
 	innerW := w - 2
 
-	s := m.ganttSchedule()
+	s := m.ganttDisplay()
 	rows := ganttRows(s)
 
 	// Reparto de ancho: etiqueta a la izquierda, días a la derecha.
@@ -155,6 +219,7 @@ func (m *Model) renderGantt(maxHeight int) string {
 	}
 
 	lines := []string{
+		m.renderFilterHeader(innerW),
 		m.renderGanttRuler(start, offset, labelW, dayCols),
 		m.renderGanttAxis(labelW, dayCols, start, offset),
 	}
@@ -250,7 +315,11 @@ func (m *Model) renderGanttRow(row ganttRow, start time.Time, offset, dayCols, l
 	if e.EstimateDefaulted {
 		mark = "~"
 	}
-	label := fmt.Sprintf("  #%d %s %s%s", e.Task.ID, e.Task.Title, model.FormatEstimate(e.Estimate), mark)
+	prefix := "  "
+	if selected {
+		prefix = "> "
+	}
+	label := fmt.Sprintf("%s#%d %s %s%s", prefix, e.Task.ID, e.Task.Title, model.FormatEstimate(e.Estimate), mark)
 	line := cellWidth(label, labelW) + " " + string(cells)
 	if selected {
 		return styleSelected.Render(line)
@@ -267,7 +336,7 @@ func (m *Model) ganttLegend(offset, dayCols int) string {
 	}
 	from := start.AddDate(0, 0, offset).Format("2006-01-02")
 	to := start.AddDate(0, 0, offset+dayCols-1).Format("2006-01-02")
-	return fmt.Sprintf("%s → %s · h/l scroll ", from, to)
+	return fmt.Sprintf("%s → %s ", from, to)
 }
 
 // daysBetween cuenta los días de calendario entre dos fechas YYYY-MM-DD.

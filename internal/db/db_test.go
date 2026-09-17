@@ -17,8 +17,8 @@ func TestCreateAndGetProject(t *testing.T) {
 	if p.Name != "api" {
 		t.Errorf("name = %q, want api", p.Name)
 	}
-	if len(p.Workflow) != 6 {
-		t.Errorf("workflow len = %d, want 6", len(p.Workflow))
+	if len(p.Workflow) != len(model.DefaultWorkflow) {
+		t.Errorf("workflow len = %d, want %d", len(p.Workflow), len(model.DefaultWorkflow))
 	}
 
 	got, err := db.GetProject("api")

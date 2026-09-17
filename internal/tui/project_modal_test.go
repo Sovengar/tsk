@@ -10,7 +10,7 @@ import (
 
 func TestDashboardIOpensProjectModal(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "1") // dashboard
+	m, _ = press(m, "4") // dashboard
 	m, _ = press(m, "i")
 
 	if !m.projectModalOpen {
@@ -23,7 +23,7 @@ func TestDashboardIOpensProjectModal(t *testing.T) {
 
 func TestListIStillOpensTaskModal(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2") // list
+	m, _ = press(m, "1") // list
 	m, _ = press(m, "i")
 
 	if !m.newTaskOpen {
@@ -36,7 +36,7 @@ func TestListIStillOpensTaskModal(t *testing.T) {
 
 func TestDashboardArchiveConfirmCancel(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "1")
+	m, _ = press(m, "4")
 	m, _ = press(m, "d")
 
 	if !m.confirmOpen {
@@ -54,7 +54,7 @@ func TestDashboardArchiveConfirmCancel(t *testing.T) {
 
 func TestDashboardToggleArchived(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "1")
+	m, _ = press(m, "4")
 
 	m, _ = press(m, "A")
 	if !m.showArchived {
@@ -73,7 +73,7 @@ func TestDashboardToggleArchived(t *testing.T) {
 
 func TestProjectSavedErrorReopensModalAndToasts(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "1")
+	m, _ = press(m, "4")
 	m, _ = press(m, "i")
 	m.projectNameInput = "api" // ya existe
 
@@ -158,7 +158,7 @@ func TestArchiveProjectCommandReloads(t *testing.T) {
 
 func TestOpenProjectModalPrefillsDefaults(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "1") // dashboard
+	m, _ = press(m, "4") // dashboard
 	m, _ = press(m, "i")
 
 	if got := m.projectWorkflowInput; got != strings.Join(model.DefaultWorkflow, ",") {

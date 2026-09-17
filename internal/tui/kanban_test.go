@@ -11,7 +11,7 @@ import (
 // los bordes de una columna y la siguiente deben estar separados por un gap.
 func TestRenderKanbanColumnsSpaced(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "3")
+	m, _ = press(m, "2")
 	m.width = 140
 
 	plain := ansi.Strip(m.renderKanban(m.height))
@@ -31,7 +31,7 @@ func TestRenderKanbanColumnsSpaced(t *testing.T) {
 // terminal y que aproveche todo el ancho disponible.
 func TestRenderKanbanFitsWidth(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "3")
+	m, _ = press(m, "2")
 	m.width = 140
 
 	out := m.renderKanban(m.height)
@@ -80,7 +80,7 @@ func TestKanbanColumnWidthsTooNarrow(t *testing.T) {
 func TestKanbanHiddenToggle(t *testing.T) {
 	m := newTestModel(t)
 	markFirstDone(t, m)
-	m, _ = press(m, "3")
+	m, _ = press(m, "2")
 
 	done := kanbanColumnIndex(m, "done")
 	if done < 0 {
@@ -104,7 +104,7 @@ func TestKanbanHiddenToggle(t *testing.T) {
 func TestKanbanHiddenCardsAreNavigable(t *testing.T) {
 	m := newTestModel(t)
 	markFirstDone(t, m)
-	m, _ = press(m, "3")
+	m, _ = press(m, "2")
 	m, _ = press(m, "H") // mostrar done
 
 	done := kanbanColumnIndex(m, "done")
@@ -136,6 +136,54 @@ func TestKanbanHiddenCardsAreNavigable(t *testing.T) {
 	}
 }
 
+// TestKanbanAdvanceUsesProjectWorkflow verifica que "s" avance según el
+// workflow del proyecto de la tarea, no según el merge. El merge pondría
+// "reviewing" como siguiente de "doing", pero web no tiene ese estado y el
+// move sería rechazado en silencio.
+func TestKanbanAdvanceUsesProjectWorkflow(t *testing.T) {
+	m := newTestModel(t)
+	if _, err := m.database.CreateTask("web", "Deploy", "", "@juan", 1, "doing"); err != nil {
+		t.Fatal(err)
+	}
+	tasks, _ := m.database.ListTasks("", "", "")
+	m.tasks = tasks
+	m.invalidateFilterCache()
+
+	m, _ = press(m, "2") // kanban view
+
+	col := kanbanColumnIndex(m, "doing")
+	if col < 0 {
+		t.Fatal("no hay columna doing")
+	}
+	colTasks := m.tasksInColumn("doing")
+	row, id := -1, int64(0)
+	for j, task := range colTasks {
+		if task.ProjectName == "web" {
+			row, id = j, task.ID
+			break
+		}
+	}
+	if row < 0 {
+		t.Fatal("no se encontró una tarea web en doing")
+	}
+	m.kanbanCol, m.kanbanRow = col, row
+
+	_, cmd := press(m, "s")
+	if cmd == nil {
+		t.Fatal("s debería emitir un comando")
+	}
+	cmd()
+
+	got, err := m.database.GetTask(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// web = [todo,doing,done]: el siguiente de doing es done, no reviewing.
+	if got.Status != "done" {
+		t.Errorf("status = %q, want done (workflow de web)", got.Status)
+	}
+}
+
 // markFirstDone marca la primera tarea del fixture como done y recarga el modelo.
 func markFirstDone(t *testing.T, m *Model) {
 	t.Helper()
@@ -160,11 +208,42 @@ func kanbanColumnIndex(m *Model, status string) int {
 	return -1
 }
 
+// TestRenderKanbanShowsFilterHeader verifica que el board muestre la misma
+// cabecera de filtros que la List, con el valor activo.
+func TestRenderKanbanShowsFilterHeader(t *testing.T) {
+	m := newTestModel(t)
+	m, _ = press(m, "2")
+	m.filterProject = "api"
+
+	plain := ansi.Strip(m.renderKanban(m.height))
+	for _, want := range []string{"Project:", "Status:", "Assignee:", "Priority:", "api"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("la cabecera del Kanban no contiene %q:\n%s", want, plain)
+		}
+	}
+}
+
+// TestKanbanRespectsProjectFilter verifica que la cabecera no mienta: el board
+// sólo muestra tareas del proyecto filtrado.
+func TestKanbanRespectsProjectFilter(t *testing.T) {
+	m := newTestModel(t)
+	m, _ = press(m, "2")
+	m.filterProject = "api"
+
+	for _, c := range m.kanbanColumns() {
+		for _, task := range c.tasks {
+			if task.ProjectName != "api" {
+				t.Errorf("columna %s: tarea %d es de %q, want api", c.status, task.ID, task.ProjectName)
+			}
+		}
+	}
+}
+
 // TestRenderKanbanRespectsHeight verifica que un título largo se recorte en vez
 // de wrappear: si wrappease, la columna crecería y el board excedería el alto.
 func TestRenderKanbanRespectsHeight(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "3")
+	m, _ = press(m, "2")
 	m.width = 100
 	for i := range m.tasks {
 		m.tasks[i].Title = strings.Repeat("TITULO-LARGO ", 12)

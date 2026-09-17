@@ -45,7 +45,7 @@ func Run(args []string) bool {
 		cmdGantt(args[1:])
 	case "update":
 		if len(args) < 2 {
-			outputError("usage: tsk update <id> [--title ...] [--description ...] [--priority N] [--assignee @name]")
+			outputError("usage: tsk update <id> [--title ...] [--description ...] [--priority N] [--assignee @name] [--tag T] [--untag T]")
 		}
 		cmdUpdate(args[1:])
 	case "move":
@@ -418,11 +418,12 @@ func cmdProjectUnarchive(name string) {
 
 func cmdAdd(args []string) {
 	if len(args) == 0 {
-		outputError("usage: tsk add <title> --project X [--priority N] [--assignee @name] [--status S]")
+		outputError("usage: tsk add <title> --project X [--priority N] [--assignee @name] [--status S] [--tag T]")
 	}
 
 	title := args[0]
 	var project, assignee, status string
+	var tags []string
 	priority := 0
 	estimate := 0.0
 
@@ -459,6 +460,11 @@ func cmdAdd(args []string) {
 				}
 				i++
 			}
+		case "--tag", "--tags":
+			if i+1 < len(args) {
+				tags = append(tags, model.ParseTags(args[i+1])...)
+				i++
+			}
 		}
 	}
 
@@ -469,7 +475,7 @@ func cmdAdd(args []string) {
 	database := openDB()
 	defer database.Close()
 
-	t, err := database.CreateTaskWithEstimate(project, title, "", assignee, priority, status, estimate)
+	t, err := database.CreateTaskFull(project, title, "", assignee, priority, status, estimate, tags)
 	if err != nil {
 		outputError(err.Error())
 	}
@@ -478,7 +484,7 @@ func cmdAdd(args []string) {
 }
 
 func cmdList(args []string) {
-	var project, status, assignee string
+	var project, status, assignee, tag string
 	jsonOutput := false
 
 	for i := 0; i < len(args); i++ {
@@ -498,6 +504,11 @@ func cmdList(args []string) {
 				assignee = args[i+1]
 				i++
 			}
+		case "--tag":
+			if i+1 < len(args) {
+				tag = args[i+1]
+				i++
+			}
 		case "--json":
 			jsonOutput = true
 		}
@@ -509,6 +520,18 @@ func cmdList(args []string) {
 	tasks, err := database.ListTasks(project, status, assignee)
 	if err != nil {
 		outputError(err.Error())
+	}
+
+	// El filtro por tag se aplica en memoria: el conjunto de datos es chico y
+	// evita acoplar el SQL a json_each para una sola etiqueta.
+	if tag != "" {
+		var byTag []model.Task
+		for _, t := range tasks {
+			if model.HasTag(t.Tags, tag) {
+				byTag = append(byTag, t)
+			}
+		}
+		tasks = byTag
 	}
 
 	if tasks == nil {
@@ -527,14 +550,15 @@ func cmdList(args []string) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tPRIORITY\tSTATUS\tASSIGNEE\tTITLE")
+	fmt.Fprintln(w, "ID\tPRIORITY\tSTATUS\tASSIGNEE\tTAGS\tTITLE")
 	for _, t := range tasks {
-		fmt.Fprintf(w, "%d\t%s %s\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%d\t%s %s\t%s\t%s\t%s\t%s\n",
 			t.ID,
 			model.PriorityBar(t.Priority),
 			model.PriorityLabel(t.Priority),
 			t.Status,
 			t.Assignee,
+			strings.Join(t.Tags, ","),
 			t.Title,
 		)
 	}
@@ -767,19 +791,28 @@ func cmdGantt(args []string) {
 	database := openDB()
 	defer database.Close()
 
-	tasks, err := database.ListTasks(project, "", assignee)
+	// La cola se calcula SIEMPRE con todas las tareas y off-days de cada
+	// persona: su capacidad es una sola y se reparte entre proyectos. --project
+	// y --assignee son filtros de vista (no cambian las fechas).
+	tasks, err := database.ListTasks("", "", "")
 	if err != nil {
 		outputError(err.Error())
 	}
-	offdays, err := database.ListOffDays(assignee)
+	offdays, err := database.ListOffDays("")
 	if err != nil {
 		outputError(err.Error())
 	}
 
 	sched := model.BuildSchedule(tasks, offdays, start, cfg.DefaultEstimateDays)
-	if sched.Unassigned == nil {
-		sched.Unassigned = []model.Task{}
-	}
+	sched = model.FilterSchedule(sched, func(t model.Task) bool {
+		if project != "" && t.ProjectName != project {
+			return false
+		}
+		if assignee != "" && t.Assignee != assignee {
+			return false
+		}
+		return true
+	})
 
 	if jsonOutput {
 		outputJSON(sched)
@@ -904,6 +937,8 @@ func padRight(s string, w int) string {
 func cmdUpdate(args []string) {
 	id := parseID(args[0])
 	updates := map[string]any{}
+	var tagsSet, tagsAdd, tagsRemove []string
+	hasTagsSet := false
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
@@ -938,13 +973,50 @@ func cmdUpdate(args []string) {
 				}
 				i++
 			}
+		case "--tags":
+			if i+1 < len(args) {
+				tagsSet = model.ParseTags(args[i+1])
+				hasTagsSet = true
+				i++
+			}
+		case "--tag":
+			if i+1 < len(args) {
+				tagsAdd = append(tagsAdd, model.ParseTags(args[i+1])...)
+				i++
+			}
+		case "--untag":
+			if i+1 < len(args) {
+				tagsRemove = append(tagsRemove, model.ParseTags(args[i+1])...)
+				i++
+			}
 		}
 	}
 
 	database := openDB()
 	defer database.Close()
 
-	t, err := database.UpdateTask(id, updates)
+	if len(updates) > 0 {
+		if _, err := database.UpdateTask(id, updates); err != nil {
+			outputError(err.Error())
+		}
+	}
+	if hasTagsSet {
+		if _, err := database.SetTaskTags(id, tagsSet); err != nil {
+			outputError(err.Error())
+		}
+	}
+	if len(tagsAdd) > 0 {
+		if _, err := database.AddTaskTags(id, tagsAdd); err != nil {
+			outputError(err.Error())
+		}
+	}
+	if len(tagsRemove) > 0 {
+		if _, err := database.RemoveTaskTags(id, tagsRemove); err != nil {
+			outputError(err.Error())
+		}
+	}
+
+	t, err := database.GetTask(id)
 	if err != nil {
 		outputError(err.Error())
 	}
@@ -1198,15 +1270,15 @@ func cmdHelp() {
 		"tsk project add <name> [--workflow] [--list-order]": "register a project",
 		"tsk project list":        "list all projects",
 		"tsk project show <name>": "show project detail + workflow",
-		"tsk project update <name> [--name] [--workflow] [--list-order]":               "update project (rename/workflow/list order)",
-		"tsk project remove <name>":                                                    "delete project + tasks",
-		"tsk project archive <name>":                                                   "archive project (hides tasks, reversible)",
-		"tsk project unarchive <name>":                                                 "restore an archived project",
-		"tsk project list [--archived]":                                                "list active or archived projects",
-		"tsk add <title> --project X [--priority N] [--assignee @name] [--estimate N]": "create a task",
-		"tsk list [--project X] [--status S] [--assignee A]":                           "list tasks",
+		"tsk project update <name> [--name] [--workflow] [--list-order]": "update project (rename/workflow/list order)",
+		"tsk project remove <name>":                                      "delete project + tasks",
+		"tsk project archive <name>":                                     "archive project (hides tasks, reversible)",
+		"tsk project unarchive <name>":                                   "restore an archived project",
+		"tsk project list [--archived]":                                  "list active or archived projects",
+		"tsk add <title> --project X [--priority N] [--assignee @name] [--estimate N] [--tag T]": "create a task",
+		"tsk list [--project X] [--status S] [--assignee A] [--tag T]":                           "list tasks",
 		"tsk show <id>": "show task detail",
-		"tsk update <id> [--title] [--description] [--priority N] [--assignee @name] [--estimate N]": "update task metadata",
+		"tsk update <id> [--title] [--description] [--priority N] [--assignee @name] [--estimate N] [--tag T] [--untag T] [--tags a,b]": "update task metadata (--tag adds, --untag removes, --tags replaces)",
 		"tsk move <id> <status>":                               "move task to a specific status",
 		"tsk start <id>":                                       "move task to 2nd workflow status",
 		"tsk review <id>":                                      "move task to review status",
@@ -1218,7 +1290,7 @@ func cmdHelp() {
 		"tsk offday add <assignee> <start> [end] [--note ...]": "mark non-working days for a person",
 		"tsk offday list [--assignee A] [--json]":              "list off-days",
 		"tsk offday remove <id>":                               "delete an off-day",
-		"tsk gantt [--project X] [--assignee A] [--from DATE] [--weeks N] [--json]": "project the schedule per person",
+		"tsk gantt [--project X] [--assignee A] [--from DATE] [--weeks N] [--json]": "project the schedule per person (--project/--assignee filter the view, not the dates)",
 		"tsk stats [--project X]": "show statistics",
 		"tsk migrate":             "run pending migrations",
 	}

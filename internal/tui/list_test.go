@@ -12,7 +12,7 @@ import (
 // disponible y que la ventana mantenga el cursor visible.
 func TestRenderListRespectsHeight(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 	addTasks(t, m, 40)
 	m.cursor = 20
 
@@ -36,7 +36,7 @@ func TestRenderListRespectsHeight(t *testing.T) {
 // incrustada en el borde inferior, alineada a la derecha.
 func TestRenderListPageLegend(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 	addTasks(t, m, 40) // 44 tareas activas
 	m.pageSize = 10
 
@@ -89,7 +89,7 @@ func selectedRow(out string) string {
 // la caja excedería el alto disponible.
 func TestRenderListFitsNarrowWidth(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 	addTasks(t, m, 40)
 	m.width = 80
 
@@ -114,10 +114,12 @@ func TestVisibleListColumns(t *testing.T) {
 		avail int
 		want  int
 	}{
-		{name: "entran todas", avail: 126, want: 5},
-		{name: "borde exacto con Description", avail: 102, want: 5},
-		{name: "se cae Description", avail: 101, want: 4},
-		{name: "borde exacto sin Description", avail: 61, want: 4},
+		{name: "entran todas", avail: 126, want: 6},
+		{name: "borde exacto con Description", avail: 113, want: 6},
+		{name: "se cae Description", avail: 112, want: 5},
+		{name: "borde exacto con Tags", avail: 72, want: 5},
+		{name: "se cae Tags", avail: 71, want: 4},
+		{name: "borde exacto sin Tags", avail: 61, want: 4},
 		{name: "se cae Title", avail: 60, want: 3},
 		{name: "muy angosto", avail: 10, want: 1},
 		{name: "más angosto que la primera", avail: 5, want: 1},
@@ -136,7 +138,7 @@ func TestVisibleListColumns(t *testing.T) {
 // se omita entera cuando no entra, en vez de cortarse a la mitad.
 func TestRenderListHidesDescriptionWhenNarrow(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 
 	wide := ansi.Strip(m.renderList(m.height))
 	if !strings.Contains(wide, "Description") {
@@ -159,7 +161,7 @@ func TestRenderListHidesDescriptionWhenNarrow(t *testing.T) {
 // llevaba el prefijo de 2 columnas que sí llevan las filas.
 func TestRenderListColumnsAligned(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 	m.width = 130 // entran todas las columnas
 
 	lines := strings.Split(ansi.Strip(m.renderList(m.height)), "\n")

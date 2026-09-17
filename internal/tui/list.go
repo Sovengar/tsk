@@ -15,6 +15,10 @@ import (
 // de columnas.
 const listFixedRows = 6
 
+// filterHeaderRows es el alto de la cabecera de filtros compartida por las
+// vistas: la barra de filtros y su separador.
+const filterHeaderRows = 2
+
 // listColumn es una columna de la tabla de la List. Los anchos son de display
 // (columnas de pantalla), no bytes.
 type listColumn struct {
@@ -23,12 +27,15 @@ type listColumn struct {
 }
 
 // listColumns define las columnas en orden. Cuando el ancho no alcanza para
-// todas se descartan desde el final, así que Description es la primera en caer.
+// todas se descartan desde el final, así que Description es la primera en caer
+// y Tags la segunda. Tags va antes que Description para que "blocked" sea
+// visible en terminales de ancho común.
 var listColumns = []listColumn{
 	{"Priority", 10},
 	{"Status", 12},
 	{"Assignee", 12},
 	{"Title", 24},
+	{"Tags", 10},
 	{"Description", 40},
 }
 
@@ -70,9 +77,6 @@ func (m *Model) renderList(maxHeight int) string {
 
 	sep := styleSep.Render(strings.Repeat("─", innerW-2))
 
-	// Filter bar
-	filterBar := m.renderFilterBar()
-
 	// Columnas que entran en el ancho disponible. Si no alcanza para todas, las
 	// últimas se descartan (Description primero) en vez de cortarse a la mitad.
 	cols := visibleListColumns(innerW - 2) // -2 por el prefijo "> " / "  "
@@ -82,8 +86,6 @@ func (m *Model) renderList(maxHeight int) string {
 		headerCells[i] = col.header
 	}
 	headerLine := styleColumnHeader.Render("  " + formatListRow(headerCells, cols))
-
-	sep2 := styleSep.Render(strings.Repeat("─", innerW-2))
 
 	tasks := m.filteredTasks()
 	pageStart, pageEnd := m.pageBounds()
@@ -107,6 +109,7 @@ func (m *Model) renderList(maxHeight int) string {
 			t.Status,
 			t.Assignee,
 			singleLine(t.Title),
+			singleLine(strings.Join(t.Tags, ",")),
 			singleLine(t.Description),
 		}
 		line := formatListRow(cells, cols)
@@ -124,10 +127,9 @@ func (m *Model) renderList(maxHeight int) string {
 	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		filterBar,
-		sep,
+		m.renderFilterHeader(innerW),
 		headerLine,
-		sep2,
+		sep,
 		strings.Join(taskLines, "\n"),
 	)
 
@@ -151,12 +153,19 @@ func (m *Model) renderList(maxHeight int) string {
 	)
 }
 
+// renderFilterBar arma la barra con los filtros activos: label en gris, valor
+// en azul, y "all" cuando no hay filtro.
 func (m *Model) renderFilterBar() string {
 	var parts []string
 
 	parts = append(parts, m.renderFilterPart("Project", m.filterProject))
-	parts = append(parts, m.renderFilterPart("Status", m.filterStatus))
+	// En Gantt el estado es siempre "active" (done/cancelled quedan fuera de la
+	// proyección), así que mostrarlo sería ruido: se omite del header.
+	if m.currentView != viewGantt {
+		parts = append(parts, m.renderFilterPart("Status", m.filterStatus))
+	}
 	parts = append(parts, m.renderFilterPart("Assignee", m.filterAssignee))
+	parts = append(parts, m.renderFilterPart("Tag", m.filterTag))
 
 	if m.filterPriority >= 0 {
 		parts = append(parts, styleFilterDim.Render("Priority: ")+styleStatusKey.Render(fmt.Sprintf("%d", m.filterPriority)))
@@ -165,6 +174,13 @@ func (m *Model) renderFilterBar() string {
 	}
 
 	return "  " + strings.Join(parts, "    ")
+}
+
+// renderFilterHeader dibuja la barra de filtros seguida de un separador, al
+// ancho interior de la caja. Es la cabecera común de List, Kanban y Gantt.
+func (m *Model) renderFilterHeader(innerW int) string {
+	sep := styleSep.Render(strings.Repeat("─", innerW-2))
+	return lipgloss.JoinVertical(lipgloss.Left, m.renderFilterBar(), sep)
 }
 
 // renderFilterPart renderiza una parte del filtro: label en gris, valor en azul.

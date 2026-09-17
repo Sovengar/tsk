@@ -14,10 +14,15 @@ type overlayKind int
 const (
 	overlayNone overlayKind = iota
 	overlayDetail
+	overlayTag
 	overlayNewTask
 	overlayFilter
 	overlayProject
 	overlayConfirm
+	overlayDescEdit
+	overlayAssignee
+	overlayAssigneeDetail
+	overlayOffdayForm
 )
 
 // KeybindsBar renderiza los keybinds en un pane con bordes.
@@ -82,6 +87,8 @@ func (s KeybindsBar) title() string {
 	switch s.overlay {
 	case overlayDetail:
 		return " Keybinds · Detail "
+	case overlayTag:
+		return " Keybinds · Tags "
 	case overlayNewTask:
 		return " Keybinds · New task "
 	case overlayFilter:
@@ -90,6 +97,14 @@ func (s KeybindsBar) title() string {
 		return " Keybinds · Project "
 	case overlayConfirm:
 		return " Keybinds · Confirm "
+	case overlayDescEdit:
+		return " Keybinds · Description "
+	case overlayAssignee:
+		return " Keybinds · Assignees "
+	case overlayAssigneeDetail:
+		return " Keybinds · Assignee "
+	case overlayOffdayForm:
+		return " Keybinds · Off-day "
 	}
 	return " Keybinds "
 }
@@ -127,6 +142,13 @@ func (s KeybindsBar) renderOverlay() []string {
 	switch s.overlay {
 	case overlayDetail:
 		return s.renderRows(detailKeybinds())
+	case overlayTag:
+		return s.renderRows([]keybind{
+			{"Enter", "toggle tag"},
+			{"↑↓", "suggestion"},
+			{"Tab", "complete"},
+			{"Esc", "close"},
+		})
 	case overlayNewTask:
 		return s.renderRows([]keybind{
 			{"Enter", "create"},
@@ -152,6 +174,34 @@ func (s KeybindsBar) renderOverlay() []string {
 		return s.renderRows([]keybind{
 			{"y", "confirm"},
 			{"n/Esc", "cancel"},
+		})
+	case overlayDescEdit:
+		return s.renderRows([]keybind{
+			{"Ctrl+S", "save"},
+			{"Ctrl+C", "copy"},
+			{"Ctrl+V", "paste"},
+			{"Esc", "cancel"},
+			{"Enter", "newline"},
+		})
+	case overlayAssignee:
+		return s.renderRows([]keybind{
+			{"Enter", "open"},
+			{"a", "add off-day"},
+			{"j/k", "move"},
+			{"Esc", "close"},
+		})
+	case overlayAssigneeDetail:
+		return s.renderRows([]keybind{
+			{"a", "add off-day"},
+			{"d/x", "delete off-day"},
+			{"j/k", "move"},
+			{"Esc", "back"},
+		})
+	case overlayOffdayForm:
+		return s.renderRows([]keybind{
+			{"Enter", "save"},
+			{"Tab", "next field"},
+			{"Esc", "cancel"},
 		})
 	}
 	return nil

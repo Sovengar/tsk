@@ -2,7 +2,9 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 
+	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"tsk/internal/config"
 	"tsk/internal/db"
@@ -27,6 +29,7 @@ type Model struct {
 	filterProject    string
 	filterStatus     string
 	filterAssignee   string
+	filterTag        string
 	filterPriority   int // -1 = all
 	filterActive     bool
 	filterText       string
@@ -56,10 +59,24 @@ type Model struct {
 	projectListOrderInput string
 	projectEditingName    string // nombre original al editar
 
-	// Confirmación (archivar/restaurar)
+	// Confirmación (archivar/restaurar proyecto, borrar off-day)
 	confirmOpen    bool
-	confirmAction  string // "archive" | "unarchive"
+	confirmAction  string // "archive" | "unarchive" | "delete-offday"
 	confirmProject string
+	confirmOffday  model.OffDay
+
+	// Assignee / off-day modal (se abre con "m" desde el Dashboard)
+	assigneeModalOpen bool
+	assigneeDetail    bool // false = lista de personas, true = detalle
+	assigneeIdx       int
+	assigneeOffdayIdx int
+
+	// Alta de off-day
+	offdayFormOpen   bool
+	offdayFormField  int // 0=start, 1=end, 2=note
+	offdayStartInput string
+	offdayEndInput   string
+	offdayNoteInput  string
 
 	// Toast de feedback transitorio
 	toast     string
@@ -72,12 +89,23 @@ type Model struct {
 	detailComments   []model.Comment
 	detailCommentSel int // -1 = ninguno seleccionado
 
+	// Tag modal (se abre con "t" desde el Detail)
+	tagOpen       bool
+	tagInput      string
+	tagSuggestIdx int // -1 = ninguna sugerencia seleccionada
+
+	// Editor inline de descripción (integrado en la caja del detalle)
+	descEditOpen      bool
+	descEditTaskID    int64
+	descEditHadDetail bool // el detalle ya estaba abierto antes de editar
+	descEditTextarea  textarea.Model
+
 	// Help modal
 	helpOpen bool
 
 	// Filter modal
 	filterOpen     bool
-	filterFieldIdx int // 0=project, 1=status, 2=assignee, 3=priority
+	filterFieldIdx int // 0=project, 1=status, 2=assignee, 3=priority, 4=tag
 
 	// New task modal
 	newTaskOpen            bool
@@ -109,6 +137,7 @@ func New(database *db.DB, cfg config.Config) Model {
 		filterActiveOnly: true,
 		pageSize:         pageSize,
 		detailCommentSel: -1,
+		tagSuggestIdx:    -1,
 		width:            80,
 		height:           24,
 		statusbar:        NewKeybindsBar(80),
@@ -129,6 +158,21 @@ type projectsLoadedMsg struct {
 
 type offdaysLoadedMsg struct {
 	offdays []model.OffDay
+}
+
+// offdaySavedMsg resulta de un alta o baja de off-day. err != nil indica fallo.
+type offdaySavedMsg struct {
+	err    error
+	action string // "add" | "delete"
+	name   string
+}
+
+// tagToggledMsg resulta de alternar una tag: trae la tarea actualizada (para el
+// Detail) y el listado recargado (para List/Kanban).
+type tagToggledMsg struct {
+	taskID int64
+	task   *model.Task
+	tasks  []model.Task
 }
 
 // ---- Commands ----
@@ -179,6 +223,28 @@ func (m Model) taskActionCmd(id int64, action func(int64) (*model.Task, error)) 
 	}
 }
 
+// toggleTagCmd agrega la tag si la tarea no la tiene, o la quita si la tiene.
+// Recarga el listado para que List/Kanban reflejen el cambio.
+func (m *Model) toggleTagCmd(taskID int64, tag string) tea.Cmd {
+	return func() tea.Msg {
+		t, err := m.database.GetTask(taskID)
+		if err != nil {
+			return nil
+		}
+		var updated *model.Task
+		if model.HasTag(t.Tags, tag) {
+			updated, err = m.database.RemoveTaskTags(taskID, []string{tag})
+		} else {
+			updated, err = m.database.AddTaskTags(taskID, []string{tag})
+		}
+		if err != nil {
+			return nil
+		}
+		tasks, _ := m.database.ListTasks("", "", "")
+		return tagToggledMsg{taskID: taskID, task: updated, tasks: tasks}
+	}
+}
+
 // mergedWorkflow combina los workflows de todos los proyectos en uno solo.
 func (m *Model) mergedWorkflow() []string {
 	seen := make(map[string]bool)
@@ -197,6 +263,82 @@ func (m *Model) mergedWorkflow() []string {
 	return result
 }
 
+// kanbanWorkflow devuelve las columnas del Kanban: el workflow del proyecto en
+// contexto si hay uno seleccionado, o la unión de todos en "all projects".
+func (m *Model) kanbanWorkflow() []string {
+	if m.filterProject != "" {
+		if p := m.projectByName(m.filterProject); p != nil {
+			return p.Workflow
+		}
+	}
+	return m.mergedWorkflow()
+}
+
+// projectByName busca un proyecto activo por nombre.
+func (m *Model) projectByName(name string) *model.Project {
+	for i := range m.projects {
+		if m.projects[i].Name == name {
+			return &m.projects[i]
+		}
+	}
+	return nil
+}
+
+// commonWorkflow devuelve los estados presentes en TODOS los proyectos, en el
+// orden del primero. Es el conjunto válido para filtrar por estado cuando no
+// hay proyecto seleccionado: un estado que no exista en todos no puede filtrar
+// tareas de todos. Sin proyectos cae al workflow por defecto.
+func (m *Model) commonWorkflow() []string {
+	if len(m.projects) == 0 {
+		return model.DefaultWorkflow
+	}
+	var result []string
+	for _, s := range m.projects[0].Workflow {
+		common := true
+		for i := 1; i < len(m.projects); i++ {
+			if !model.HasStatus(m.projects[i].Workflow, s) {
+				common = false
+				break
+			}
+		}
+		if common {
+			result = append(result, s)
+		}
+	}
+	if len(result) == 0 {
+		return model.DefaultWorkflow
+	}
+	return result
+}
+
+// taskMatchesFilter indica si una tarea pasa los filtros activos. hideDone
+// oculta done/cancelled cuando no se filtró por estado, que es el
+// comportamiento por defecto de la List. Lo comparten List, Kanban y Gantt para
+// que la cabecera de filtros sea consistente en todas las vistas.
+func (m *Model) taskMatchesFilter(t model.Task, hideDone bool) bool {
+	if hideDone && m.filterStatus == "" {
+		if t.Status == "done" || t.Status == "cancelled" {
+			return false
+		}
+	}
+	if m.filterProject != "" && t.ProjectName != m.filterProject {
+		return false
+	}
+	if m.filterStatus != "" && t.Status != m.filterStatus {
+		return false
+	}
+	if m.filterAssignee != "" && t.Assignee != m.filterAssignee {
+		return false
+	}
+	if m.filterTag != "" && !model.HasTag(t.Tags, m.filterTag) {
+		return false
+	}
+	if m.filterPriority >= 0 && t.Priority != m.filterPriority {
+		return false
+	}
+	return true
+}
+
 // filteredTasks devuelve las tareas filtradas.
 func (m *Model) filteredTasks() []model.Task {
 	if m.filteredT != nil {
@@ -205,25 +347,9 @@ func (m *Model) filteredTasks() []model.Task {
 
 	var result []model.Task
 	for _, t := range m.tasks {
-		// Ocultar done/cancelled por defecto (a menos que el usuario filtre por esos estados)
-		if m.filterActiveOnly && m.filterStatus == "" {
-			if t.Status == "done" || t.Status == "cancelled" {
-				continue
-			}
+		if m.taskMatchesFilter(t, m.filterActiveOnly) {
+			result = append(result, t)
 		}
-		if m.filterProject != "" && t.ProjectName != m.filterProject {
-			continue
-		}
-		if m.filterStatus != "" && t.Status != m.filterStatus {
-			continue
-		}
-		if m.filterAssignee != "" && t.Assignee != m.filterAssignee {
-			continue
-		}
-		if m.filterPriority >= 0 && t.Priority != m.filterPriority {
-			continue
-		}
-		result = append(result, t)
 	}
 
 	m.filteredT = result
@@ -314,6 +440,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.statusbar.SetWidth(msg.Width)
 		m.preview.SetWidth(msg.Width)
+		if m.descEditOpen {
+			m.resizeDescEditor()
+		}
 		return m, nil
 
 	case projectsLoadedMsg:
@@ -341,9 +470,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.invalidateFilterCache()
 		return m, nil
 
+	case tagToggledMsg:
+		if msg.task != nil {
+			m.tasks = msg.tasks
+			m.invalidateFilterCache()
+			if m.detailTask != nil && m.detailTask.ID == msg.taskID {
+				m.detailTask = msg.task
+			}
+		}
+		return m, nil
+
 	case offdaysLoadedMsg:
 		m.offdays = msg.offdays
 		return m, nil
+
+	case offdaySavedMsg:
+		return m.handleOffdaySaved(msg)
 
 	case editorFinishedMsg:
 		if msg.err != nil {
@@ -376,8 +518,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.addCommentCmd(msg.taskID, msg.body)
 
+	case tea.PasteMsg:
+		// El textarea del editor inline maneja el pegado por sí mismo.
+		if m.descEditOpen {
+			return m.handleDescEditKey(msg)
+		}
+		if m.tagOpen {
+			return m.handleTagPaste(msg.Content)
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
+
+	default:
+		// El textarea del editor inline emite mensajes privados del paquete
+		// (pasteMsg/copyMsg) como resultado de sus comandos asíncronos. No son
+		// tea.KeyMsg ni tea.PasteMsg, así que hay que reenviarlos a su Update.
+		if m.descEditOpen {
+			return m.handleDescEditKey(msg)
+		}
 	}
 
 	return m, nil
@@ -401,6 +561,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleNewTaskKey(key)
 	}
 
+	// Editor inline de descripción (puede superponerse al detalle)
+	if m.descEditOpen {
+		return m.handleDescEditKey(msg)
+	}
+
+	// Tag modal (se superpone al detalle)
+	if m.tagOpen {
+		return m.handleTagModalKey(key)
+	}
+
 	// Detail modal keys
 	if m.detailOpen {
 		return m.handleDetailKey(key)
@@ -409,6 +579,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Filter modal keys
 	if m.filterOpen {
 		return m.handleFilterModalKey(key)
+	}
+
+	// Assignee / off-day modal (formulario encima de la lista)
+	if m.offdayFormOpen {
+		return m.handleOffdayFormKey(key)
+	}
+	if m.assigneeModalOpen {
+		return m.handleAssigneeModalKey(key)
 	}
 
 	// Global keys
@@ -464,6 +642,10 @@ func (m Model) handleDashboardKey(key string) (tea.Model, tea.Cmd) {
 	case "A":
 		m.showArchived = !m.showArchived
 		m.dashProjectIdx = 0
+	case "m":
+		// Gestionar off-days por persona.
+		m.openAssigneeModal()
+		return m, m.loadOffDays()
 	}
 	return m, nil
 }
@@ -473,6 +655,11 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	tasks := m.filteredTasks()
 
 	switch key {
+	case "tab":
+		// Cambiar de proyecto ciclando el filtro Project, como en el Dashboard.
+		m.cycleProjectFilter(1)
+		m.cursor = 0
+		return m, nil
 	case "j", "down":
 		if _, end := m.pageBounds(); m.cursor < end-1 {
 			m.cursor++
@@ -501,7 +688,10 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		// Ir a la primera página: cursor al primer elemento.
 		m.cursor = 0
 	case "e":
-		// Edit task in nvim
+		// Editar la descripción inline, desde la propia TUI.
+		return m, m.openDescEditor()
+	case "E":
+		// Editor externo completo (write in nvim).
 		return m, m.editSelectedTask()
 	case "i":
 		// New task
@@ -557,6 +747,22 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 	m.clampKanbanCursor()
 
+	// Abrir filtros antes del corte por columnas vacías, para que funcione
+	// aunque el board no tenga nada.
+	if key == "/" {
+		m.filterOpen = true
+		m.filterFieldIdx = 0
+		return m, nil
+	}
+
+	// Tab cambia de proyecto ciclando el filtro Project (como el Dashboard).
+	// Las columnas se navegan con h/l o ←/→, que ya hacían lo mismo.
+	if key == "tab" {
+		m.cycleProjectFilter(1)
+		m.clampKanbanCursor()
+		return m, nil
+	}
+
 	cols := m.kanbanColumns()
 	if len(cols) == 0 {
 		return m, nil
@@ -564,10 +770,6 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 	colTasks := cols[m.kanbanCol].tasks
 
 	switch key {
-	case "tab":
-		// Cycle through columns
-		m.kanbanCol = (m.kanbanCol + 1) % len(cols)
-		m.kanbanRow = 0
 	case "h", "left":
 		if m.kanbanCol > 0 {
 			m.kanbanCol--
@@ -587,23 +789,29 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 			m.kanbanRow = (m.kanbanRow - 1 + len(colTasks)) % len(colTasks)
 		}
 	case "s":
-		// Move task right (advance status)
+		// Move task right (advance status) según el workflow de SU proyecto:
+		// el orden del merge puede no existir en el proyecto y el move sería
+		// rechazado en silencio por MoveTask.
 		if m.kanbanRow < len(colTasks) {
 			t := colTasks[m.kanbanRow]
-			if nextStatus, ok := model.NextStatus(m.mergedWorkflow(), t.Status); ok {
-				return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
-					return m.database.MoveTask(id, nextStatus)
-				})
+			if p := m.projectByName(t.ProjectName); p != nil {
+				if nextStatus, ok := model.NextStatus(p.Workflow, t.Status); ok {
+					return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
+						return m.database.MoveTask(id, nextStatus)
+					})
+				}
 			}
 		}
 	case "S":
-		// Move task left (retreat status)
+		// Move task left (retreat status) según el workflow de su proyecto.
 		if m.kanbanRow < len(colTasks) {
 			t := colTasks[m.kanbanRow]
-			if prevStatus, ok := model.PrevStatus(m.mergedWorkflow(), t.Status); ok {
-				return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
-					return m.database.MoveTask(id, prevStatus)
-				})
+			if p := m.projectByName(t.ProjectName); p != nil {
+				if prevStatus, ok := model.PrevStatus(p.Workflow, t.Status); ok {
+					return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
+						return m.database.MoveTask(id, prevStatus)
+					})
+				}
 			}
 		}
 	case "d":
@@ -617,7 +825,10 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 			return m, m.taskActionCmd(colTasks[m.kanbanRow].ID, m.database.CancelTask)
 		}
 	case "e":
-		// Edit task in nvim
+		// Editar la descripción inline, desde la propia TUI.
+		return m, m.openDescEditor()
+	case "E":
+		// Editor externo completo (write in nvim).
 		return m, m.editSelectedTask()
 	case "i":
 		// New task
@@ -654,13 +865,13 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 func (m Model) tasksInColumn(status string) []model.Task {
 	var result []model.Task
 	for _, t := range m.tasks {
-		if t.Status == status {
-			// Ocultar done/cancelled por defecto en kanban
-			if m.filterActiveOnly && (t.Status == "done" || t.Status == "cancelled") {
-				continue
-			}
-			result = append(result, t)
+		if t.Status != status {
+			continue
 		}
+		if !m.taskMatchesFilter(t, m.filterActiveOnly) {
+			continue
+		}
+		result = append(result, t)
 	}
 	return result
 }
@@ -703,8 +914,20 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 			}
 			return m, commentCmd(m.detailTask.ID, editorCmd)
 		}
+	case "t":
+		// Abrir el modal de tags de la tarea abierta.
+		if m.detailTask != nil {
+			m.tagOpen = true
+			m.tagInput = ""
+			m.tagSuggestIdx = -1
+		}
 	case "e":
-		// Edit task in editor
+		// Editar la descripción inline; el detalle queda abierto detrás.
+		if m.detailTask != nil {
+			return m, m.openDescEditor()
+		}
+	case "E":
+		// Editor externo completo (write in nvim).
 		if m.detailTask != nil {
 			editorCmd := m.config.Editor.Command
 			if editorCmd == "" {
@@ -762,6 +985,23 @@ func (m Model) uniqueAssignees() []string {
 	return result
 }
 
+// uniqueTags devuelve las tags en uso en todas las tareas, sin repetir y
+// ordenadas alfabéticamente. Es la fuente de opciones del filtro por tag.
+func (m Model) uniqueTags() []string {
+	seen := make(map[string]bool)
+	var result []string
+	for _, t := range m.tasks {
+		for _, tag := range t.Tags {
+			if !seen[tag] {
+				seen[tag] = true
+				result = append(result, tag)
+			}
+		}
+	}
+	sort.Strings(result)
+	return result
+}
+
 // selectedTask devuelve la tarea seleccionada en la vista actual, o nil si no hay.
 func (m *Model) selectedTask() *model.Task {
 	switch m.currentView {
@@ -802,7 +1042,8 @@ func (m Model) previewBudget(keybindsHeight int) int {
 }
 
 // overlayKind devuelve el modal activo, en el mismo orden de prioridad que
-// handleKey: confirmación, proyecto, nueva tarea, detalle, filtros.
+// handleKey: confirmación, proyecto, nueva tarea, editor de descripción, tags,
+// detalle, filtros.
 func (m Model) overlayKind() overlayKind {
 	switch {
 	case m.confirmOpen:
@@ -811,10 +1052,20 @@ func (m Model) overlayKind() overlayKind {
 		return overlayProject
 	case m.newTaskOpen:
 		return overlayNewTask
+	case m.descEditOpen:
+		return overlayDescEdit
+	case m.tagOpen:
+		return overlayTag
 	case m.detailOpen:
 		return overlayDetail
 	case m.filterOpen:
 		return overlayFilter
+	case m.offdayFormOpen:
+		return overlayOffdayForm
+	case m.assigneeModalOpen && m.assigneeDetail:
+		return overlayAssigneeDetail
+	case m.assigneeModalOpen:
+		return overlayAssignee
 	}
 	return overlayNone
 }
@@ -831,8 +1082,8 @@ func (m Model) View() tea.View {
 	m.preview.SetMaxLines(m.previewBudget(keybindsHeight))
 	preview := m.preview.View()
 
-	// El detalle ya muestra la descripción: sin preview duplicado.
-	if m.detailOpen {
+	// El detalle y el editor inline ya muestran la descripción: sin preview.
+	if m.detailOpen || m.descEditOpen {
 		preview = ""
 	}
 
@@ -859,6 +1110,10 @@ func (m Model) View() tea.View {
 		content = m.renderDetail(m.detailTask, budget)
 	}
 
+	if m.tagOpen {
+		content = m.renderTagModal(content)
+	}
+
 	if m.filterOpen {
 		content = m.renderFilterModal(content)
 	}
@@ -869,6 +1124,14 @@ func (m Model) View() tea.View {
 
 	if m.projectModalOpen {
 		content = m.renderProjectModal(content)
+	}
+
+	if m.assigneeModalOpen {
+		content = m.renderAssigneeModal(content)
+	}
+
+	if m.offdayFormOpen {
+		content = m.renderOffdayForm(content)
 	}
 
 	if m.confirmOpen {

@@ -282,7 +282,7 @@ func TestRenderDetailIndentsDescription(t *testing.T) {
 // de preview (la descripción ya se muestra dentro del modal).
 func TestDetailHidesPreview(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 
 	withPreview := ansi.Strip(m.View().Content)
 	if !strings.Contains(withPreview, " Description ") {
@@ -303,7 +303,7 @@ func TestDetailHidesPreview(t *testing.T) {
 // cajas con borde redondeado: tarea+descripción, comentarios y keybinds.
 func TestDetailViewHasThreeBoxes(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 	m, _ = press(m, "enter")
 
 	out := ansi.Strip(m.View().Content)

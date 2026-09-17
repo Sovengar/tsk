@@ -35,19 +35,22 @@ func (v viewKind) String() string {
 // keybindsForView devuelve, en orden de prioridad, las teclas de una vista. Es
 // la única fuente de verdad para la KeybindsBar y el modal de ayuda.
 //
-// Las teclas comunes (1/2/3, hjkl, H, ?, q) van primero por ser las más
+// Las teclas comunes (1/2/3/4, hjkl, H, ?, q) van primero por ser las más
 // repetidas; después el resto por frecuencia de uso. La barra las reparte en
 // filas de keybindsPerRow, así que bastan 7 entradas para llenar una fila.
 func keybindsForView(v viewKind) []keybind {
 	// Comunes: aplican en casi cualquier vista, pero se listan dentro de cada
 	// una (no como fila "global") para poder omitirlas donde no aplican.
 	common := []keybind{
-		{"1/2/3/4", "Dash / List / Kanban / Gantt"},
+		{"1/2/3/4", "List / Kanban / Gantt / Dash"},
 		{"hjkl", "arrows"},
-		{"H", "hidden"},
-		{"?", "help"},
-		{"q", "quit"},
 	}
+	// H oculta done/cancelled; en Gantt no aplica porque la proyección ya los
+	// excluye, así que se omite para no mostrar una tecla muerta.
+	if v != viewGantt {
+		common = append(common, keybind{"H", "hidden"})
+	}
+	common = append(common, keybind{"?", "help"}, keybind{"q", "quit"})
 
 	var viewKeys []keybind
 	switch v {
@@ -59,36 +62,39 @@ func keybindsForView(v viewKind) []keybind {
 			{"d", "archive project"},
 			{"r", "restore project"},
 			{"A", "archived"},
+			{"m", "assignees"},
 		}
 	case viewList:
 		viewKeys = []keybind{
+			{"Tab", "cycle projects"},
 			{"Enter", "detail"},
 			{"i", "insert task"},
 			{"s", "start"},
 			{"d", "done"},
 			{"x", "cancel"},
-			{"e", "edit task"},
+			{"e/E", "edit/editor"},
 			{"/", "filters"},
 			{"Ctrl+p", "priority"},
 			{"n/p  N/P", "page nav"},
 		}
 	case viewKanban:
 		viewKeys = []keybind{
-			{"Tab", "next column"},
+			{"Tab", "cycle projects"},
 			{"s/S", "status"},
 			{"i", "insert task"},
 			{"Enter", "detail"},
 			{"d", "done"},
 			{"x", "cancel"},
-			{"e", "edit task"},
+			{"e/E", "edit/editor"},
 			{"Ctrl+p", "priority"},
+			{"/", "filters"},
 		}
 	case viewGantt:
 		viewKeys = []keybind{
-			{"j/k", "task"},
-			{"h/l", "move dates"},
+			{"Tab", "cycle projects"},
 			{"g/G", "first/last"},
 			{"Enter", "detail"},
+			{"/", "filters"},
 		}
 	}
 	return append(common, viewKeys...)
@@ -103,19 +109,20 @@ func handleGlobalKeys(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	case "q", "ctrl+c":
 		return m, tea.Quit, true
 	case "1":
-		m.currentView = viewDashboard
-		return m, nil, true
-	case "2":
 		m.currentView = viewList
 		return m, m.loadTasks(), true
-	case "3":
+	case "2":
 		m.currentView = viewKanban
 		return m, m.loadTasks(), true
-	case "4":
+	case "3":
 		m.currentView = viewGantt
 		m.ganttCursor = 0
 		m.ganttOffsetDays = 0
+		m.snapGanttCursor()
 		return m, tea.Batch(m.loadTasks(), m.loadOffDays()), true
+	case "4":
+		m.currentView = viewDashboard
+		return m, nil, true
 	case "esc":
 		if m.helpOpen {
 			m.helpOpen = false
@@ -131,6 +138,11 @@ func handleGlobalKeys(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			return m, nil, true
 		}
 	case "H":
+		// H oculta done/cancelled en List/Kanban. En Gantt no aplica (la
+		// proyección ya las excluye), así que la tecla queda deshabilitada.
+		if m.currentView == viewGantt {
+			return m, nil, true
+		}
 		m.filterActiveOnly = !m.filterActiveOnly
 		m.invalidateFilterCache()
 		m.clampKanbanCursor()

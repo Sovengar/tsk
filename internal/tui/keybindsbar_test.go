@@ -20,9 +20,9 @@ func TestKeybindsBarNormalViewShowsCommonAndViewKeys(t *testing.T) {
 	if !strings.Contains(out, "insert task") {
 		t.Errorf("la vista List debe mostrar sus keybinds:\n%s", out)
 	}
-	// List no usa Tab: no debe aparecer (antes venía de la fila global).
-	if strings.Contains(out, "switch") || strings.Contains(out, "cycle project") {
-		t.Errorf("List no debe mostrar keybinds de Tab:\n%s", out)
+	// List usa Tab para ciclar proyectos.
+	if !strings.Contains(out, "cycle project") {
+		t.Errorf("List debe mostrar Tab como cycle projects:\n%s", out)
 	}
 	if !strings.Contains(out, "Keybinds") {
 		t.Errorf("falta el título del pane:\n%s", out)
@@ -30,15 +30,29 @@ func TestKeybindsBarNormalViewShowsCommonAndViewKeys(t *testing.T) {
 }
 
 // TestKeybindsForViewCommonFirst verifica que las teclas antes globales
-// encabezan la lista (son las más repetidas) en todas las vistas.
+// encabezan la lista (son las más repetidas) en todas las vistas. En Gantt, H
+// (hidden) no aplica y por tanto no se lista.
 func TestKeybindsForViewCommonFirst(t *testing.T) {
-	want := []string{"1/2/3/4", "hjkl", "H", "?", "q"}
-	for _, v := range []viewKind{viewDashboard, viewList, viewKanban, viewGantt} {
+	for _, v := range []viewKind{viewDashboard, viewList, viewKanban} {
+		want := []string{"1/2/3/4", "hjkl", "H", "?", "q"}
 		kbs := keybindsForView(v)
 		for i, key := range want {
 			if i >= len(kbs) || kbs[i].key != key {
 				t.Fatalf("vista %s: keybind[%d].key = %q, want %q", v, i, kbs[i].key, key)
 			}
+		}
+	}
+
+	kbs := keybindsForView(viewGantt)
+	want := []string{"1/2/3/4", "hjkl", "?", "q"}
+	for i, key := range want {
+		if i >= len(kbs) || kbs[i].key != key {
+			t.Fatalf("vista Gantt: keybind[%d].key = %q, want %q", i, kbs[i].key, key)
+		}
+	}
+	for _, kb := range kbs {
+		if kb.key == "H" {
+			t.Errorf("Gantt no debe listar H (hidden): %+v", kb)
 		}
 	}
 }
@@ -60,20 +74,21 @@ func TestKeybindsBarMaxSevenPerRow(t *testing.T) {
 	}
 }
 
-// TestKeybindsBarDetailSingleRow verifica que el detalle muestra sus 7 acciones
-// en una sola fila.
-func TestKeybindsBarDetailSingleRow(t *testing.T) {
+// TestKeybindsBarDetailAllActions verifica que el detalle muestre todas sus
+// acciones repartidas en filas de a lo sumo keybindsPerRow.
+func TestKeybindsBarDetailAllActions(t *testing.T) {
 	var kb KeybindsBar
 	kb.SetWidth(200)
 	kb.SetView(viewList)
 	kb.SetOverlay(overlayDetail)
 
 	out := ansi.Strip(kb.View())
-	// 1 fila de contenido => 3 líneas (borde superior, contenido, borde inferior).
-	if lines := strings.Count(out, "\n") + 1; lines != 3 {
-		t.Errorf("detail debe ocupar una sola fila de keybinds, got %d líneas:\n%s", lines, out)
+	for _, line := range strings.Split(out, "\n") {
+		if n := strings.Count(line, "·"); n > keybindsPerRow-1 {
+			t.Errorf("fila del detalle con más de %d acciones:\n%s", keybindsPerRow, line)
+		}
 	}
-	for _, want := range []string{"j/k", "select comment", "new comment", "delete/done", "edit task", "start", "cancel", "close"} {
+	for _, want := range []string{"j/k", "select comment", "new comment", "tags", "delete/done", "edit/editor", "start", "cancel", "close"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("falta %q en el detalle:\n%s", want, out)
 		}
@@ -160,7 +175,7 @@ func TestOverlayKindPriority(t *testing.T) {
 // contexto de la barra de keybinds.
 func TestDetailOpenSwitchesKeybinds(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 
 	if m.overlayKind() != overlayNone {
 		t.Fatalf("antes de abrir: %v, want overlayNone", m.overlayKind())

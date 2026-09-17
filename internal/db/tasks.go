@@ -15,6 +15,11 @@ func (db *DB) CreateTask(projectName, title, description, assignee string, prior
 
 // CreateTaskWithEstimate crea una tarea nueva con estimate en días.
 func (db *DB) CreateTaskWithEstimate(projectName, title, description, assignee string, priority int, status string, estimate float64) (*model.Task, error) {
+	return db.CreateTaskFull(projectName, title, description, assignee, priority, status, estimate, nil)
+}
+
+// CreateTaskFull crea una tarea nueva con estimate y tags.
+func (db *DB) CreateTaskFull(projectName, title, description, assignee string, priority int, status string, estimate float64, tags []string) (*model.Task, error) {
 	p, err := db.GetProject(projectName)
 	if err != nil {
 		return nil, err
@@ -32,12 +37,13 @@ func (db *DB) CreateTaskWithEstimate(projectName, title, description, assignee s
 	if assignee == "" {
 		assignee = "unassigned"
 	}
+	tags = model.NormalizeTags(tags)
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	result, err := db.conn.Exec(
-		`INSERT INTO tasks (project_id, title, description, status, priority, assignee, estimate, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, title, description, status, priority, assignee, estimate, now, now,
+		`INSERT INTO tasks (project_id, title, description, status, priority, assignee, estimate, tags, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, title, description, status, priority, assignee, estimate, model.TagsJSON(tags), now, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create task: %w", err)
@@ -54,6 +60,7 @@ func (db *DB) CreateTaskWithEstimate(projectName, title, description, assignee s
 		Priority:    priority,
 		Assignee:    assignee,
 		Estimate:    estimate,
+		Tags:        tags,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}, nil
@@ -63,13 +70,14 @@ func (db *DB) CreateTaskWithEstimate(projectName, title, description, assignee s
 func (db *DB) GetTask(id int64) (*model.Task, error) {
 	var t model.Task
 	var completedAt sql.NullString
+	var tagsJSON string
 	err := db.conn.QueryRow(`
 		SELECT t.id, t.project_id, p.name, t.title, t.description, t.status, t.priority, t.assignee,
-		       t.estimate, t.created_at, t.updated_at, t.completed_at
+		       t.estimate, t.tags, t.created_at, t.updated_at, t.completed_at
 		FROM tasks t JOIN projects p ON t.project_id = p.id
 		WHERE t.id = ?`, id,
 	).Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.Title, &t.Description, &t.Status,
-		&t.Priority, &t.Assignee, &t.Estimate, &t.CreatedAt, &t.UpdatedAt, &completedAt)
+		&t.Priority, &t.Assignee, &t.Estimate, &tagsJSON, &t.CreatedAt, &t.UpdatedAt, &completedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("task not found: %d", id)
 	}
@@ -79,6 +87,7 @@ func (db *DB) GetTask(id int64) (*model.Task, error) {
 	if completedAt.Valid {
 		t.CompletedAt = completedAt.String
 	}
+	t.Tags = model.ParseTagsJSON(tagsJSON)
 	return &t, nil
 }
 
@@ -91,7 +100,7 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 	query := `
 		WITH ranked AS (
 			SELECT t.id, t.project_id, p.name, t.title, t.description, t.status, t.priority, t.assignee,
-			       t.estimate, t.created_at, t.updated_at, t.completed_at,
+			       t.estimate, t.tags, t.created_at, t.updated_at, t.completed_at,
 			       (SELECT je.key FROM json_each(p.list_order) AS je WHERE je.value = t.status) AS lo_rank,
 			       (SELECT COUNT(*) FROM json_each(p.list_order)) AS lo_len,
 			       (SELECT je.key FROM json_each(p.workflow) AS je WHERE je.value = t.status) AS wf_rank
@@ -115,7 +124,7 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 	query += `
 		)
 		SELECT id, project_id, name, title, description, status, priority, assignee,
-		       estimate, created_at, updated_at, completed_at
+		       estimate, tags, created_at, updated_at, completed_at
 		FROM ranked
 		ORDER BY priority DESC,
 		         CASE
@@ -137,13 +146,15 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 	for rows.Next() {
 		var t model.Task
 		var completedAt sql.NullString
+		var tagsJSON string
 		if err := rows.Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.Title, &t.Description,
-			&t.Status, &t.Priority, &t.Assignee, &t.Estimate, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
+			&t.Status, &t.Priority, &t.Assignee, &t.Estimate, &tagsJSON, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
 			return nil, err
 		}
 		if completedAt.Valid {
 			t.CompletedAt = completedAt.String
 		}
+		t.Tags = model.ParseTagsJSON(tagsJSON)
 		tasks = append(tasks, t)
 	}
 	return tasks, rows.Err()
@@ -252,6 +263,49 @@ func (db *DB) UpdateTask(id int64, updates map[string]any) (*model.Task, error) 
 	}
 
 	return db.GetTask(id)
+}
+
+// SetTaskTags reemplaza las tags de una tarea.
+func (db *DB) SetTaskTags(id int64, tags []string) (*model.Task, error) {
+	if _, err := db.GetTask(id); err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := db.conn.Exec(
+		`UPDATE tasks SET tags = ?, updated_at = ? WHERE id = ?`,
+		model.TagsJSON(model.NormalizeTags(tags)), now, id,
+	); err != nil {
+		return nil, err
+	}
+	return db.GetTask(id)
+}
+
+// AddTaskTags agrega tags sin duplicar las existentes.
+func (db *DB) AddTaskTags(id int64, tags []string) (*model.Task, error) {
+	t, err := db.GetTask(id)
+	if err != nil {
+		return nil, err
+	}
+	return db.SetTaskTags(id, append(append([]string{}, t.Tags...), tags...))
+}
+
+// RemoveTaskTags quita las tags indicadas de una tarea.
+func (db *DB) RemoveTaskTags(id int64, tags []string) (*model.Task, error) {
+	t, err := db.GetTask(id)
+	if err != nil {
+		return nil, err
+	}
+	remove := make(map[string]bool)
+	for _, tag := range model.NormalizeTags(tags) {
+		remove[tag] = true
+	}
+	var kept []string
+	for _, tag := range t.Tags {
+		if !remove[tag] {
+			kept = append(kept, tag)
+		}
+	}
+	return db.SetTaskTags(id, kept)
 }
 
 // Stats devuelve estadísticas de tareas, excluyendo proyectos archivados.

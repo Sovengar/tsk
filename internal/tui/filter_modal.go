@@ -2,10 +2,8 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 )
 
 // filterField indices
@@ -14,7 +12,11 @@ const (
 	filterFieldStatus   = 1
 	filterFieldAssignee = 2
 	filterFieldPriority = 3
+	filterFieldTag      = 4
 )
+
+// filterFieldCount es la cantidad de campos del modal de filtros.
+const filterFieldCount = 5
 
 // filterFieldOptions retorna las opciones disponibles para un campo.
 func (m *Model) filterFieldOptions(field int) []string {
@@ -27,10 +29,15 @@ func (m *Model) filterFieldOptions(field int) []string {
 		return opts
 	case filterFieldStatus:
 		opts := []string{"all"}
-		for _, s := range m.mergedWorkflow() {
-			opts = append(opts, s)
+		// El estado es un concepto por-proyecto: si hay uno seleccionado, sólo
+		// se ofrecen sus estados; en "all projects", sólo los comunes a todos.
+		if m.filterProject != "" {
+			if p := m.projectByName(m.filterProject); p != nil {
+				return append(opts, p.Workflow...)
+			}
+			return opts
 		}
-		return opts
+		return append(opts, m.commonWorkflow()...)
 	case filterFieldAssignee:
 		opts := []string{"all"}
 		for _, a := range m.uniqueAssignees() {
@@ -41,6 +48,8 @@ func (m *Model) filterFieldOptions(field int) []string {
 		return opts
 	case filterFieldPriority:
 		return []string{"all", "none", "low", "med", "high"}
+	case filterFieldTag:
+		return append([]string{"all"}, m.uniqueTags()...)
 	}
 	return nil
 }
@@ -56,6 +65,8 @@ func filterFieldLabel(field int) string {
 		return "Assignee"
 	case filterFieldPriority:
 		return "Priority"
+	case filterFieldTag:
+		return "Tag"
 	}
 	return "?"
 }
@@ -91,6 +102,11 @@ func (m *Model) filterCurrentValue(field int) string {
 		case 3:
 			return "high"
 		}
+	case filterFieldTag:
+		if m.filterTag == "" {
+			return "all"
+		}
+		return m.filterTag
 	}
 	return "all"
 }
@@ -104,6 +120,9 @@ func (m *Model) filterApplySelection(field int, value string) {
 		} else {
 			m.filterProject = value
 		}
+		// El estado es por-proyecto: si el filtro activo ya no existe en el
+		// nuevo contexto (otro proyecto, o la intersección en "all"), se limpia.
+		m.clearInvalidStatusFilter()
 	case filterFieldStatus:
 		if value == "all" {
 			m.filterStatus = ""
@@ -129,8 +148,48 @@ func (m *Model) filterApplySelection(field int, value string) {
 		case "high":
 			m.filterPriority = 3
 		}
+	case filterFieldTag:
+		if value == "all" {
+			m.filterTag = ""
+		} else {
+			m.filterTag = value
+		}
 	}
 	m.invalidateFilterCache()
+}
+
+// cycleProjectFilter avanza (dir=+1) o retrocede (dir=-1) el filtro Project a
+// través de sus opciones ("all" + proyectos activos). Reutiliza las mismas
+// opciones y validaciones del modal de filtros, de modo que Tab se comporta
+// igual en List, Kanban y Gantt. Con 0 o 1 opción no hace nada.
+func (m *Model) cycleProjectFilter(dir int) {
+	opts := m.filterFieldOptions(filterFieldProject)
+	if len(opts) <= 1 {
+		return
+	}
+	current := m.filterCurrentValue(filterFieldProject)
+	idx := 0
+	for i, o := range opts {
+		if o == current {
+			idx = i
+			break
+		}
+	}
+	m.filterApplySelection(filterFieldProject, opts[(idx+dir+len(opts))%len(opts)])
+}
+
+// clearInvalidStatusFilter limpia el filtro de estado cuando dejó de existir en
+// el contexto del proyecto actual. "" (all) siempre es válido.
+func (m *Model) clearInvalidStatusFilter() {
+	if m.filterStatus == "" {
+		return
+	}
+	for _, opt := range m.filterFieldOptions(filterFieldStatus) {
+		if opt == m.filterStatus {
+			return
+		}
+	}
+	m.filterStatus = ""
 }
 
 // handleFilterModalKey procesa teclas del modal de filtros.
@@ -141,11 +200,11 @@ func (m Model) handleFilterModalKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "tab", "down":
-		m.filterFieldIdx = (m.filterFieldIdx + 1) % 4
+		m.filterFieldIdx = (m.filterFieldIdx + 1) % filterFieldCount
 		return m, nil
 
 	case "shift+tab", "up":
-		m.filterFieldIdx = (m.filterFieldIdx + 3) % 4
+		m.filterFieldIdx = (m.filterFieldIdx + filterFieldCount - 1) % filterFieldCount
 		return m, nil
 
 	case "left", "right":
@@ -177,12 +236,10 @@ func (m Model) handleFilterModalKey(key string) (tea.Model, tea.Cmd) {
 // renderFilterModal renderiza el modal flotante de filtros.
 func (m *Model) renderFilterModal(content string) string {
 	w := m.width
-	fields := []int{filterFieldProject, filterFieldStatus, filterFieldAssignee, filterFieldPriority}
+	fields := []int{filterFieldProject, filterFieldStatus, filterFieldAssignee, filterFieldPriority, filterFieldTag}
 
 	var lines []string
 	lines = append(lines, "")
-	lines = append(lines, styleTitle.Render("  Filters"))
-	lines = append(lines, styleSep.Render(strings.Repeat("─", 42)))
 
 	for _, field := range fields {
 		label := filterFieldLabel(field)
@@ -219,48 +276,6 @@ func (m *Model) renderFilterModal(content string) string {
 		}
 	}
 
-	lines = append(lines, styleSep.Render(strings.Repeat("─", 42)))
-	lines = append(lines, styleHelp.Render("  Tab/↑↓ field    ← → change    Enter close    Esc cancel"))
-
-	modalContent := strings.Join(lines, "\n")
-
-	// Modal width
-	modalWidth := 46
-	if modalWidth > w-2 {
-		modalWidth = w - 2
-	}
-
-	modal := lipgloss.NewStyle().
-		Width(modalWidth).
-		Border(lipgloss.RoundedBorder(), true).
-		Render(modalContent)
-
-	// Overlay on content
-	bgLines := strings.Split(content, "\n")
-	totalLines := len(bgLines)
-	modalLines := strings.Split(modal, "\n")
-	modalH := len(modalLines)
-
-	startY := (totalLines - modalH) / 2
-	if startY < 0 {
-		startY = 0
-	}
-
-	// Pad background if modal is taller (like dbx does)
-	for len(bgLines) < startY+modalH {
-		bgLines = append(bgLines, strings.Repeat(" ", w))
-	}
-
-	totalModalW := modalWidth + 2
-	startX := (w - totalModalW) / 2
-	if startX < 0 {
-		startX = 0
-	}
-
-	for i, ml := range modalLines {
-		y := startY + i
-		bgLines[y] = OverlayLine(bgLines[y], ml, startX)
-	}
-
-	return strings.Join(bgLines, "\n")
+	totalWidth := modalWidthFor(48, w)
+	return overlayModal(content, renderModalBox(" Filters ", lines, totalWidth), totalWidth, w)
 }

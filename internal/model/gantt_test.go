@@ -172,6 +172,47 @@ func TestBuildScheduleUnassigned(t *testing.T) {
 	}
 }
 
+func TestFilterScheduleKeepsRealDates(t *testing.T) {
+	tasks := []Task{
+		{ID: 1, ProjectName: "api", Assignee: "@a", Status: "todo", Estimate: 1},
+		{ID: 2, ProjectName: "web", Assignee: "@a", Status: "todo", Estimate: 1},
+	}
+	full := BuildSchedule(tasks, nil, mustDate(t, monday), 1)
+
+	// Filtrar a "web" no debe recortar su fecha: sigue en el martes, aunque en
+	// la vista no se vea la tarea de "api" del lunes.
+	onlyWeb := FilterSchedule(full, func(t Task) bool { return t.ProjectName == "web" })
+	if len(onlyWeb.Assignees) != 1 || len(onlyWeb.Assignees[0].Entries) != 1 {
+		t.Fatalf("filtered assignees = %+v", onlyWeb.Assignees)
+	}
+	web := onlyWeb.Assignees[0].Entries[0]
+	if web.Start != "2026-09-15" || web.End != "2026-09-15" {
+		t.Errorf("web task = %s→%s, want 2026-09-15 (real slot, not recalculated)", web.Start, web.End)
+	}
+	if onlyWeb.Assignees[0].End != "2026-09-15" {
+		t.Errorf("assignee end = %s, want 2026-09-15", onlyWeb.Assignees[0].End)
+	}
+}
+
+func TestFilterScheduleDropsEmptyAndFiltersUnassigned(t *testing.T) {
+	tasks := []Task{
+		{ID: 1, ProjectName: "api", Assignee: "@a", Status: "todo", Estimate: 1},
+		{ID: 2, ProjectName: "api", Assignee: "unassigned", Status: "todo", Estimate: 1},
+	}
+	full := BuildSchedule(tasks, nil, mustDate(t, monday), 1)
+
+	onlyWeb := FilterSchedule(full, func(t Task) bool { return t.ProjectName == "web" })
+	if len(onlyWeb.Assignees) != 0 {
+		t.Errorf("assignees = %+v, want none", onlyWeb.Assignees)
+	}
+	if len(onlyWeb.Unassigned) != 0 {
+		t.Errorf("unassigned = %+v, want none", onlyWeb.Unassigned)
+	}
+	if onlyWeb.Assignees == nil || onlyWeb.Unassigned == nil {
+		t.Error("slices should be non-nil for clean JSON")
+	}
+}
+
 func TestWeekOfMonthLabel(t *testing.T) {
 	// t es el lunes que abre cada semana.
 	tests := map[string]string{

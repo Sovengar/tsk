@@ -194,7 +194,7 @@ func (m *Model) openEditorForNewTask(projectName, title string, priority int, as
 		editorCmd = "nvim"
 	}
 
-	content := fmt.Sprintf("# %s\n\n\n\n---\nassignee: %s\npriority: %d\n",
+	content := fmt.Sprintf("# %s\n\n\n\n---\nassignee: %s\npriority: %d\ntags: \n",
 		title, assignee, priority)
 
 	return newTaskCmdWithContent(projectName, editorCmd, content, 4)

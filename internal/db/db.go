@@ -101,7 +101,11 @@ func (db *DB) migrate() error {
 		if v <= currentVersion {
 			continue
 		}
-		if _, err := db.conn.Exec(m.query); err != nil {
+		if m.run != nil {
+			if err := m.run(db); err != nil {
+				return fmt.Errorf("migration %s: %w", m.version, err)
+			}
+		} else if _, err := db.conn.Exec(m.query); err != nil {
 			return fmt.Errorf("migration %s: %w", m.version, err)
 		}
 		if _, err := db.conn.Exec(`INSERT OR REPLACE INTO _meta (key, value) VALUES ('schema_version', ?)`, m.version); err != nil {

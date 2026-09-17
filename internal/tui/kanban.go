@@ -49,7 +49,7 @@ func priorityChar(p int) string {
 // fuente de verdad del board: la usan el render, la navegación y el preview, así
 // el resaltado y la tarea seleccionada nunca se contradicen.
 func (m *Model) kanbanColumns() []kanbanColumn {
-	workflow := m.mergedWorkflow()
+	workflow := m.kanbanWorkflow()
 	cols := make([]kanbanColumn, 0, len(workflow)+1)
 	for _, status := range workflow {
 		cols = append(cols, kanbanColumn{
@@ -87,13 +87,16 @@ func (m *Model) clampKanbanCursor() {
 
 // renderKanban renderiza la vista Kanban dentro del alto disponible.
 func (m *Model) renderKanban(maxHeight int) string {
+	// Los filtros pueden haber dejado menos tarjetas: reencuadrar el cursor.
+	m.clampKanbanCursor()
+
 	w := m.width
 
 	cols := m.kanbanColumns()
 
 	// Solo se muestran las tarjetas que entran en el alto disponible, con la
 	// ventana desplazada en la columna activa para que el cursor sea visible.
-	colContentHeight := maxHeight - kanbanBoardChrome
+	colContentHeight := maxHeight - kanbanBoardChrome - filterHeaderRows
 	if colContentHeight < 2 {
 		colContentHeight = 2
 	}
@@ -149,8 +152,13 @@ func (m *Model) renderKanban(maxHeight int) string {
 	board := lipgloss.JoinHorizontal(lipgloss.Top, views...)
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
+		m.renderFilterHeader(w-2),
 		board,
 	)
+
+	// Ninguna fila debe exceder el ancho interior: si lo hiciera, el borde la
+	// re-wrapéaría y el board crecería más allá del alto calculado.
+	content = truncateLines(content, w-2)
 
 	// Envolver con borde redondeado
 	var borderFg color.Color = lipgloss.Color("8")
@@ -206,11 +214,15 @@ func (m *Model) renderKanbanColumn(col kanbanColumn, width int, headerText strin
 	var cards []string
 	for j := win.start; j < win.end; j++ {
 		t := col.tasks[j]
+		assigneeLine := t.Assignee
+		if len(t.Tags) > 0 {
+			assigneeLine += "  " + styleDim.Render(strings.Join(t.Tags, ","))
+		}
 		var card string
 		if col.showPriority {
-			card = fmt.Sprintf("  %s %s\n     %s", priorityChar(t.Priority), t.Title, t.Assignee)
+			card = fmt.Sprintf("  %s %s\n     %s", priorityChar(t.Priority), t.Title, assigneeLine)
 		} else {
-			card = fmt.Sprintf("  %s\n     %s", t.Title, t.Assignee)
+			card = fmt.Sprintf("  %s\n     %s", t.Title, assigneeLine)
 		}
 		// Recortar a width-4 (bordes + prefijo) para que ninguna línea de la
 		// tarjeta exceda el ancho interior: si lo hiciera, lipgloss la

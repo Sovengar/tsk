@@ -28,23 +28,34 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 	prio := priorityChar(t.Priority) + " " + model.PriorityLabel(t.Priority)
 
 	// Metadata
+	tagsDisplay := strings.Join(t.Tags, ", ")
+	if tagsDisplay == "" {
+		tagsDisplay = "—"
+	}
 	meta := []string{
 		fmt.Sprintf("  Status:     %-20s Project:   %s", t.Status, t.ProjectName),
 		fmt.Sprintf("  Assignee:   %-20s Estimate:  %s", t.Assignee, model.FormatEstimate(t.Estimate)),
+		fmt.Sprintf("  Tags:       %s", tagsDisplay),
 		fmt.Sprintf("  Created:    %-20s Updated:   %s", formatTime(t.CreatedAt), formatTime(t.UpdatedAt)),
 		fmt.Sprintf("  Completed:  %s", formatCompleted(t.CompletedAt)),
 	}
 
-	// Description
-	desc := "(no description)"
-	if t.Description != "" {
-		desc = t.Description
-	}
-	descLines := strings.Split(desc, "\n")
-	// Identar cada línea no vacía, igual que la metadata.
-	for i := range descLines {
-		if strings.TrimSpace(descLines[i]) != "" {
-			descLines[i] = "  " + descLines[i]
+	// Description. En modo edición la sección se reemplaza por el textarea
+	// integrado en la misma caja, en lugar de superponer otro modal.
+	var descLines []string
+	if m.descEditOpen {
+		descLines = m.descEditorLines()
+	} else {
+		desc := "(no description)"
+		if t.Description != "" {
+			desc = t.Description
+		}
+		descLines = strings.Split(desc, "\n")
+		// Identar cada línea no vacía, igual que la metadata.
+		for i := range descLines {
+			if strings.TrimSpace(descLines[i]) != "" {
+				descLines[i] = "  " + descLines[i]
+			}
 		}
 	}
 
@@ -52,10 +63,10 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 
 	// Reparto de alto entre descripción y comentarios.
 	// fixed = líneas que no son contenido:
-	//   caja tarea:      2 bordes + 4 meta + sep + "Description:" = 8
+	//   caja tarea:      2 bordes + 5 meta + sep + "Description:" = 9
 	//   separación:      1
 	//   caja comentarios: 2 bordes = 2
-	const fixed = 11
+	const fixed = 12
 	avail := h - fixed
 	if avail < 3 {
 		avail = 3

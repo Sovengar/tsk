@@ -215,23 +215,36 @@ func (m Model) projectActionCmd(action, name string) tea.Cmd {
 	}
 }
 
-// handleConfirmKey resuelve el modal de confirmación de archivar/restaurar.
+// handleConfirmKey resuelve el modal de confirmación de acciones destructivas:
+// archivar/restaurar proyecto o borrar un off-day.
 func (m Model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "y", "Y", "enter":
 		action := m.confirmAction
-		name := m.confirmProject
+		project := m.confirmProject
+		offday := m.confirmOffday
 		m.confirmOpen = false
 		m.confirmAction = ""
 		m.confirmProject = ""
-		if action == "" || name == "" {
-			return m, nil
+		m.confirmOffday = model.OffDay{}
+		switch action {
+		case "delete-offday":
+			if offday.ID == 0 {
+				return m, nil
+			}
+			return m, m.deleteOffDayCmd(offday.ID, offday.Assignee)
+		case "archive", "unarchive":
+			if project == "" {
+				return m, nil
+			}
+			return m, m.projectActionCmd(action, project)
 		}
-		return m, m.projectActionCmd(action, name)
+		return m, nil
 	case "n", "N", "esc", "q":
 		m.confirmOpen = false
 		m.confirmAction = ""
 		m.confirmProject = ""
+		m.confirmOffday = model.OffDay{}
 	}
 	return m, nil
 }
@@ -307,16 +320,28 @@ func (m *Model) renderProjectModal(content string) string {
 func (m *Model) renderConfirmModal(content string) string {
 	w := m.width
 
-	title := " Archive project "
-	detail := "Tasks will be hidden. You can restore it later."
-	if m.confirmAction == "unarchive" {
-		title = " Restore project "
-		detail = "The project and its tasks will be visible again."
-	}
-
-	lines := []string{
-		fmt.Sprintf("  Project: %s", m.confirmProject),
-		styleDim.Render("  " + detail),
+	var title string
+	var lines []string
+	if m.confirmAction == "delete-offday" {
+		o := m.confirmOffday
+		title = " Delete off-day "
+		lines = []string{
+			fmt.Sprintf("  Person: %s", o.Assignee),
+			fmt.Sprintf("  From:   %s", o.StartDate),
+			fmt.Sprintf("  To:     %s", o.EndDate),
+			styleDim.Render("  This only removes the absence; tasks are unaffected."),
+		}
+	} else {
+		title = " Archive project "
+		detail := "Tasks will be hidden. You can restore it later."
+		if m.confirmAction == "unarchive" {
+			title = " Restore project "
+			detail = "The project and its tasks will be visible again."
+		}
+		lines = []string{
+			fmt.Sprintf("  Project: %s", m.confirmProject),
+			styleDim.Render("  " + detail),
+		}
 	}
 
 	totalWidth := modalWidthFor(54, w)

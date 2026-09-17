@@ -186,6 +186,34 @@ func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstim
 	return sched
 }
 
+// FilterSchedule devuelve una copia de s con sólo las tareas que cumplen keep.
+// Es un filtro de VISTA: no recalcula fechas ni colas, así que una tarea oculta
+// sigue ocupando su lugar en la línea de tiempo de la persona (puede haber
+// huecos entre las tareas visibles). Las personas que quedan sin tareas se
+// descartan.
+func FilterSchedule(s *Schedule, keep func(Task) bool) *Schedule {
+	out := &Schedule{Start: s.Start, Assignees: []AssigneeSchedule{}, Unassigned: []Task{}}
+	for _, a := range s.Assignees {
+		filtered := AssigneeSchedule{Assignee: a.Assignee, Entries: []ScheduleEntry{}}
+		for _, e := range a.Entries {
+			if keep(e.Task) {
+				filtered.Entries = append(filtered.Entries, e)
+			}
+		}
+		if len(filtered.Entries) == 0 {
+			continue
+		}
+		filtered.End = filtered.Entries[len(filtered.Entries)-1].End
+		out.Assignees = append(out.Assignees, filtered)
+	}
+	for _, t := range s.Unassigned {
+		if keep(t) {
+			out.Unassigned = append(out.Unassigned, t)
+		}
+	}
+	return out
+}
+
 // nextWorkingDay avanza day hasta el primer día laborable para assignee:
 // sábado y domingo siempre son no laborables, más sus off-days.
 func nextWorkingDay(day time.Time, assignee string, lookup map[string][]offRange) time.Time {

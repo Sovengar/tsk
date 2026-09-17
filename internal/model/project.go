@@ -19,11 +19,11 @@ type Project struct {
 
 // DefaultWorkflow es el flujo por defecto si no se especifica. Define la
 // progresión de las acciones; debe incluir "done".
-var DefaultWorkflow = []string{"backlog", "todo", "doing", "reviewing", "done", "cancelled"}
+var DefaultWorkflow = []string{"backlog", "todo", "doing", "delivered", "reviewing", "done", "cancelled"}
 
 // DefaultListOrder es el orden de presentación por defecto de la vista List.
 // Contiene los mismos estados que DefaultWorkflow, en otro orden.
-var DefaultListOrder = []string{"reviewing", "doing", "todo", "backlog", "done", "cancelled"}
+var DefaultListOrder = []string{"reviewing", "delivered", "doing", "todo", "backlog", "done", "cancelled"}
 
 // ParseWorkflow convierte un string "a,b,c" en []string.
 func ParseWorkflow(s string) ([]string, error) {

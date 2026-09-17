@@ -12,8 +12,9 @@ func detailKeybinds() []keybind {
 	return []keybind{
 		{"j/k", "select comment"},
 		{"c", "new comment"},
+		{"t", "tags"},
 		{"d", "delete/done"},
-		{"e", "edit task"},
+		{"e/E", "edit/editor"},
 		{"s", "start"},
 		{"x", "cancel"},
 		{"Esc", "close"},

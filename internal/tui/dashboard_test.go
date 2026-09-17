@@ -13,7 +13,7 @@ import (
 // columnas se descartan.
 func TestRenderDashboardRespectsHeight(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "1")
+	m, _ = press(m, "4")
 	m.width = 100
 
 	for i := 0; i < 30; i++ {

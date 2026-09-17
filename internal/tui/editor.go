@@ -37,12 +37,13 @@ func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
 	}
 
 	// Escribir formato editable
-	content := fmt.Sprintf("# %s\n\n%s\n\n---\nassignee: %s\npriority: %d\nestimate: %g\n",
+	content := fmt.Sprintf("# %s\n\n%s\n\n---\nassignee: %s\npriority: %d\nestimate: %g\ntags: %s\n",
 		task.Title,
 		task.Description,
 		task.Assignee,
 		task.Priority,
 		task.Estimate,
+		strings.Join(task.Tags, ","),
 	)
 	if _, err := tmpFile.WriteString(content); err != nil {
 		tmpFile.Close()
@@ -78,7 +79,7 @@ func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
 
 // newTaskCmd lanza el editor con un template vacío para crear una tarea nueva.
 func newTaskCmd(projectName, editorCmd string) tea.Cmd {
-	content := "# \n\nDescripción aquí\n\n---\nassignee: unassigned\npriority: 0\nestimate: 1\n"
+	content := "# \n\nDescripción aquí\n\n---\nassignee: unassigned\npriority: 0\nestimate: 1\ntags: \n"
 	return newTaskCmdWithContent(projectName, editorCmd, content, 0)
 }
 
@@ -126,7 +127,7 @@ func newTaskCmdWithContent(projectName, editorCmd, content string, cursorLine in
 }
 
 // parseEditFile parsea el contenido del archivo editado.
-func parseEditFile(content string) (title, description, assignee string, priority int, estimate float64) {
+func parseEditFile(content string) (title, description, assignee string, priority int, estimate float64, tags []string) {
 	mainPart := content
 	metadataPart := ""
 	if idx := strings.Index(content, "---\n"); idx >= 0 {
@@ -167,6 +168,8 @@ func parseEditFile(content string) (title, description, assignee string, priorit
 				if e, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(line, "estimate:")), 64); err == nil && e >= 0 {
 					estimate = e
 				}
+			} else if strings.HasPrefix(line, "tags:") {
+				tags = model.ParseTags(strings.TrimPrefix(line, "tags:"))
 			}
 		}
 	}
@@ -177,7 +180,7 @@ func parseEditFile(content string) (title, description, assignee string, priorit
 // updateTaskFromEdit actualiza la tarea con los datos editados.
 func (m *Model) updateTaskFromEdit(taskID int64, content string) tea.Cmd {
 	return func() tea.Msg {
-		title, description, assignee, priority, estimate := parseEditFile(content)
+		title, description, assignee, priority, estimate, tags := parseEditFile(content)
 
 		updates := map[string]any{
 			"title":       title,
@@ -185,6 +188,7 @@ func (m *Model) updateTaskFromEdit(taskID int64, content string) tea.Cmd {
 			"assignee":    assignee,
 			"priority":    priority,
 			"estimate":    estimate,
+			"tags":        model.TagsJSON(tags),
 		}
 
 		_, err := m.database.UpdateTask(taskID, updates)
@@ -202,14 +206,14 @@ func (m *Model) updateTaskFromEdit(taskID int64, content string) tea.Cmd {
 // createTaskFromEdit crea una tarea nueva con los datos del editor.
 func (m *Model) createTaskFromEdit(projectName, content string) tea.Cmd {
 	return func() tea.Msg {
-		title, description, assignee, priority, estimate := parseEditFile(content)
+		title, description, assignee, priority, estimate, tags := parseEditFile(content)
 
 		title = strings.TrimSpace(title)
 		if title == "" {
 			title = "(untitled)"
 		}
 
-		_, err := m.database.CreateTaskWithEstimate(projectName, title, description, assignee, priority, "", estimate)
+		_, err := m.database.CreateTaskFull(projectName, title, description, assignee, priority, "", estimate, tags)
 		if err != nil {
 			return nil
 		}
@@ -221,30 +225,34 @@ func (m *Model) createTaskFromEdit(projectName, content string) tea.Cmd {
 	}
 }
 
-// editSelectedTask edita la tarea seleccionada en la vista actual.
-func (m *Model) editSelectedTask() tea.Cmd {
-	var t *model.Task
-
+// selectedEditableTask devuelve la tarea seleccionada en la vista actual, o
+// nil si no hay ninguna. Fuente única para el editor externo y el inline.
+func (m *Model) selectedEditableTask() *model.Task {
 	switch m.currentView {
 	case viewList:
 		tasks := m.filteredTasks()
 		if len(tasks) > 0 && m.cursor < len(tasks) {
-			t = &tasks[m.cursor]
+			return &tasks[m.cursor]
 		}
 	case viewKanban:
-		workflow := m.mergedWorkflow()
-		if m.kanbanCol < len(workflow) {
-			colTasks := m.tasksInColumn(workflow[m.kanbanCol])
+		cols := m.kanbanColumns()
+		if m.kanbanCol < len(cols) {
+			colTasks := cols[m.kanbanCol].tasks
 			if len(colTasks) > 0 && m.kanbanRow < len(colTasks) {
-				t = &colTasks[m.kanbanRow]
+				return &colTasks[m.kanbanRow]
 			}
 		}
 	case viewDashboard:
 		if m.detailOpen && m.detailTask != nil {
-			t = m.detailTask
+			return m.detailTask
 		}
 	}
+	return nil
+}
 
+// editSelectedTask abre el editor externo con la tarea seleccionada.
+func (m *Model) editSelectedTask() tea.Cmd {
+	t := m.selectedEditableTask()
 	if t == nil {
 		return nil
 	}

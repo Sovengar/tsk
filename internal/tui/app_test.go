@@ -81,47 +81,67 @@ func TestViewSwitching123(t *testing.T) {
 		t.Fatal("initial view should be list")
 	}
 
-	m, _ = press(m, "3")
+	m, _ = press(m, "2")
 	if m.currentView != viewKanban {
-		t.Errorf("after 3: view = %v, want kanban", m.currentView)
+		t.Errorf("after 2: view = %v, want kanban", m.currentView)
+	}
+
+	m, _ = press(m, "4")
+	if m.currentView != viewDashboard {
+		t.Errorf("after 4: view = %v, want dashboard", m.currentView)
 	}
 
 	m, _ = press(m, "1")
-	if m.currentView != viewDashboard {
-		t.Errorf("after 1: view = %v, want dashboard", m.currentView)
-	}
-
-	m, _ = press(m, "2")
 	if m.currentView != viewList {
-		t.Errorf("after 2: view = %v, want list", m.currentView)
+		t.Errorf("after 1: view = %v, want list", m.currentView)
 	}
 }
 
-func TestTabCyclesViews(t *testing.T) {
+func TestTabCyclesProjectFilter(t *testing.T) {
 	m := newTestModel(t)
 
-	// Tab in list is a no-op: no longer cycles views
+	// List: Tab cicla el filtro Project (all -> api -> web -> all).
+	if m.filterProject != "" {
+		t.Fatalf("filtro inicial = %q, want vacío", m.filterProject)
+	}
 	m, _ = press(m, "tab")
-	if m.currentView != viewList {
-		t.Errorf("tab from list should stay in list, got %v", m.currentView)
+	if m.filterProject != "api" {
+		t.Errorf("tab en List: filterProject = %q, want api", m.filterProject)
+	}
+	m, _ = press(m, "tab")
+	if m.filterProject != "web" {
+		t.Errorf("tab en List: filterProject = %q, want web", m.filterProject)
+	}
+	m, _ = press(m, "tab")
+	if m.filterProject != "" {
+		t.Errorf("tab en List debe volver a all: filterProject = %q", m.filterProject)
 	}
 
-	// Move to kanban and verify Tab cycles columns
+	// Kanban: Tab también cicla proyectos (las columnas se mueven con h/l).
+	m, _ = press(m, "2")
+	m, _ = press(m, "tab")
+	if m.filterProject != "api" {
+		t.Errorf("tab en Kanban: filterProject = %q, want api", m.filterProject)
+	}
+	if m.kanbanCol != 0 {
+		t.Errorf("tab en Kanban no debe mover columna: kanbanCol = %d", m.kanbanCol)
+	}
+
+	// Gantt: Tab cicla proyectos.
 	m, _ = press(m, "3")
-	// Tab in kanban cycles columns
 	m, _ = press(m, "tab")
-	if m.kanbanCol != 1 {
-		t.Errorf("tab in kanban: col = %d, want 1", m.kanbanCol)
+	if m.filterProject != "web" {
+		t.Errorf("tab en Gantt: filterProject = %q, want web", m.filterProject)
 	}
 
-	// Tab from dashboard cycles projects
-	m, _ = press(m, "1") // switch to dashboard
+	// Dashboard: Tab sigue ciclando el proyecto resaltado.
+	m, _ = press(m, "4")
 	m, _ = press(m, "tab")
 	if m.currentView != viewDashboard {
-		t.Errorf("tab from dashboard should stay in dashboard, got %v", m.currentView)
+		t.Errorf("tab desde dashboard cambió de view: %v", m.currentView)
 	}
 	if m.dashProjectIdx != 1 {
-		t.Errorf("tab from dashboard: projectIdx = %d, want 1", m.dashProjectIdx)
+		t.Errorf("tab en dashboard: projectIdx = %d, want 1", m.dashProjectIdx)
 	}
 }
 
@@ -129,7 +149,7 @@ func TestTabCyclesViews(t *testing.T) {
 
 func TestListNavigation(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2") // switch to list
+	m, _ = press(m, "1") // switch to list
 
 	if m.cursor != 0 {
 		t.Fatalf("initial cursor = %d, want 0", m.cursor)
@@ -171,7 +191,7 @@ func TestListNavigation(t *testing.T) {
 
 func TestListStartTask(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2") // list view
+	m, _ = press(m, "1") // list view
 
 	_, cmd := press(m, "s")
 	if cmd == nil {
@@ -181,7 +201,7 @@ func TestListStartTask(t *testing.T) {
 
 func TestListDoneTask(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 
 	_, cmd := press(m, "d")
 	if cmd == nil {
@@ -191,7 +211,7 @@ func TestListDoneTask(t *testing.T) {
 
 func TestListCancelTask(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 
 	_, cmd := press(m, "x")
 	if cmd == nil {
@@ -205,7 +225,7 @@ func TestListPageNavigation(t *testing.T) {
 	m := newTestModel(t)
 	m.pageSize = 2
 	addTasks(t, m, 5) // 4 fixtures + 5 = 9 tareas activas
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 
 	// n: salta al primer elemento de la próxima página
 	m, _ = press(m, "n")
@@ -247,7 +267,7 @@ func TestListPageCursorClamp(t *testing.T) {
 	m := newTestModel(t)
 	m.pageSize = 2
 	addTasks(t, m, 5)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 
 	// Página 0 = [0, 2): j se detiene en 1
 	m, _ = press(m, "j")
@@ -316,7 +336,7 @@ func TestCursorClampedWhenTasksShrink(t *testing.T) {
 
 func TestListPriorityFilter(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2") // list view
+	m, _ = press(m, "1") // list view
 
 	if m.filterPriority != -1 {
 		t.Fatalf("initial priority filter = %d, want -1", m.filterPriority)
@@ -357,7 +377,7 @@ func TestListPriorityFilter(t *testing.T) {
 
 func TestListAssigneeFilter(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2") // list view
+	m, _ = press(m, "1") // list view
 
 	// Open filter modal
 	m, _ = press(m, "/")
@@ -390,7 +410,7 @@ func TestListAssigneeFilter(t *testing.T) {
 
 func TestKanbanNavigation(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "3") // kanban view
+	m, _ = press(m, "2") // kanban view
 
 	if m.kanbanCol != 0 || m.kanbanRow != 0 {
 		t.Fatalf("initial pos = (%d,%d), want (0,0)", m.kanbanCol, m.kanbanRow)
@@ -432,7 +452,7 @@ func TestKanbanNavigation(t *testing.T) {
 
 func TestKanbanMoveRight(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "3") // kanban view
+	m, _ = press(m, "2") // kanban view
 
 	// Find a column with tasks that isn't the last column
 	workflow := m.mergedWorkflow()
@@ -451,24 +471,34 @@ func TestKanbanMoveRight(t *testing.T) {
 
 func TestKanbanMoveLeft(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "3") // kanban view
+	m, _ = press(m, "2") // kanban view
 
-	// Find a column with tasks that isn't the first column
+	// Buscar una tarjeta que tenga estado anterior en el workflow de SU
+	// proyecto. Con workflows divergentes eso no coincide con el merge, así que
+	// el bug anterior (retroceder según el merge) produciría un move inválido.
 	workflow := m.mergedWorkflow()
-	for i := 1; i < len(workflow); i++ {
-		if len(m.tasksInColumn(workflow[i])) > 0 {
-			m.kanbanCol = i
-			m.kanbanRow = 0
-			break
+	found := false
+	for i := 1; i < len(workflow) && !found; i++ {
+		colTasks := m.tasksInColumn(workflow[i])
+		for j, task := range colTasks {
+			p := m.projectByName(task.ProjectName)
+			if p == nil {
+				continue
+			}
+			if _, ok := model.PrevStatus(p.Workflow, task.Status); ok {
+				m.kanbanCol, m.kanbanRow = i, j
+				found = true
+				break
+			}
 		}
 	}
+	if !found {
+		t.Fatal("el fixture no tiene una tarea con estado anterior en su proyecto")
+	}
 
-	// Only test if we found such a column
-	if m.kanbanCol > 0 {
-		_, cmd := press(m, "S")
-		if cmd == nil {
-			t.Error("S in kanban should produce a command (if task exists)")
-		}
+	_, cmd := press(m, "S")
+	if cmd == nil {
+		t.Error("S in kanban should produce a command when the task can retreat")
 	}
 }
 
@@ -553,7 +583,7 @@ func TestRenderDashboard(t *testing.T) {
 
 func TestRenderList(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 	out := m.renderList(m.height)
 	if out == "" {
 		t.Error("list should not be empty")
@@ -562,7 +592,7 @@ func TestRenderList(t *testing.T) {
 
 func TestRenderKanban(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "3")
+	m, _ = press(m, "2")
 	out := m.renderKanban(m.height)
 	if out == "" {
 		t.Error("kanban should not be empty")

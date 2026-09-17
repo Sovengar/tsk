@@ -75,7 +75,7 @@ func TestPreviewBarRespectsWidth(t *testing.T) {
 
 func TestSelectedTaskNilOnDashboard(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "1")
+	m, _ = press(m, "4")
 
 	if got := m.selectedTask(); got != nil {
 		t.Errorf("en dashboard no hay tarea seleccionada, got %+v", got)
@@ -84,7 +84,7 @@ func TestSelectedTaskNilOnDashboard(t *testing.T) {
 
 func TestSelectedTaskFollowsListCursor(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "2")
+	m, _ = press(m, "1")
 	m.cursor = 1
 
 	got := m.selectedTask()
@@ -98,7 +98,7 @@ func TestSelectedTaskFollowsListCursor(t *testing.T) {
 
 func TestSelectedTaskFollowsKanbanCursor(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "3")
+	m, _ = press(m, "2")
 
 	cols := m.kanbanColumns()
 	idx := -1
