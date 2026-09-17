@@ -61,10 +61,9 @@ func (s KeybindsBar) View() string {
 // renderGlobal formatea los keybinds globales.
 func (s KeybindsBar) renderGlobal() string {
 	parts := []string{
-		s.renderKey("1", "Dash"),
-		s.renderKey("2", "List"),
-		s.renderKey("3", "Kanban"),
+		s.renderKey("1/2/3", "Dash/List/Kanban"),
 		s.renderKey("Tab", "switch"),
+		s.renderKey("hjkl", "Arrows"),
 		s.renderKey("H", "hidden"),
 		s.renderKey("?", "help"),
 		s.renderKey("q", "quit"),
@@ -79,30 +78,26 @@ func (s KeybindsBar) renderViewSpecific() string {
 	switch s.view {
 	case viewDashboard:
 		parts = []string{
-			s.renderKey("j/k", "select"),
-			s.renderKey("n", "new"),
+			s.renderKey("i", "insert task"),
 		}
 	case viewList:
 		parts = []string{
-			s.renderKey("j/k", "move"),
-			s.renderKey("P/N", "page"),
+			s.renderKey("n/p N/P", "page nav"),
 			s.renderKey("Enter", "detail"),
 			s.renderKey("e", "edit"),
 			s.renderKey("s", "start"),
 			s.renderKey("d", "done"),
 			s.renderKey("x", "cancel"),
-			s.renderKey("n", "new"),
+			s.renderKey("i", "insert task"),
 			s.renderKey("/", "filter"),
 		}
 	case viewKanban:
 		parts = []string{
-			s.renderKey("h/l", "column"),
-			s.renderKey("j/k", "move"),
 			s.renderKey("s/S", "status"),
 			s.renderKey("e", "edit"),
 			s.renderKey("d", "done"),
 			s.renderKey("x", "cancel"),
-			s.renderKey("n", "new"),
+			s.renderKey("i", "insert task"),
 			s.renderKey("Enter", "detail"),
 		}
 	}

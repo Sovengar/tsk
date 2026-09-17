@@ -205,37 +205,37 @@ func TestListPageNavigation(t *testing.T) {
 	addTasks(t, m, 5) // 4 fixtures + 5 = 9 tareas activas
 	m, _ = press(m, "2")
 
-	// N: salta al primer elemento de la próxima página
-	m, _ = press(m, "N")
+	// n: salta al primer elemento de la próxima página
+	m, _ = press(m, "n")
 	if m.cursor != 2 {
-		t.Errorf("after N: cursor = %d, want 2", m.cursor)
+		t.Errorf("after n: cursor = %d, want 2", m.cursor)
 	}
-	m, _ = press(m, "N")
+	m, _ = press(m, "n")
 	if m.cursor != 4 {
-		t.Errorf("after 2x N: cursor = %d, want 4", m.cursor)
+		t.Errorf("after 2x n: cursor = %d, want 4", m.cursor)
 	}
 
-	// P: salta al primer elemento de la página previa
-	m, _ = press(m, "P")
+	// p: salta al primer elemento de la página previa
+	m, _ = press(m, "p")
 	if m.cursor != 2 {
-		t.Errorf("after P: cursor = %d, want 2", m.cursor)
+		t.Errorf("after p: cursor = %d, want 2", m.cursor)
 	}
-	m, _ = press(m, "P")
+	m, _ = press(m, "p")
 	if m.cursor != 0 {
-		t.Errorf("after 2x P: cursor = %d, want 0", m.cursor)
+		t.Errorf("after 2x p: cursor = %d, want 0", m.cursor)
 	}
 
-	// P en la primera página no hace nada
-	m, _ = press(m, "P")
+	// p en la primera página no hace nada
+	m, _ = press(m, "p")
 	if m.cursor != 0 {
-		t.Errorf("P at first page: cursor = %d, want 0", m.cursor)
+		t.Errorf("p at first page: cursor = %d, want 0", m.cursor)
 	}
 
-	// N en la última página no hace nada
+	// n en la última página no hace nada
 	tasks := m.filteredTasks()
 	m.cursor = len(tasks) - 1
 	last := m.cursor
-	m, _ = press(m, "N")
+	m, _ = press(m, "n")
 	if m.cursor != last {
 		t.Errorf("N at last page: cursor = %d, want %d", m.cursor, last)
 	}

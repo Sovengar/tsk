@@ -351,7 +351,7 @@ func (m Model) handleDashboardKey(key string) (tea.Model, tea.Cmd) {
 		if len(m.projects) > 0 {
 			m.dashProjectIdx = (m.dashProjectIdx - 1 + len(m.projects)) % len(m.projects)
 		}
-	case "n":
+	case "i":
 		return m, m.newTask()
 	}
 	return m, nil
@@ -374,21 +374,29 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		if start, _ := m.pageBounds(); m.cursor > start {
 			m.cursor--
 		}
-	case "N":
+	case "n":
 		// Página siguiente: saltar al primer elemento de la próxima página.
 		start := m.currentPage() * m.listPageSize()
 		if next := start + m.listPageSize(); next < len(tasks) {
 			m.cursor = next
 		}
-	case "P":
+	case "p":
 		// Página anterior: saltar al primer elemento de la página previa.
 		if start := m.currentPage() * m.listPageSize(); start > 0 {
 			m.cursor = start - m.listPageSize()
 		}
+	case "N":
+		// Ir a la última página: cursor al último elemento.
+		if len(tasks) > 0 {
+			m.cursor = len(tasks) - 1
+		}
+	case "P":
+		// Ir a la primera página: cursor al primer elemento.
+		m.cursor = 0
 	case "e":
 		// Edit task in nvim
 		return m, m.editSelectedTask()
-	case "n":
+	case "i":
 		// New task
 		return m, m.newTask()
 	case "enter":
@@ -486,7 +494,7 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 	case "e":
 		// Edit task in nvim
 		return m, m.editSelectedTask()
-	case "n":
+	case "i":
 		// New task
 		return m, m.newTask()
 	case "enter":

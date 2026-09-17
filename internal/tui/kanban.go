@@ -89,8 +89,6 @@ func (m *Model) clampKanbanCursor() {
 func (m *Model) renderKanban(maxHeight int) string {
 	w := m.width
 
-	sep := styleSep.Render(strings.Repeat("─", w-4))
-
 	cols := m.kanbanColumns()
 
 	// Solo se muestran las tarjetas que entran en el alto disponible, con la
@@ -151,7 +149,6 @@ func (m *Model) renderKanban(maxHeight int) string {
 	board := lipgloss.JoinHorizontal(lipgloss.Top, views...)
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
-		sep,
 		board,
 	)
 

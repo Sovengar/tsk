@@ -13,9 +13,9 @@ type keybind struct {
 
 func (m *Model) globalKeybinds() []keybind {
 	return []keybind{
-		{"1", "Dashboard"},
-		{"2", "List"},
-		{"3", "Kanban"},
+		{"1/2/3", "Dash / List / Kanban"},
+		{"Tab", "Next view"},
+		{"hjkl", "Arrows (←↓↑→)"},
 		{"H", "Toggle hidden (done/cancelled)"},
 		{"?", "Toggle this help"},
 		{"Esc", "Close / cancel"},
@@ -27,29 +27,24 @@ func (m *Model) viewKeybinds() []keybind {
 	switch m.currentView {
 	case viewDashboard:
 		return []keybind{
-			{"Tab/j/k", "Cycle projects"},
-			{"n", "New task"},
+			{"Tab", "Cycle projects"},
+			{"i", "Insert new task"},
 		}
 	case viewList:
 		return []keybind{
-			{"j/k", "Move cursor"},
-			{"P/N", "Previous / next page"},
+			{"n/p  N/P", "Page navigation (next/prev, first/last)"},
 			{"Enter", "Open detail"},
-			{"n", "New task"},
+			{"i", "Insert new task"},
 			{"e", "Edit task in $EDITOR"},
 			{"s", "Start task (advance status)"},
 			{"d", "Mark done"},
 			{"x", "Cancel task"},
-			{"H", "Toggle hidden"},
 			{"/", "Open filters"},
-			{"Tab", "Next view"},
 		}
 	case viewKanban:
 		return []keybind{
-			{"h/l", "Move between columns"},
-			{"j/k", "Move within column"},
 			{"Tab", "Next column"},
-			{"n", "New task"},
+			{"i", "Insert new task"},
 			{"e", "Edit task in $EDITOR"},
 			{"s", "Advance status (→)"},
 			{"S", "Retreat status (←)"},
