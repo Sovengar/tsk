@@ -71,38 +71,47 @@ func (s KeybindsBar) renderGlobal() string {
 	return strings.Join(parts, styleStatusSep.Render(" · "))
 }
 
-// renderViewSpecific formatea los keybinds de la vista actual.
+// renderViewSpecific formatea los keybinds de la vista actual en dos filas.
 func (s KeybindsBar) renderViewSpecific() string {
-	var parts []string
+	var row1, row2 []string
 
 	switch s.view {
 	case viewDashboard:
-		parts = []string{
+		row1 = []string{
 			s.renderKey("i", "insert task"),
 		}
 	case viewList:
-		parts = []string{
+		row1 = []string{
 			s.renderKey("n/p N/P", "page nav"),
 			s.renderKey("Enter", "detail"),
 			s.renderKey("e", "edit"),
-			s.renderKey("s", "start"),
-			s.renderKey("d", "done"),
-			s.renderKey("x", "cancel"),
 			s.renderKey("i", "insert task"),
 			s.renderKey("/", "filter"),
 		}
+		row2 = []string{
+			s.renderKey("s", "start"),
+			s.renderKey("d", "done"),
+			s.renderKey("x", "cancel"),
+		}
 	case viewKanban:
-		parts = []string{
+		row1 = []string{
 			s.renderKey("s/S", "status"),
 			s.renderKey("e", "edit"),
 			s.renderKey("d", "done"),
 			s.renderKey("x", "cancel"),
+		}
+		row2 = []string{
 			s.renderKey("i", "insert task"),
 			s.renderKey("Enter", "detail"),
 		}
 	}
 
-	return strings.Join(parts, styleStatusSep.Render(" · "))
+	sep := styleStatusSep.Render(" · ")
+	lines := strings.Join(row1, sep)
+	if len(row2) > 0 {
+		lines += "\n" + strings.Join(row2, sep)
+	}
+	return lines
 }
 
 // renderKey renderiza un par key+desc.
