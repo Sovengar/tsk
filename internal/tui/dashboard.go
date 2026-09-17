@@ -31,8 +31,9 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	}
 
 	// Projects line with selection indicator
+	list := m.dashProjectList()
 	projParts := []string{}
-	for i, p := range m.projects {
+	for i, p := range list {
 		count := 0
 		for _, t := range m.tasks {
 			if t.ProjectName == p.Name && t.IsActive() {
@@ -45,15 +46,24 @@ func (m *Model) renderDashboard(maxHeight int) string {
 			projParts = append(projParts, fmt.Sprintf("%s(%d)", p.Name, count))
 		}
 	}
-	projectsLine := "Projects: " + strings.Join(projParts, "  ")
+	label := "Projects: "
+	if m.showArchived {
+		label = "Archived: "
+	}
+	projectsLine := label
+	if len(projParts) == 0 {
+		projectsLine += styleDim.Render("(none)")
+	} else {
+		projectsLine += strings.Join(projParts, "  ")
+	}
 
 	// Separator
 	sep := styleSep.Render(strings.Repeat("─", w-4))
 
 	// Filter by selected project if any
 	selectedProject := ""
-	if m.dashProjectIdx >= 0 && m.dashProjectIdx < len(m.projects) {
-		selectedProject = m.projects[m.dashProjectIdx].Name
+	if p := m.selectedDashProject(); p != nil {
+		selectedProject = p.Name
 	}
 
 	// Stats section

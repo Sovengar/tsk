@@ -4,8 +4,8 @@ import "testing"
 
 func TestAddAndListComments(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	if _, err := db.AddComment(task.ID, "primer comentario"); err != nil {
 		t.Fatal(err)
@@ -35,8 +35,8 @@ func TestAddAndListComments(t *testing.T) {
 
 func TestAddCommentTrimsBody(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	c, err := db.AddComment(task.ID, "  con espacios  ")
 	if err != nil {
@@ -49,8 +49,8 @@ func TestAddCommentTrimsBody(t *testing.T) {
 
 func TestAddCommentEmptyBody(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	if _, err := db.AddComment(task.ID, "   "); err == nil {
 		t.Error("expected error for empty body")
@@ -66,8 +66,8 @@ func TestAddCommentUnknownTask(t *testing.T) {
 
 func TestDeleteComment(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	c, _ := db.AddComment(task.ID, "para borrar")
 	if err := db.DeleteComment(c.ID); err != nil {
@@ -89,8 +89,8 @@ func TestDeleteCommentNotFound(t *testing.T) {
 
 func TestCommentsCascadeOnProjectDelete(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 	db.AddComment(task.ID, "nota")
 
 	if err := db.DeleteProject("api"); err != nil {

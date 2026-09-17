@@ -2,6 +2,12 @@ package tui
 
 import "charm.land/bubbletea/v2"
 
+// keybind es un par tecla/descripción mostrado en la barra y en la ayuda.
+type keybind struct {
+	key  string
+	desc string
+}
+
 // viewKind es la vista activa.
 type viewKind int
 
@@ -23,15 +29,59 @@ func (v viewKind) String() string {
 	return "?"
 }
 
-func (v viewKind) next() viewKind {
+// keybindsForView devuelve, en orden de prioridad, las teclas de una vista. Es
+// la única fuente de verdad para la KeybindsBar y el modal de ayuda.
+//
+// Las teclas comunes (1/2/3, hjkl, H, ?, q) van primero por ser las más
+// repetidas; después el resto por frecuencia de uso. La barra las reparte en
+// filas de keybindsPerRow, así que bastan 7 entradas para llenar una fila.
+func keybindsForView(v viewKind) []keybind {
+	// Comunes: aplican en casi cualquier vista, pero se listan dentro de cada
+	// una (no como fila "global") para poder omitirlas donde no aplican.
+	common := []keybind{
+		{"1/2/3", "Dash / List / Kanban"},
+		{"hjkl", "arrows"},
+		{"H", "hidden"},
+		{"?", "help"},
+		{"q", "quit"},
+	}
+
+	var viewKeys []keybind
 	switch v {
 	case viewDashboard:
-		return viewList
+		viewKeys = []keybind{
+			{"Tab", "cycle projects"},
+			{"i", "Insert new project"},
+			{"e", "edit project"},
+			{"d", "archive project"},
+			{"r", "restore project"},
+			{"A", "archived"},
+		}
 	case viewList:
-		return viewKanban
-	default:
-		return viewDashboard
+		viewKeys = []keybind{
+			{"Enter", "detail"},
+			{"i", "insert task"},
+			{"s", "start"},
+			{"d", "done"},
+			{"x", "cancel"},
+			{"e", "edit task"},
+			{"/", "filters"},
+			{"Ctrl+p", "priority"},
+			{"n/p  N/P", "page nav"},
+		}
+	case viewKanban:
+		viewKeys = []keybind{
+			{"Tab", "next column"},
+			{"s/S", "status"},
+			{"i", "insert task"},
+			{"Enter", "detail"},
+			{"d", "done"},
+			{"x", "cancel"},
+			{"e", "edit task"},
+			{"Ctrl+p", "priority"},
+		}
 	}
+	return append(common, viewKeys...)
 }
 
 // handleGlobalKeys procesa teclas que funcionan en todas las vistas.

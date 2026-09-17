@@ -202,15 +202,7 @@ func (m *Model) createTaskFromEdit(projectName, content string) tea.Cmd {
 			title = "(untitled)"
 		}
 
-		// Position: al final de las tasks del proyecto
-		position := 0
-		for _, t := range m.tasks {
-			if t.ProjectName == projectName && t.Position >= position {
-				position = t.Position + 1
-			}
-		}
-
-		_, err := m.database.CreateTask(projectName, title, description, assignee, priority, position, "")
+		_, err := m.database.CreateTask(projectName, title, description, assignee, priority, "")
 		if err != nil {
 			return nil
 		}
@@ -278,10 +270,6 @@ func (m *Model) newTask() tea.Cmd {
 // currentProjectName devuelve el nombre del proyecto según la vista activa.
 func (m *Model) currentProjectName() string {
 	switch m.currentView {
-	case viewDashboard:
-		if m.dashProjectIdx >= 0 && m.dashProjectIdx < len(m.projects) {
-			return m.projects[m.dashProjectIdx].Name
-		}
 	case viewList, viewKanban:
 		if m.filterProject != "" {
 			return m.filterProject

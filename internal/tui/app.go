@@ -37,7 +37,29 @@ type Model struct {
 	kanbanRow int // row index within column
 
 	// Dashboard state
-	dashProjectIdx int // selected project index in dashboard
+	dashProjectIdx    int // selected project index in dashboard
+	showArchived      bool
+	archivedProjects  []model.Project
+	pendingSelectName string // proyecto a seleccionar tras recargar
+
+	// Project modal (crear/editar proyecto)
+	projectModalOpen      bool
+	projectModalEdit      bool
+	projectModalField     int // 0=name, 1=workflow, 2=list_order
+	projectNameInput      string
+	projectWorkflowInput  string
+	projectListOrderInput string
+	projectEditingName    string // nombre original al editar
+
+	// Confirmación (archivar/restaurar)
+	confirmOpen    bool
+	confirmAction  string // "archive" | "unarchive"
+	confirmProject string
+
+	// Toast de feedback transitorio
+	toast     string
+	toastKind string // "info" | "error"
+	toastSeq  int
 
 	// Detail modal
 	detailOpen       bool
@@ -96,7 +118,8 @@ type tasksLoadedMsg struct {
 }
 
 type projectsLoadedMsg struct {
-	projects []model.Project
+	projects         []model.Project
+	archivedProjects []model.Project
 }
 
 // ---- Commands ----
@@ -107,7 +130,11 @@ func (m *Model) loadProjects() tea.Cmd {
 		if err != nil {
 			return projectsLoadedMsg{}
 		}
-		return projectsLoadedMsg{projects: projects}
+		archived, err := m.database.ListArchivedProjects()
+		if err != nil {
+			archived = nil
+		}
+		return projectsLoadedMsg{projects: projects, archivedProjects: archived}
 	}
 }
 
@@ -271,6 +298,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case projectsLoadedMsg:
 		m.projects = msg.projects
+		m.archivedProjects = msg.archivedProjects
+		if m.pendingSelectName != "" {
+			m.selectProjectByName(m.pendingSelectName)
+			m.pendingSelectName = ""
+		}
+		m.clampDashProjectIdx()
+		return m, nil
+
+	case projectSavedMsg:
+		return m.handleProjectSaved(msg)
+
+	case toastExpiredMsg:
+		if msg.seq == m.toastSeq {
+			m.toast = ""
+			m.toastKind = ""
+		}
 		return m, nil
 
 	case tasksLoadedMsg:
@@ -319,6 +362,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
+	// Confirmación de acción destructiva (overlay estricto)
+	if m.confirmOpen {
+		return m.handleConfirmKey(key)
+	}
+
+	// Project modal takes priority
+	if m.projectModalOpen {
+		return m.handleProjectModalKey(key)
+	}
+
 	// New task modal takes priority
 	if m.newTaskOpen {
 		return m.handleNewTaskKey(key)
@@ -354,21 +407,37 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleDashboardKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
-	case "tab":
-		// Cycle through projects
-		if len(m.projects) > 0 {
-			m.dashProjectIdx = (m.dashProjectIdx + 1) % len(m.projects)
-		}
-	case "j", "down":
-		if len(m.projects) > 0 {
-			m.dashProjectIdx = (m.dashProjectIdx + 1) % len(m.projects)
+	case "tab", "j", "down":
+		// Cycle through visible projects
+		if n := len(m.dashProjectList()); n > 0 {
+			m.dashProjectIdx = (m.dashProjectIdx + 1) % n
 		}
 	case "k", "up":
-		if len(m.projects) > 0 {
-			m.dashProjectIdx = (m.dashProjectIdx - 1 + len(m.projects)) % len(m.projects)
+		if n := len(m.dashProjectList()); n > 0 {
+			m.dashProjectIdx = (m.dashProjectIdx - 1 + n) % n
 		}
 	case "i":
-		return m, m.newTask()
+		// Nuevo proyecto: el Dashboard concentra la config global
+		return m, m.openProjectModal(false)
+	case "e":
+		if p := m.selectedDashProject(); p != nil {
+			return m, m.openProjectModalForEdit(p)
+		}
+	case "d":
+		if p := m.selectedDashProject(); p != nil && !m.showArchived {
+			m.confirmOpen = true
+			m.confirmAction = "archive"
+			m.confirmProject = p.Name
+		}
+	case "r":
+		if p := m.selectedDashProject(); p != nil && m.showArchived {
+			m.confirmOpen = true
+			m.confirmAction = "unarchive"
+			m.confirmProject = p.Name
+		}
+	case "A":
+		m.showArchived = !m.showArchived
+		m.dashProjectIdx = 0
 	}
 	return m, nil
 }
@@ -378,10 +447,6 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	tasks := m.filteredTasks()
 
 	switch key {
-	case "tab":
-		// Cycle to next view
-		m.currentView = m.currentView.next()
-		return m, m.loadTasks()
 	case "j", "down":
 		if _, end := m.pageBounds(); m.cursor < end-1 {
 			m.cursor++
@@ -706,9 +771,13 @@ func (m Model) previewBudget(keybindsHeight int) int {
 }
 
 // overlayKind devuelve el modal activo, en el mismo orden de prioridad que
-// handleKey: nueva tarea, detalle, filtros.
+// handleKey: confirmación, proyecto, nueva tarea, detalle, filtros.
 func (m Model) overlayKind() overlayKind {
 	switch {
+	case m.confirmOpen:
+		return overlayConfirm
+	case m.projectModalOpen:
+		return overlayProject
 	case m.newTaskOpen:
 		return overlayNewTask
 	case m.detailOpen:
@@ -736,7 +805,10 @@ func (m Model) View() tea.View {
 		preview = ""
 	}
 
-	budget := contentBudget(m.height, lineCount(preview), keybindsHeight)
+	// Toast de feedback: ocupa una línea por encima del preview.
+	toastView := m.renderToast()
+
+	budget := contentBudget(m.height, lineCount(preview)+lineCount(toastView), keybindsHeight)
 
 	var content string
 	switch m.currentView {
@@ -762,11 +834,19 @@ func (m Model) View() tea.View {
 		content = m.renderNewTaskModal(content)
 	}
 
+	if m.projectModalOpen {
+		content = m.renderProjectModal(content)
+	}
+
+	if m.confirmOpen {
+		content = m.renderConfirmModal(content)
+	}
+
 	if m.helpOpen {
 		content = m.renderHelpModal(content)
 	}
 
-	v := tea.NewView(joinSections(content, preview, keybinds))
+	v := tea.NewView(joinSections(content, toastView, preview, keybinds))
 	v.AltScreen = true
 	return v
 }

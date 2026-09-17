@@ -16,6 +16,8 @@ const (
 	overlayDetail
 	overlayNewTask
 	overlayFilter
+	overlayProject
+	overlayConfirm
 )
 
 // KeybindsBar renderiza los keybinds en un pane con bordes.
@@ -46,15 +48,15 @@ func (s *KeybindsBar) SetWidth(w int) {
 	s.width = w
 }
 
-// View renderiza el KeybindsBar con una o dos filas de keybinds.
+// View renderiza el KeybindsBar con las filas del contexto activo. No existe el
+// concepto de keybind "global": cada vista u overlay define su lista completa.
 func (s KeybindsBar) View() string {
 	var content string
 	if s.overlay != overlayNone {
 		// Modal activo: solo las teclas que funcionan en ese contexto.
 		content = strings.Join(s.renderOverlay(), "\n")
 	} else {
-		// Vista normal: fila global + filas específicas de la vista.
-		content = s.renderGlobal() + "\n" + s.renderViewSpecific()
+		content = strings.Join(s.renderView(), "\n")
 	}
 
 	// Border color
@@ -84,109 +86,75 @@ func (s KeybindsBar) title() string {
 		return " Keybinds · New task "
 	case overlayFilter:
 		return " Keybinds · Filters "
+	case overlayProject:
+		return " Keybinds · Project "
+	case overlayConfirm:
+		return " Keybinds · Confirm "
 	}
 	return " Keybinds "
 }
 
-// renderOverlay formatea las teclas del modal activo.
-func (s KeybindsBar) renderOverlay() []string {
-	sep := styleStatusSep.Render(" · ")
-	join := func(parts ...string) string { return strings.Join(parts, sep) }
+// keybindsPerRow es el máximo de acciones por fila en la KeybindsBar. El
+// sobrante salta a la fila siguiente; se añaden tantas filas como haga falta.
+// Mismo reparto para vistas y overlays.
+const keybindsPerRow = 7
 
+// renderRows reparte una lista priorizada de keybinds en filas de
+// keybindsPerRow acciones como máximo.
+func (s KeybindsBar) renderRows(kbs []keybind) []string {
+	sep := styleStatusSep.Render(" · ")
+	var out []string
+	for i := 0; i < len(kbs); i += keybindsPerRow {
+		end := min(i+keybindsPerRow, len(kbs))
+		parts := make([]string, 0, end-i)
+		for _, kb := range kbs[i:end] {
+			parts = append(parts, s.renderKey(kb.key, kb.desc))
+		}
+		out = append(out, strings.Join(parts, sep))
+	}
+	return out
+}
+
+// renderView formatea las filas de keybinds de la vista actual a partir de la
+// definición única en keybindsForView.
+func (s KeybindsBar) renderView() []string {
+	return s.renderRows(keybindsForView(s.view))
+}
+
+// renderOverlay formatea las teclas del modal activo, con el mismo reparto en
+// filas de keybindsPerRow.
+func (s KeybindsBar) renderOverlay() []string {
 	switch s.overlay {
 	case overlayDetail:
-		return []string{
-			join(
-				s.renderKey("c", "comment"),
-				s.renderKey("j/k", "select"),
-				s.renderKey("d", "delete/done"),
-				s.renderKey("Esc", "close"),
-			),
-			join(
-				s.renderKey("e", "edit"),
-				s.renderKey("s", "start"),
-				s.renderKey("x", "cancel"),
-			),
-		}
+		return s.renderRows(detailKeybinds())
 	case overlayNewTask:
-		return []string{
-			join(
-				s.renderKey("Enter", "create"),
-				s.renderKey("Esc", "cancel"),
-				s.renderKey("Tab", "next field"),
-				s.renderKey("←→/1-4", "priority"),
-				s.renderKey("↑↓", "suggestions"),
-			),
-		}
+		return s.renderRows([]keybind{
+			{"Enter", "create"},
+			{"Esc", "cancel"},
+			{"Tab", "next field"},
+			{"←→/1-4", "priority"},
+			{"↑↓", "suggestions"},
+		})
 	case overlayFilter:
-		return []string{
-			join(
-				s.renderKey("Tab/↑↓", "field"),
-				s.renderKey("←→", "change"),
-				s.renderKey("Enter", "close"),
-				s.renderKey("Esc", "cancel"),
-			),
-		}
+		return s.renderRows([]keybind{
+			{"Tab/↑↓", "field"},
+			{"←→", "change"},
+			{"Enter", "close"},
+			{"Esc", "cancel"},
+		})
+	case overlayProject:
+		return s.renderRows([]keybind{
+			{"Enter", "save"},
+			{"Esc", "cancel"},
+			{"Tab", "next field"},
+		})
+	case overlayConfirm:
+		return s.renderRows([]keybind{
+			{"y", "confirm"},
+			{"n/Esc", "cancel"},
+		})
 	}
 	return nil
-}
-
-// renderGlobal formatea los keybinds globales.
-func (s KeybindsBar) renderGlobal() string {
-	parts := []string{
-		s.renderKey("1/2/3", "Dash/List/Kanban"),
-		s.renderKey("Tab", "switch"),
-		s.renderKey("hjkl", "Arrows"),
-		s.renderKey("H", "hidden"),
-		s.renderKey("?", "help"),
-		s.renderKey("q", "quit"),
-	}
-	return strings.Join(parts, styleStatusSep.Render(" · "))
-}
-
-// renderViewSpecific formatea los keybinds de la vista actual en dos filas.
-func (s KeybindsBar) renderViewSpecific() string {
-	var row1, row2 []string
-
-	switch s.view {
-	case viewDashboard:
-		row1 = []string{
-			s.renderKey("i", "insert task"),
-		}
-	case viewList:
-		row1 = []string{
-			s.renderKey("n/p N/P", "page nav"),
-			s.renderKey("Enter", "detail"),
-			s.renderKey("e", "edit"),
-			s.renderKey("i", "insert task"),
-			s.renderKey("/", "filter"),
-			s.renderKey("Ctrl+p", "priority"),
-		}
-		row2 = []string{
-			s.renderKey("s", "start"),
-			s.renderKey("d", "done"),
-			s.renderKey("x", "cancel"),
-		}
-	case viewKanban:
-		row1 = []string{
-			s.renderKey("s/S", "status"),
-			s.renderKey("e", "edit"),
-			s.renderKey("d", "done"),
-			s.renderKey("x", "cancel"),
-			s.renderKey("Ctrl+p", "priority"),
-		}
-		row2 = []string{
-			s.renderKey("i", "insert task"),
-			s.renderKey("Enter", "detail"),
-		}
-	}
-
-	sep := styleStatusSep.Render(" · ")
-	lines := strings.Join(row1, sep)
-	if len(row2) > 0 {
-		lines += "\n" + strings.Join(row2, sep)
-	}
-	return lines
 }
 
 // renderKey renderiza un par key+desc.

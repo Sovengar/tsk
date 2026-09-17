@@ -10,15 +10,15 @@ import (
 
 func TestCreateAndGetProject(t *testing.T) {
 	db := newTestDB(t)
-	p, err := db.CreateProject("api", "/dev/api", nil)
+	p, err := db.CreateProject("api", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if p.Name != "api" {
 		t.Errorf("name = %q, want api", p.Name)
 	}
-	if len(p.Workflow) != 5 {
-		t.Errorf("workflow len = %d, want 5", len(p.Workflow))
+	if len(p.Workflow) != 6 {
+		t.Errorf("workflow len = %d, want 6", len(p.Workflow))
 	}
 
 	got, err := db.GetProject("api")
@@ -28,17 +28,14 @@ func TestCreateAndGetProject(t *testing.T) {
 	if got.ID != p.ID {
 		t.Errorf("id = %d, want %d", got.ID, p.ID)
 	}
-	if got.Path != "/dev/api" {
-		t.Errorf("path = %q, want /dev/api", got.Path)
-	}
 }
 
 func TestCreateProjectDuplicate(t *testing.T) {
 	db := newTestDB(t)
-	if _, err := db.CreateProject("api", "/a", nil); err != nil {
+	if _, err := db.CreateProject("api", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateProject("api", "/b", nil); err == nil {
+	if _, err := db.CreateProject("api", nil); err == nil {
 		t.Error("expected duplicate error")
 	}
 }
@@ -46,7 +43,7 @@ func TestCreateProjectDuplicate(t *testing.T) {
 func TestCreateProjectCustomWorkflow(t *testing.T) {
 	db := newTestDB(t)
 	wf := []string{"todo", "doing", "done"}
-	p, err := db.CreateProject("web", "/dev/web", wf)
+	p, err := db.CreateProject("web", wf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,10 +52,83 @@ func TestCreateProjectCustomWorkflow(t *testing.T) {
 	}
 }
 
+func TestCreateProjectWithListOrder(t *testing.T) {
+	db := newTestDB(t)
+	p, err := db.CreateProjectWithListOrder("web",
+		[]string{"todo", "doing", "reviewing", "done"},
+		[]string{"reviewing", "doing", "todo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.ListOrder) != 3 || p.ListOrder[0] != "reviewing" || p.ListOrder[2] != "todo" {
+		t.Errorf("list_order = %v, want [reviewing doing todo]", p.ListOrder)
+	}
+
+	got, err := db.GetProject("web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.ListOrder) != 3 || got.ListOrder[1] != "doing" {
+		t.Errorf("persisted list_order = %v, want [reviewing doing todo]", got.ListOrder)
+	}
+}
+
+func TestCreateProjectInvalidListOrder(t *testing.T) {
+	db := newTestDB(t)
+	_, err := db.CreateProjectWithListOrder("web",
+		[]string{"todo", "doing", "done"},
+		[]string{"nope"})
+	if err == nil {
+		t.Error("expected error for status not in workflow")
+	}
+}
+
+func TestUpdateProjectListOrder(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateProject("web", nil)
+
+	if err := db.UpdateProject("web", map[string]any{
+		"list_order": []string{"reviewing", "backlog"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := db.GetProject("web")
+	if len(got.ListOrder) != 2 || got.ListOrder[0] != "reviewing" || got.ListOrder[1] != "backlog" {
+		t.Errorf("list_order = %v, want [reviewing backlog]", got.ListOrder)
+	}
+
+	// Limpiar con lista vacía.
+	if err := db.UpdateProject("web", map[string]any{"list_order": []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = db.GetProject("web")
+	if len(got.ListOrder) != 0 {
+		t.Errorf("list_order = %v, want empty", got.ListOrder)
+	}
+}
+
+func TestUpdateProjectWorkflowFiltersListOrder(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateProjectWithListOrder("web",
+		[]string{"todo", "doing", "reviewing", "done"},
+		[]string{"reviewing", "doing", "todo"})
+
+	// Quitar "doing" del workflow debe descartarlo también de list_order.
+	if err := db.UpdateProject("web", map[string]any{
+		"workflow": []string{"todo", "reviewing", "done"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := db.GetProject("web")
+	if len(got.ListOrder) != 2 || got.ListOrder[0] != "reviewing" || got.ListOrder[1] != "todo" {
+		t.Errorf("list_order = %v, want [reviewing todo]", got.ListOrder)
+	}
+}
+
 func TestListProjects(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("a", "/a", nil)
-	db.CreateProject("b", "/b", nil)
+	db.CreateProject("a", nil)
+	db.CreateProject("b", nil)
 
 	projects, err := db.ListProjects()
 	if err != nil {
@@ -75,7 +145,7 @@ func TestListProjects(t *testing.T) {
 
 func TestUpdateProjectWorkflow(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
+	db.CreateProject("api", nil)
 
 	err := db.UpdateProject("api", map[string]any{
 		"workflow": []string{"todo", "done"},
@@ -92,11 +162,11 @@ func TestUpdateProjectWorkflow(t *testing.T) {
 
 func TestUpdateProjectRejectRemoveStatusWithTasks(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	db.CreateTask("api", "task1", "", "", 0, 0, "review")
+	db.CreateProject("api", nil)
+	db.CreateTask("api", "task1", "", "", 0, "reviewing")
 
 	err := db.UpdateProject("api", map[string]any{
-		"workflow": []string{"todo", "in_progress", "done"},
+		"workflow": []string{"todo", "doing", "done"},
 	})
 	if err == nil {
 		t.Error("expected error removing status with tasks")
@@ -105,11 +175,11 @@ func TestUpdateProjectRejectRemoveStatusWithTasks(t *testing.T) {
 
 func TestUpdateProjectForce(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	db.CreateTask("api", "task1", "", "", 0, 0, "review")
+	db.CreateProject("api", nil)
+	db.CreateTask("api", "task1", "", "", 0, "reviewing")
 
 	err := db.UpdateProject("api", map[string]any{
-		"workflow": []string{"todo", "in_progress", "done"},
+		"workflow": []string{"todo", "doing", "done"},
 		"force":    true,
 	})
 	if err != nil {
@@ -128,8 +198,8 @@ func TestUpdateProjectForce(t *testing.T) {
 
 func TestDeleteProject(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	db.CreateTask("api", "task1", "", "", 0, 0, "")
+	db.CreateProject("api", nil)
+	db.CreateTask("api", "task1", "", "", 0, "")
 
 	err := db.DeleteProject("api")
 	if err != nil {
@@ -165,7 +235,7 @@ func TestGetProjectNotFound(t *testing.T) {
 
 func TestGetProjectByID(t *testing.T) {
 	db := newTestDB(t)
-	p, _ := db.CreateProject("api", "/dev/api", nil)
+	p, _ := db.CreateProject("api", nil)
 
 	got, err := db.GetProjectByID(p.ID)
 	if err != nil {
@@ -178,9 +248,9 @@ func TestGetProjectByID(t *testing.T) {
 
 func TestProjectTaskCount(t *testing.T) {
 	db := newTestDB(t)
-	p, _ := db.CreateProject("api", "/dev/api", nil)
-	db.CreateTask("api", "t1", "", "", 0, 0, "")
-	db.CreateTask("api", "t2", "", "", 0, 0, "")
+	p, _ := db.CreateProject("api", nil)
+	db.CreateTask("api", "t1", "", "", 0, "")
+	db.CreateTask("api", "t2", "", "", 0, "")
 
 	count, err := db.ProjectTaskCount(p.ID)
 	if err != nil {
@@ -195,9 +265,9 @@ func TestProjectTaskCount(t *testing.T) {
 
 func TestCreateTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
+	db.CreateProject("api", nil)
 
-	task, err := db.CreateTask("api", "Fix auth", "description here", "@juan", 3, 0, "")
+	task, err := db.CreateTask("api", "Fix auth", "description here", "@juan", 3, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,22 +290,22 @@ func TestCreateTask(t *testing.T) {
 
 func TestCreateTaskCustomStatus(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
+	db.CreateProject("api", nil)
 
-	task, err := db.CreateTask("api", "task", "", "", 0, 0, "in_progress")
+	task, err := db.CreateTask("api", "task", "", "", 0, "doing")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if task.Status != "in_progress" {
-		t.Errorf("status = %q, want in_progress", task.Status)
+	if task.Status != "doing" {
+		t.Errorf("status = %q, want doing", task.Status)
 	}
 }
 
 func TestCreateTaskInvalidStatus(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
+	db.CreateProject("api", nil)
 
-	_, err := db.CreateTask("api", "task", "", "", 0, 0, "invalid")
+	_, err := db.CreateTask("api", "task", "", "", 0, "invalid")
 	if err == nil {
 		t.Error("expected error for invalid status")
 	}
@@ -243,7 +313,7 @@ func TestCreateTaskInvalidStatus(t *testing.T) {
 
 func TestCreateTaskUnknownProject(t *testing.T) {
 	db := newTestDB(t)
-	_, err := db.CreateTask("nope", "task", "", "", 0, 0, "")
+	_, err := db.CreateTask("nope", "task", "", "", 0, "")
 	if err == nil {
 		t.Error("expected error for unknown project")
 	}
@@ -251,8 +321,8 @@ func TestCreateTaskUnknownProject(t *testing.T) {
 
 func TestGetTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	created, _ := db.CreateTask("api", "Fix N+1", "desc", "@juan", 3, 0, "")
+	db.CreateProject("api", nil)
+	created, _ := db.CreateTask("api", "Fix N+1", "desc", "@juan", 3, "")
 
 	got, err := db.GetTask(created.ID)
 	if err != nil {
@@ -276,11 +346,11 @@ func TestGetTaskNotFound(t *testing.T) {
 
 func TestListTasksFilters(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	db.CreateProject("web", "/dev/web", nil)
-	db.CreateTask("api", "t1", "", "@juan", 3, 0, "backlog")
-	db.CreateTask("api", "t2", "", "@maria", 2, 0, "in_progress")
-	db.CreateTask("web", "t3", "", "@juan", 1, 0, "todo")
+	db.CreateProject("api", nil)
+	db.CreateProject("web", nil)
+	db.CreateTask("api", "t1", "", "@juan", 3, "backlog")
+	db.CreateTask("api", "t2", "", "@maria", 2, "doing")
+	db.CreateTask("web", "t3", "", "@juan", 1, "todo")
 
 	// Filter by project
 	tasks, _ := db.ListTasks("api", "", "")
@@ -289,7 +359,7 @@ func TestListTasksFilters(t *testing.T) {
 	}
 
 	// Filter by status
-	tasks, _ = db.ListTasks("", "in_progress", "")
+	tasks, _ = db.ListTasks("", "doing", "")
 	if len(tasks) != 1 || tasks[0].Title != "t2" {
 		t.Errorf("status filter: %v", tasks)
 	}
@@ -309,10 +379,10 @@ func TestListTasksFilters(t *testing.T) {
 
 func TestListTasksOrderByPriority(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	db.CreateTask("api", "low", "", "", 1, 0, "")
-	db.CreateTask("api", "high", "", "", 3, 0, "")
-	db.CreateTask("api", "med", "", "", 2, 0, "")
+	db.CreateProject("api", nil)
+	db.CreateTask("api", "low", "", "", 1, "")
+	db.CreateTask("api", "high", "", "", 3, "")
+	db.CreateTask("api", "med", "", "", 2, "")
 
 	tasks, _ := db.ListTasks("", "", "")
 	if len(tasks) != 3 {
@@ -324,24 +394,117 @@ func TestListTasksOrderByPriority(t *testing.T) {
 	}
 }
 
+func TestListTasksOrderByPriorityStatusAssignee(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateProject("api", nil)
+	db.CreateTask("api", "backlog-a", "", "@a", 2, "backlog")
+	db.CreateTask("api", "backlog-b", "", "@b", 2, "backlog")
+	db.CreateTask("api", "todo-a", "", "@a", 2, "todo")
+	db.CreateTask("api", "in-progress", "", "@a", 2, "doing")
+	db.CreateTask("api", "reviewing", "", "@a", 2, "reviewing")
+	db.CreateTask("api", "done", "", "@a", 2, "done")
+	db.CreateTask("api", "low", "", "@a", 1, "todo")
+
+	// Prioridad desc, luego el orden literal del workflow (backlog > todo >
+	// doing > reviewing > done), luego assignee asc.
+	tasks, _ := db.ListTasks("", "", "")
+	want := []string{"backlog-a", "backlog-b", "todo-a", "in-progress", "reviewing", "done", "low"}
+	if len(tasks) != len(want) {
+		t.Fatalf("count = %d, want %d", len(tasks), len(want))
+	}
+	for i, title := range want {
+		if tasks[i].Title != title {
+			t.Errorf("order[%d] = %q, want %q", i, tasks[i].Title, title)
+		}
+	}
+}
+
+func TestListTasksOrderCustomWorkflow(t *testing.T) {
+	db := newTestDB(t)
+	// El array del proyecto define el orden del listado tal cual.
+	db.CreateProject("web", []string{"reviewing", "doing", "todo", "done"})
+	db.CreateTask("web", "todo", "", "@a", 2, "todo")
+	db.CreateTask("web", "doing", "", "@a", 2, "doing")
+	db.CreateTask("web", "reviewing", "", "@a", 2, "reviewing")
+	db.CreateTask("web", "done", "", "@a", 2, "done")
+
+	tasks, _ := db.ListTasks("", "", "")
+	want := []string{"reviewing", "doing", "todo", "done"}
+	if len(tasks) != len(want) {
+		t.Fatalf("count = %d, want %d", len(tasks), len(want))
+	}
+	for i, title := range want {
+		if tasks[i].Title != title {
+			t.Errorf("order[%d] = %q, want %q", i, tasks[i].Title, title)
+		}
+	}
+}
+
+func TestListTasksOrderByListOrder(t *testing.T) {
+	db := newTestDB(t)
+	// workflow = progresión (acciones); list_order = orden de presentación.
+	db.CreateProjectWithListOrder("web",
+		[]string{"todo", "doing", "reviewing", "done"},
+		[]string{"reviewing", "doing", "todo"})
+	db.CreateTask("web", "todo", "", "@a", 2, "todo")
+	db.CreateTask("web", "doing", "", "@a", 2, "doing")
+	db.CreateTask("web", "reviewing", "", "@a", 2, "reviewing")
+	db.CreateTask("web", "done", "", "@a", 2, "done")
+	cancelled, _ := db.CreateTask("web", "cancelled", "", "@a", 2, "todo")
+	db.MoveTask(cancelled.ID, "cancelled")
+
+	// reviewing > doing > todo (list_order), luego done (no listado pero en el
+	// workflow) y al final cancelled (ni en list_order ni en workflow).
+	tasks, _ := db.ListTasks("", "", "")
+	want := []string{"reviewing", "doing", "todo", "done", "cancelled"}
+	if len(tasks) != len(want) {
+		t.Fatalf("count = %d, want %d", len(tasks), len(want))
+	}
+	for i, title := range want {
+		if tasks[i].Title != title {
+			t.Errorf("order[%d] = %q, want %q", i, tasks[i].Title, title)
+		}
+	}
+}
+
+func TestListTasksEmptyListOrderFallsBackToWorkflow(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateProject("web", []string{"reviewing", "doing", "todo", "done"})
+	db.CreateTask("web", "todo", "", "@a", 2, "todo")
+	db.CreateTask("web", "doing", "", "@a", 2, "doing")
+	db.CreateTask("web", "reviewing", "", "@a", 2, "reviewing")
+	db.CreateTask("web", "done", "", "@a", 2, "done")
+
+	tasks, _ := db.ListTasks("", "", "")
+	want := []string{"reviewing", "doing", "todo", "done"}
+	if len(tasks) != len(want) {
+		t.Fatalf("count = %d, want %d", len(tasks), len(want))
+	}
+	for i, title := range want {
+		if tasks[i].Title != title {
+			t.Errorf("order[%d] = %q, want %q", i, tasks[i].Title, title)
+		}
+	}
+}
+
 func TestMoveTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
-	moved, err := db.MoveTask(task.ID, "in_progress")
+	moved, err := db.MoveTask(task.ID, "doing")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if moved.Status != "in_progress" {
-		t.Errorf("status = %q, want in_progress", moved.Status)
+	if moved.Status != "doing" {
+		t.Errorf("status = %q, want doing", moved.Status)
 	}
 }
 
 func TestMoveTaskInvalidStatus(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	_, err := db.MoveTask(task.ID, "invalid")
 	if err == nil {
@@ -351,8 +514,8 @@ func TestMoveTaskInvalidStatus(t *testing.T) {
 
 func TestMoveTaskSetsCompletedAt(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	done, err := db.MoveTask(task.ID, "done")
 	if err != nil {
@@ -365,8 +528,8 @@ func TestMoveTaskSetsCompletedAt(t *testing.T) {
 
 func TestMoveTaskCancelledSetsCompletedAt(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	cancelled, err := db.MoveTask(task.ID, model.CancelledStatus)
 	if err != nil {
@@ -379,8 +542,8 @@ func TestMoveTaskCancelledSetsCompletedAt(t *testing.T) {
 
 func TestStartTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil) // workflow: backlog,todo,in_progress,review,done
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
+	db.CreateProject("api", nil) // workflow: backlog,todo,doing,reviewing,done
+	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	started, err := db.StartTask(task.ID)
 	if err != nil {
@@ -393,8 +556,8 @@ func TestStartTask(t *testing.T) {
 
 func TestStartTaskWithoutBacklog(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("simple", "/dev/simple", []string{"todo", "in_progress", "done"})
-	task, _ := db.CreateTask("simple", "task", "", "", 0, 0, "")
+	db.CreateProject("simple", []string{"todo", "doing", "done"})
+	task, _ := db.CreateTask("simple", "task", "", "", 0, "")
 
 	started, err := db.StartTask(task.ID)
 	if err != nil {
@@ -407,8 +570,8 @@ func TestStartTaskWithoutBacklog(t *testing.T) {
 
 func TestDoneTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "in_progress")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "doing")
 
 	done, err := db.DoneTask(task.ID)
 	if err != nil {
@@ -424,8 +587,8 @@ func TestDoneTask(t *testing.T) {
 
 func TestCancelTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	cancelled, err := db.CancelTask(task.ID)
 	if err != nil {
@@ -438,33 +601,33 @@ func TestCancelTask(t *testing.T) {
 
 func TestReviewTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "in_progress")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "task", "", "", 0, "doing")
 
 	reviewed, err := db.ReviewTask(task.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if reviewed.Status != "review" {
-		t.Errorf("status = %q, want review", reviewed.Status)
+	if reviewed.Status != "reviewing" {
+		t.Errorf("status = %q, want reviewing", reviewed.Status)
 	}
 }
 
 func TestReviewTaskNoReviewStatus(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("simple", "/dev/simple", []string{"todo", "done"})
-	task, _ := db.CreateTask("simple", "task", "", "", 0, 0, "")
+	db.CreateProject("simple", []string{"todo", "done"})
+	task, _ := db.CreateTask("simple", "task", "", "", 0, "")
 
 	_, err := db.ReviewTask(task.ID)
 	if err == nil {
-		t.Error("expected error: no review status in workflow")
+		t.Error("expected error: no reviewing status in workflow")
 	}
 }
 
 func TestUpdateTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "old title", "old desc", "@juan", 1, 0, "")
+	db.CreateProject("api", nil)
+	task, _ := db.CreateTask("api", "old title", "old desc", "@juan", 1, "")
 
 	updated, err := db.UpdateTask(task.ID, map[string]any{
 		"title":    "new title",
@@ -489,31 +652,15 @@ func TestUpdateTask(t *testing.T) {
 	}
 }
 
-func TestReorderTask(t *testing.T) {
-	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	task, _ := db.CreateTask("api", "task", "", "", 0, 0, "")
-
-	err := db.ReorderTask(task.ID, 5)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got, _ := db.GetTask(task.ID)
-	if got.Position != 5 {
-		t.Errorf("position = %d, want 5", got.Position)
-	}
-}
-
 // --- Stats ---
 
 func TestStatsGlobal(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	db.CreateProject("web", "/dev/web", nil)
-	db.CreateTask("api", "t1", "", "@juan", 3, 0, "backlog")
-	db.CreateTask("api", "t2", "", "@maria", 2, 0, "in_progress")
-	db.CreateTask("web", "t3", "", "@juan", 1, 0, "done")
+	db.CreateProject("api", nil)
+	db.CreateProject("web", nil)
+	db.CreateTask("api", "t1", "", "@juan", 3, "backlog")
+	db.CreateTask("api", "t2", "", "@maria", 2, "doing")
+	db.CreateTask("web", "t3", "", "@juan", 1, "done")
 
 	stats, err := db.Stats("")
 	if err != nil {
@@ -524,7 +671,7 @@ func TestStatsGlobal(t *testing.T) {
 	}
 
 	byStatus := stats["by_status"].(map[string]int)
-	if byStatus["backlog"] != 1 || byStatus["in_progress"] != 1 || byStatus["done"] != 1 {
+	if byStatus["backlog"] != 1 || byStatus["doing"] != 1 || byStatus["done"] != 1 {
 		t.Errorf("by_status = %v", byStatus)
 	}
 
@@ -536,11 +683,11 @@ func TestStatsGlobal(t *testing.T) {
 
 func TestStatsByProject(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", "/dev/api", nil)
-	db.CreateProject("web", "/dev/web", nil)
-	db.CreateTask("api", "t1", "", "@juan", 0, 0, "")
-	db.CreateTask("api", "t2", "", "@maria", 0, 0, "")
-	db.CreateTask("web", "t3", "", "@juan", 0, 0, "")
+	db.CreateProject("api", nil)
+	db.CreateProject("web", nil)
+	db.CreateTask("api", "t1", "", "@juan", 0, "")
+	db.CreateTask("api", "t2", "", "@maria", 0, "")
+	db.CreateTask("web", "t3", "", "@juan", 0, "")
 
 	stats, err := db.Stats("api")
 	if err != nil {
@@ -548,6 +695,131 @@ func TestStatsByProject(t *testing.T) {
 	}
 	if stats["total"] != 2 {
 		t.Errorf("total = %v, want 2", stats["total"])
+	}
+}
+
+// --- Archive (soft delete) ---
+
+func TestArchiveProjectHidesTasksAndStats(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateProject("api", nil)
+	db.CreateProject("web", nil)
+	db.CreateTask("api", "t1", "", "@juan", 0, "")
+	db.CreateTask("web", "t2", "", "@maria", 0, "")
+
+	if err := db.ArchiveProject("api"); err != nil {
+		t.Fatal(err)
+	}
+
+	projects, _ := db.ListProjects()
+	if len(projects) != 1 || projects[0].Name != "web" {
+		t.Errorf("active projects = %v, want [web]", projects)
+	}
+
+	archived, _ := db.ListArchivedProjects()
+	if len(archived) != 1 || archived[0].Name != "api" {
+		t.Errorf("archived projects = %v, want [api]", archived)
+	}
+	if !archived[0].Archived {
+		t.Error("archived project should have Archived=true")
+	}
+
+	tasks, _ := db.ListTasks("", "", "")
+	if len(tasks) != 1 || tasks[0].ProjectName != "web" {
+		t.Errorf("tasks = %v, want only web's", tasks)
+	}
+
+	stats, _ := db.Stats("")
+	if stats["total"] != 1 {
+		t.Errorf("stats total = %v, want 1", stats["total"])
+	}
+}
+
+func TestUnarchiveProjectRestores(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateProject("api", nil)
+	db.CreateTask("api", "t1", "", "", 0, "")
+	db.ArchiveProject("api")
+
+	if err := db.UnarchiveProject("api"); err != nil {
+		t.Fatal(err)
+	}
+	projects, _ := db.ListProjects()
+	if len(projects) != 1 {
+		t.Fatalf("projects = %d, want 1", len(projects))
+	}
+	if projects[0].Archived {
+		t.Error("project should not be archived")
+	}
+	tasks, _ := db.ListTasks("", "", "")
+	if len(tasks) != 1 {
+		t.Errorf("tasks = %d, want 1 restored", len(tasks))
+	}
+}
+
+func TestCreateTaskOnArchivedProjectFails(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateProject("api", nil)
+	db.ArchiveProject("api")
+
+	if _, err := db.CreateTask("api", "t", "", "", 0, ""); err == nil {
+		t.Error("expected error creating task on archived project")
+	}
+}
+
+func TestArchiveProjectErrors(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateProject("api", nil)
+
+	if err := db.ArchiveProject("api"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.ArchiveProject("api"); err == nil {
+		t.Error("expected error archiving twice")
+	}
+	if err := db.UnarchiveProject("nope"); err == nil {
+		t.Error("expected error unarchiving nonexistent project")
+	}
+}
+
+func TestUpdateProjectRename(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateProject("api", nil)
+	db.CreateTask("api", "t1", "", "", 0, "")
+
+	if err := db.UpdateProject("api", map[string]any{"name": "backend"}); err != nil {
+		t.Fatal(err)
+	}
+	p, err := db.GetProject("backend")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Name != "backend" {
+		t.Errorf("name = %q, want backend", p.Name)
+	}
+	// La tarea referencia project_id, así que sobrevive al rename.
+	tasks, _ := db.ListTasks("", "", "")
+	if len(tasks) != 1 || tasks[0].ProjectName != "backend" {
+		t.Errorf("tasks after rename = %v", tasks)
+	}
+}
+
+func TestUpdateProjectDuplicateName(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateProject("api", nil)
+	db.CreateProject("web", nil)
+
+	if err := db.UpdateProject("api", map[string]any{"name": "web"}); err == nil {
+		t.Error("expected duplicate name error")
+	}
+}
+
+func TestUpdateProjectEmptyNameRejected(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateProject("api", nil)
+
+	if err := db.UpdateProject("api", map[string]any{"name": "  "}); err == nil {
+		t.Error("expected empty name error")
 	}
 }
 

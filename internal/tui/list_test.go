@@ -64,7 +64,7 @@ func TestRenderListPageLegend(t *testing.T) {
 func addTasks(t *testing.T, m *Model, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
-		if _, err := m.database.CreateTask("api", fmt.Sprintf("T%02d", i), "", "@juan", 1, 0, "todo"); err != nil {
+		if _, err := m.database.CreateTask("api", fmt.Sprintf("T%02d", i), "", "@juan", 1, "todo"); err != nil {
 			t.Fatal(err)
 		}
 	}

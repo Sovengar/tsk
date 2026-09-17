@@ -68,11 +68,6 @@ func Run(args []string) bool {
 			outputError("usage: tsk cancel <id>")
 		}
 		cmdCancel(args[1])
-	case "reorder":
-		if len(args) < 3 {
-			outputError("usage: tsk reorder <id> <position>")
-		}
-		cmdReorder(args[1], args[2])
 	case "stats":
 		cmdStats(args[1:])
 	case "migrate":
@@ -142,7 +137,7 @@ func cmdProject(args []string) {
 		cmdProjectShow(args[1:])
 	case "update":
 		if len(args) < 2 {
-			outputError("usage: tsk project update <name> [--workflow ...] [--path ...]")
+			outputError("usage: tsk project update <name> [--name ...] [--workflow ...] [--list-order ...]")
 		}
 		cmdProjectUpdate(args[1:])
 	case "remove":
@@ -150,6 +145,16 @@ func cmdProject(args []string) {
 			outputError("usage: tsk project remove <name>")
 		}
 		cmdProjectRemove(args[1])
+	case "archive":
+		if len(args) < 2 {
+			outputError("usage: tsk project archive <name>")
+		}
+		cmdProjectArchive(args[1])
+	case "unarchive":
+		if len(args) < 2 {
+			outputError("usage: tsk project unarchive <name>")
+		}
+		cmdProjectUnarchive(args[1])
 	default:
 		outputError(fmt.Sprintf("unknown project subcommand: %s", args[0]))
 	}
@@ -157,21 +162,21 @@ func cmdProject(args []string) {
 
 func cmdProjectAdd(args []string) {
 	if len(args) == 0 {
-		outputError("usage: tsk project add <name> [--path ...] [--workflow ...]")
+		outputError("usage: tsk project add <name> [--workflow ...] [--list-order ...]")
 	}
 	name := args[0]
-	var path, workflow string
+	var workflow, listOrder string
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
-		case "--path":
-			if i+1 < len(args) {
-				path = args[i+1]
-				i++
-			}
 		case "--workflow":
 			if i+1 < len(args) {
 				workflow = args[i+1]
+				i++
+			}
+		case "--list-order":
+			if i+1 < len(args) {
+				listOrder = args[i+1]
 				i++
 			}
 		}
@@ -180,7 +185,7 @@ func cmdProjectAdd(args []string) {
 	database := openDB()
 	defer database.Close()
 
-	var wf []string
+	var wf, lo []string
 	if workflow != "" {
 		var err error
 		wf, err = model.ParseWorkflow(workflow)
@@ -188,8 +193,15 @@ func cmdProjectAdd(args []string) {
 			outputError(err.Error())
 		}
 	}
+	if listOrder != "" {
+		var err error
+		lo, err = model.ParseWorkflow(listOrder)
+		if err != nil {
+			outputError(err.Error())
+		}
+	}
 
-	p, err := database.CreateProject(name, path, wf)
+	p, err := database.CreateProjectWithListOrder(name, wf, lo)
 	if err != nil {
 		outputError(err.Error())
 	}
@@ -202,24 +214,35 @@ func cmdProjectAdd(args []string) {
 
 func cmdProjectList(args []string) {
 	jsonOutput := false
+	showArchived := false
 	for _, a := range args {
-		if a == "--json" {
+		switch a {
+		case "--json":
 			jsonOutput = true
+		case "--archived":
+			showArchived = true
 		}
 	}
 
 	database := openDB()
 	defer database.Close()
 
-	projects, err := database.ListProjects()
+	var projects []model.Project
+	var err error
+	if showArchived {
+		projects, err = database.ListArchivedProjects()
+	} else {
+		projects, err = database.ListProjects()
+	}
 	if err != nil {
 		outputError(err.Error())
 	}
 
 	type ProjectInfo struct {
 		Name      string   `json:"name"`
-		Path      string   `json:"path"`
 		Workflow  []string `json:"workflow"`
+		ListOrder []string `json:"list_order"`
+		Archived  bool     `json:"archived"`
 		TaskCount int      `json:"task_count"`
 	}
 
@@ -228,8 +251,9 @@ func cmdProjectList(args []string) {
 		count, _ := database.ProjectTaskCount(p.ID)
 		result = append(result, ProjectInfo{
 			Name:      p.Name,
-			Path:      p.Path,
 			Workflow:  p.Workflow,
+			ListOrder: p.ListOrder,
+			Archived:  p.Archived,
 			TaskCount: count,
 		})
 	}
@@ -241,15 +265,20 @@ func cmdProjectList(args []string) {
 
 	// Human-readable output
 	if len(result) == 0 {
-		fmt.Println("No projects registered.")
+		if showArchived {
+			fmt.Println("No archived projects.")
+		} else {
+			fmt.Println("No projects registered.")
+		}
 		return
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tPATH\tWORKFLOW\tTASKS")
+	fmt.Fprintln(w, "NAME\tWORKFLOW\tLIST ORDER\tTASKS")
 	for _, p := range result {
 		wf := strings.Join(p.Workflow, ",")
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", p.Name, p.Path, wf, p.TaskCount)
+		lo := strings.Join(p.ListOrder, ",")
+		fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", p.Name, wf, lo, p.TaskCount)
 	}
 	w.Flush()
 }
@@ -278,28 +307,40 @@ func cmdProjectShow(args []string) {
 
 	// Human-readable
 	fmt.Printf("Project:  %s\n", p.Name)
-	fmt.Printf("Path:     %s\n", p.Path)
 	fmt.Printf("Workflow: %s\n", strings.Join(p.Workflow, " → "))
+	listOrder := strings.Join(p.ListOrder, " → ")
+	if listOrder == "" {
+		listOrder = "(workflow order)"
+	}
+	fmt.Printf("List:     %s\n", listOrder)
+	fmt.Printf("Archived: %t\n", p.Archived)
 	fmt.Printf("Created:  %s\n", p.CreatedAt)
 	fmt.Printf("Updated:  %s\n", p.UpdatedAt)
 }
 
 func cmdProjectUpdate(args []string) {
 	name := args[0]
-	var workflow, path string
+	var newName, workflow, listOrder string
+	listOrderSet := false
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
+		case "--name":
+			if i+1 < len(args) {
+				newName = args[i+1]
+				i++
+			}
 		case "--workflow":
 			if i+1 < len(args) {
 				workflow = args[i+1]
 				i++
 			}
-		case "--path":
+		case "--list-order":
 			if i+1 < len(args) {
-				path = args[i+1]
+				listOrder = args[i+1]
 				i++
 			}
+			listOrderSet = true
 		}
 	}
 
@@ -307,6 +348,9 @@ func cmdProjectUpdate(args []string) {
 	defer database.Close()
 
 	updates := map[string]any{}
+	if newName != "" {
+		updates["name"] = newName
+	}
 	if workflow != "" {
 		wf, err := model.ParseWorkflow(workflow)
 		if err != nil {
@@ -314,8 +358,12 @@ func cmdProjectUpdate(args []string) {
 		}
 		updates["workflow"] = wf
 	}
-	if path != "" {
-		updates["path"] = path
+	if listOrderSet {
+		lo, err := model.ParseWorkflow(listOrder)
+		if err != nil {
+			outputError(err.Error())
+		}
+		updates["list_order"] = lo
 	}
 
 	if err := database.UpdateProject(name, updates); err != nil {
@@ -330,6 +378,31 @@ func cmdProjectRemove(name string) {
 	defer database.Close()
 
 	if err := database.DeleteProject(name); err != nil {
+		outputError(err.Error())
+	}
+
+	outputJSON(map[string]any{"ok": true})
+}
+
+// cmdProjectArchive archiva un proyecto (soft delete): oculta él, sus tareas y
+// sus comentarios sin borrarlos.
+func cmdProjectArchive(name string) {
+	database := openDB()
+	defer database.Close()
+
+	if err := database.ArchiveProject(name); err != nil {
+		outputError(err.Error())
+	}
+
+	outputJSON(map[string]any{"ok": true})
+}
+
+// cmdProjectUnarchive restaura un proyecto archivado.
+func cmdProjectUnarchive(name string) {
+	database := openDB()
+	defer database.Close()
+
+	if err := database.UnarchiveProject(name); err != nil {
 		outputError(err.Error())
 	}
 
@@ -382,7 +455,7 @@ func cmdAdd(args []string) {
 	database := openDB()
 	defer database.Close()
 
-	t, err := database.CreateTask(project, title, "", assignee, priority, 0, status)
+	t, err := database.CreateTask(project, title, "", assignee, priority, status)
 	if err != nil {
 		outputError(err.Error())
 	}
@@ -651,23 +724,6 @@ func cmdCancel(idStr string) {
 	outputJSON(model.TaskActionResult{OK: true, Task: *t})
 }
 
-func cmdReorder(idStr, posStr string) {
-	id := parseID(idStr)
-	pos, err := strconv.Atoi(posStr)
-	if err != nil {
-		outputError("invalid position: " + posStr)
-	}
-
-	database := openDB()
-	defer database.Close()
-
-	if err := database.ReorderTask(id, pos); err != nil {
-		outputError(err.Error())
-	}
-
-	outputJSON(map[string]any{"ok": true})
-}
-
 func cmdStats(args []string) {
 	var project string
 	jsonOutput := false
@@ -751,23 +807,23 @@ _tsk_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="project add list show update move start review done cancel reorder comment stats migrate completion help"
+    commands="project add list show update move start review done cancel comment stats migrate completion help"
 
     if [[ ${cur} == -* ]] ; then
-        COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --path --workflow --force" -- ${cur}) )
+        COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --workflow --list-order --force --archived --name" -- ${cur}) )
         return 0
     fi
 
     case ${prev} in
         project)
-            COMPREPLY=( $(compgen -W "add list show update remove" -- ${cur}) )
+            COMPREPLY=( $(compgen -W "add list show update remove archive unarchive" -- ${cur}) )
             return 0
             ;;
         comment)
             COMPREPLY=( $(compgen -W "add list remove" -- ${cur}) )
             return 0
             ;;
-        add|list|show|update|move|start|review|done|cancel|reorder|stats)
+        add|list|show|update|move|start|review|done|cancel|stats)
             return 0
             ;;
     esac
@@ -782,7 +838,7 @@ const zshCompletion = `#compdef tsk
 
 _tsk() {
     _arguments \
-        '1:command:(project add list show update move start review done cancel reorder comment stats migrate completion help)' \
+        '1:command:(project add list show update move start review done cancel comment stats migrate completion help)' \
         '*::arg:->args'
 }
 
@@ -791,6 +847,13 @@ _tsk "$@"
 
 const fishCompletion = `complete -c tsk -f
 complete -c tsk -n '__fish_use_subcommand' -a project -d 'Manage projects'
+complete -c tsk -n '__fish_seen_subcommand_from project' -a add -d 'Register a project'
+complete -c tsk -n '__fish_seen_subcommand_from project' -a list -d 'List projects'
+complete -c tsk -n '__fish_seen_subcommand_from project' -a show -d 'Show project detail'
+complete -c tsk -n '__fish_seen_subcommand_from project' -a update -d 'Update project'
+complete -c tsk -n '__fish_seen_subcommand_from project' -a remove -d 'Delete project + tasks'
+complete -c tsk -n '__fish_seen_subcommand_from project' -a archive -d 'Archive project'
+complete -c tsk -n '__fish_seen_subcommand_from project' -a unarchive -d 'Restore archived project'
 complete -c tsk -n '__fish_use_subcommand' -a add -d 'Create a task'
 complete -c tsk -n '__fish_use_subcommand' -a list -d 'List tasks'
 complete -c tsk -n '__fish_use_subcommand' -a show -d 'Show task detail'
@@ -800,7 +863,6 @@ complete -c tsk -n '__fish_use_subcommand' -a start -d 'Start a task'
 complete -c tsk -n '__fish_use_subcommand' -a review -d 'Move to review'
 complete -c tsk -n '__fish_use_subcommand' -a done -d 'Complete a task'
 complete -c tsk -n '__fish_use_subcommand' -a cancel -d 'Cancel a task'
-complete -c tsk -n '__fish_use_subcommand' -a reorder -d 'Reorder task'
 complete -c tsk -n '__fish_use_subcommand' -a comment -d 'Manage task comments'
 complete -c tsk -n '__fish_use_subcommand' -a stats -d 'Show statistics'
 complete -c tsk -n '__fish_use_subcommand' -a migrate -d 'Run migrations'
@@ -811,31 +873,34 @@ complete -c tsk -l project -d 'Filter by project'
 complete -c tsk -l priority -d 'Set priority (0-3)'
 complete -c tsk -l assignee -d 'Set assignee'
 complete -c tsk -l status -d 'Filter by status'
+complete -c tsk -l archived -d 'List archived projects'
 `
 
 func cmdHelp() {
 	commands := map[string]string{
-		"tsk":                                         "launch the TUI (default when no arguments)",
-		"tsk project add <name> [--path] [--workflow]": "register a project",
-		"tsk project list":                            "list all projects",
-		"tsk project show <name>":                     "show project detail + workflow",
-		"tsk project update <name> [--workflow]":      "update project",
-		"tsk project remove <name>":                   "delete project + tasks",
-		"tsk add <title> --project X [--priority N] [--assignee @name]": "create a task",
-		"tsk list [--project X] [--status S] [--assignee A]":           "list tasks",
-		"tsk show <id>":                               "show task detail",
+		"tsk": "launch the TUI (default when no arguments)",
+		"tsk project add <name> [--workflow] [--list-order]": "register a project",
+		"tsk project list":        "list all projects",
+		"tsk project show <name>": "show project detail + workflow",
+		"tsk project update <name> [--name] [--workflow] [--list-order]": "update project (rename/workflow/list order)",
+		"tsk project remove <name>":                                      "delete project + tasks",
+		"tsk project archive <name>":                                     "archive project (hides tasks, reversible)",
+		"tsk project unarchive <name>":                                   "restore an archived project",
+		"tsk project list [--archived]":                                  "list active or archived projects",
+		"tsk add <title> --project X [--priority N] [--assignee @name]":  "create a task",
+		"tsk list [--project X] [--status S] [--assignee A]":             "list tasks",
+		"tsk show <id>": "show task detail",
 		"tsk update <id> [--title] [--description] [--priority N] [--assignee @name]": "update task metadata",
-		"tsk move <id> <status>":                      "move task to a specific status",
-		"tsk start <id>":                              "move task to 2nd workflow status",
-		"tsk review <id>":                             "move task to review status",
-		"tsk done <id>":                               "move task to terminal status",
-		"tsk cancel <id>":                             "cancel a task",
-		"tsk reorder <id> <position>":                 "reorder task within column",
-		"tsk comment add <task-id> \"<text>\"":         "add a comment to a task",
-		"tsk comment list <task-id>":                  "list comments of a task",
-		"tsk comment remove <comment-id>":             "delete a comment",
-		"tsk stats [--project X]":                     "show statistics",
-		"tsk migrate":                                 "run pending migrations",
+		"tsk move <id> <status>":               "move task to a specific status",
+		"tsk start <id>":                       "move task to 2nd workflow status",
+		"tsk review <id>":                      "move task to review status",
+		"tsk done <id>":                        "move task to terminal status",
+		"tsk cancel <id>":                      "cancel a task",
+		"tsk comment add <task-id> \"<text>\"": "add a comment to a task",
+		"tsk comment list <task-id>":           "list comments of a task",
+		"tsk comment remove <comment-id>":      "delete a comment",
+		"tsk stats [--project X]":              "show statistics",
+		"tsk migrate":                          "run pending migrations",
 	}
 
 	// Group by category

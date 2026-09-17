@@ -17,7 +17,7 @@ func TestRenderDashboardRespectsHeight(t *testing.T) {
 	m.width = 100
 
 	for i := 0; i < 30; i++ {
-		if _, err := m.database.CreateTask("api", fmt.Sprintf("T%02d", i), "", fmt.Sprintf("@dev%02d", i), 1, 0, "todo"); err != nil {
+		if _, err := m.database.CreateTask("api", fmt.Sprintf("T%02d", i), "", fmt.Sprintf("@dev%02d", i), 1, "todo"); err != nil {
 			t.Fatal(err)
 		}
 	}

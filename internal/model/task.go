@@ -2,10 +2,10 @@ package model
 
 // Priority levels.
 const (
-	PriorityNone    = 0
-	PriorityLow     = 1
-	PriorityMedium  = 2
-	PriorityHigh    = 3
+	PriorityNone   = 0
+	PriorityLow    = 1
+	PriorityMedium = 2
+	PriorityHigh   = 3
 )
 
 // Task representa una tarea en un proyecto.
@@ -18,7 +18,6 @@ type Task struct {
 	Status      string `json:"status"`
 	Priority    int    `json:"priority"`
 	Assignee    string `json:"assignee"`
-	Position    int    `json:"position"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 	CompletedAt string `json:"completed_at,omitempty"`

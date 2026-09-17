@@ -36,13 +36,13 @@ func newTestModel(t *testing.T) *Model {
 
 func createFixtures(t *testing.T, database *db.DB) {
 	t.Helper()
-	database.CreateProject("api", "/dev/api", nil)
-	database.CreateProject("web", "/dev/web", []string{"todo", "in_progress", "done"})
+	database.CreateProject("api", nil)
+	database.CreateProject("web", []string{"todo", "doing", "done"})
 
-	database.CreateTask("api", "Fix N+1 query", "desc", "@juan", 3, 0, "in_progress")
-	database.CreateTask("api", "Add caching", "", "@maria", 2, 0, "backlog")
-	database.CreateTask("api", "Update README", "", "@juan", 1, 0, "review")
-	database.CreateTask("web", "Fix checkout", "", "@maria", 3, 0, "todo")
+	database.CreateTask("api", "Fix N+1 query", "desc", "@juan", 3, "doing")
+	database.CreateTask("api", "Add caching", "", "@maria", 2, "backlog")
+	database.CreateTask("api", "Update README", "", "@juan", 1, "reviewing")
+	database.CreateTask("web", "Fix checkout", "", "@maria", 3, "todo")
 }
 
 func press(m *Model, key string) (*Model, tea.Cmd) {
@@ -100,12 +100,14 @@ func TestViewSwitching123(t *testing.T) {
 func TestTabCyclesViews(t *testing.T) {
 	m := newTestModel(t)
 
-	// Tab in list cycles to kanban
+	// Tab in list is a no-op: no longer cycles views
 	m, _ = press(m, "tab")
-	if m.currentView != viewKanban {
-		t.Errorf("tab from list: %v, want kanban", m.currentView)
+	if m.currentView != viewList {
+		t.Errorf("tab from list should stay in list, got %v", m.currentView)
 	}
 
+	// Move to kanban and verify Tab cycles columns
+	m, _ = press(m, "3")
 	// Tab in kanban cycles columns
 	m, _ = press(m, "tab")
 	if m.kanbanCol != 1 {
@@ -475,11 +477,11 @@ func TestKanbanMoveLeft(t *testing.T) {
 func TestMergedWorkflow(t *testing.T) {
 	m := newTestModel(t)
 	wf := m.mergedWorkflow()
-	// api: backlog,todo,in_progress,review,done
-	// web: todo,in_progress,done
-	// merged: backlog,todo,in_progress,review,done (5 unique)
-	if len(wf) != 5 {
-		t.Errorf("merged workflow len = %d, want 5: %v", len(wf), wf)
+	// api: backlog,todo,doing,reviewing,done,cancelled (default)
+	// web: todo,doing,done
+	// merged: default completo (6 únicos)
+	if len(wf) != len(model.DefaultWorkflow) {
+		t.Errorf("merged workflow len = %d, want %d: %v", len(wf), len(model.DefaultWorkflow), wf)
 	}
 	seen := map[string]bool{}
 	for _, s := range wf {
@@ -528,12 +530,12 @@ func TestUniqueAssignees(t *testing.T) {
 
 func TestTasksInColumn(t *testing.T) {
 	m := newTestModel(t)
-	tasks := m.tasksInColumn("in_progress")
+	tasks := m.tasksInColumn("doing")
 	if len(tasks) == 0 {
-		t.Error("no tasks in in_progress column")
+		t.Error("no tasks in doing column")
 	}
 	for _, task := range tasks {
-		if task.Status != "in_progress" {
+		if task.Status != "doing" {
 			t.Errorf("task %d has status %q", task.ID, task.Status)
 		}
 	}

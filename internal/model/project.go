@@ -7,16 +7,23 @@ import (
 
 // Project representa un proyecto registrado en tsk.
 type Project struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
-	Path      string `json:"path"`
-	Workflow  []string `json:"workflow"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	ID         int64    `json:"id"`
+	Name       string   `json:"name"`
+	Workflow   []string `json:"workflow"`
+	ListOrder  []string `json:"list_order"`
+	Archived   bool     `json:"archived"`
+	ArchivedAt string   `json:"archived_at,omitempty"`
+	CreatedAt  string   `json:"created_at"`
+	UpdatedAt  string   `json:"updated_at"`
 }
 
-// DefaultWorkflow es el flujo por defecto si no se especifica.
-var DefaultWorkflow = []string{"backlog", "todo", "in_progress", "review", "done"}
+// DefaultWorkflow es el flujo por defecto si no se especifica. Define la
+// progresión de las acciones; debe incluir "done".
+var DefaultWorkflow = []string{"backlog", "todo", "doing", "reviewing", "done", "cancelled"}
+
+// DefaultListOrder es el orden de presentación por defecto de la vista List.
+// Contiene los mismos estados que DefaultWorkflow, en otro orden.
+var DefaultListOrder = []string{"reviewing", "doing", "todo", "backlog", "done", "cancelled"}
 
 // ParseWorkflow convierte un string "a,b,c" en []string.
 func ParseWorkflow(s string) ([]string, error) {
@@ -57,12 +64,14 @@ func FindStatusContaining(workflow []string, substr string) (string, bool) {
 	return "", false
 }
 
-// TerminalStatus devuelve el último estado del workflow (done).
+// DoneStatus es el estado final al que mueve la acción "done". Debe estar
+// presente en el workflow del proyecto (se valida al crear/editar).
+const DoneStatus = "done"
+
+// TerminalStatus devuelve el estado terminal de las acciones de cierre: siempre
+// "done", con independencia de su posición en el workflow.
 func TerminalStatus(workflow []string) string {
-	if len(workflow) == 0 {
-		return "done"
-	}
-	return workflow[len(workflow)-1]
+	return DoneStatus
 }
 
 // StartStatus devuelve el segundo estado del workflow (después de backlog si existe).
@@ -99,7 +108,8 @@ func PrevStatus(workflow []string, current string) (string, bool) {
 	return "", false
 }
 
-// ValidateWorkflow verifica que no haya duplicados.
+// ValidateWorkflow verifica que no haya duplicados y que incluya el estado
+// "done", necesario para las acciones de cierre.
 func ValidateWorkflow(workflow []string) error {
 	seen := make(map[string]bool, len(workflow))
 	for _, s := range workflow {
@@ -107,6 +117,32 @@ func ValidateWorkflow(workflow []string) error {
 			return fmt.Errorf("duplicate status %q in workflow", s)
 		}
 		seen[s] = true
+	}
+	if !HasStatus(workflow, DoneStatus) {
+		return fmt.Errorf("workflow must include %q", DoneStatus)
+	}
+	return nil
+}
+
+// ValidateListOrder verifica que list_order no tenga duplicados y que cada
+// estado pertenezca al workflow del proyecto (cancelled siempre se permite).
+// Un list_order vacío es válido: significa "usar el orden del workflow".
+func ValidateListOrder(workflow, listOrder []string) error {
+	seen := make(map[string]bool, len(listOrder))
+	for _, s := range listOrder {
+		if s == "" {
+			return fmt.Errorf("empty status in list_order")
+		}
+		if seen[s] {
+			return fmt.Errorf("duplicate status %q in list_order", s)
+		}
+		seen[s] = true
+		if s == CancelledStatus {
+			continue
+		}
+		if !HasStatus(workflow, s) {
+			return fmt.Errorf("status %q in list_order not in workflow %v", s, workflow)
+		}
 	}
 	return nil
 }

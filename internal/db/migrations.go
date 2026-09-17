@@ -49,6 +49,31 @@ CREATE INDEX IF NOT EXISTS idx_comments_task ON comments(task_id);
 CREATE INDEX IF NOT EXISTS idx_comments_task_created ON comments(task_id, created_at);
 `
 
+// schemaV3 añade el archivado (soft delete) de proyectos.
+const schemaV3 = `
+ALTER TABLE projects ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE projects ADD COLUMN archived_at TEXT;
+CREATE INDEX IF NOT EXISTS idx_projects_archived ON projects(archived);
+`
+
+// schemaV4 elimina la columna position: el orden de las tareas ya no es manual
+// sino que se deriva del workflow del proyecto.
+const schemaV4 = `
+ALTER TABLE tasks DROP COLUMN position;
+`
+
+// schemaV5 separa el orden de presentación de la vista List del workflow
+// (que define la progresión de las acciones). list_order es un array JSON de
+// estados; vacío ('[]') significa "usar el orden del workflow".
+const schemaV5 = `
+ALTER TABLE projects ADD COLUMN list_order TEXT NOT NULL DEFAULT '[]';
+`
+
+// schemaV6 elimina path: era metadata sin uso en la app.
+const schemaV6 = `
+ALTER TABLE projects DROP COLUMN path;
+`
+
 // migrations es la lista de migraciones en orden.
 var migrations = []struct {
 	version string
@@ -56,4 +81,8 @@ var migrations = []struct {
 }{
 	{"001", schemaV1},
 	{"002", schemaV2},
+	{"003", schemaV3},
+	{"004", schemaV4},
+	{"005", schemaV5},
+	{"006", schemaV6},
 }

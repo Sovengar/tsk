@@ -6,68 +6,17 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-type keybind struct {
-	key  string
-	desc string
-}
-
-func (m *Model) globalKeybinds() []keybind {
-	return []keybind{
-		{"1/2/3", "Dash / List / Kanban"},
-		{"Tab", "Next view"},
-		{"hjkl", "Arrows (←↓↑→)"},
-		{"H", "Toggle hidden (done/cancelled)"},
-		{"?", "Toggle this help"},
-		{"Esc", "Close / cancel"},
-		{"q", "Quit"},
-	}
-}
-
-func (m *Model) viewKeybinds() []keybind {
-	switch m.currentView {
-	case viewDashboard:
-		return []keybind{
-			{"Tab", "Cycle projects"},
-			{"i", "Insert new task"},
-		}
-	case viewList:
-		return []keybind{
-			{"n/p  N/P", "Page navigation (next/prev, first/last)"},
-			{"Enter", "Open detail"},
-			{"i", "Insert new task"},
-			{"e", "Edit task in $EDITOR"},
-			{"Ctrl+p", "Cycle priority (backlog: includes none)"},
-			{"s", "Start task (advance status)"},
-			{"d", "Mark done"},
-			{"x", "Cancel task"},
-			{"/", "Open filters"},
-		}
-	case viewKanban:
-		return []keybind{
-			{"Tab", "Next column"},
-			{"i", "Insert new task"},
-			{"e", "Edit task in $EDITOR"},
-			{"s", "Advance status (→)"},
-			{"S", "Retreat status (←)"},
-			{"d", "Mark done"},
-			{"x", "Cancel task"},
-			{"Enter", "Open detail"},
-			{"Ctrl+p", "Cycle priority (backlog: includes none)"},
-		}
-	}
-	return nil
-}
-
-// detailKeybinds devuelve los keybinds del modal de detalle de tarea.
+// detailKeybinds devuelve las teclas del modal de detalle de tarea, en orden de
+// prioridad. Fuente única para la KeybindsBar y el modal de ayuda.
 func detailKeybinds() []keybind {
 	return []keybind{
-		{"c", "New comment ($EDITOR)"},
-		{"j/k", "Select comment"},
-		{"d", "Delete selected comment / Done"},
-		{"e", "Edit task in $EDITOR"},
-		{"s", "Start task"},
-		{"x", "Cancel task"},
-		{"Esc", "Deselect comment / close"},
+		{"j/k", "select comment"},
+		{"c", "new comment"},
+		{"d", "delete/done"},
+		{"e", "edit task"},
+		{"s", "start"},
+		{"x", "cancel"},
+		{"Esc", "close"},
 	}
 }
 
@@ -78,18 +27,10 @@ func (m *Model) renderHelpModal(content string) string {
 
 	sep := styleSep.Render(strings.Repeat("─", 40))
 
-	// Global keys
-	var globalLines []string
-	globalLines = append(globalLines, styleColumnHeader.Render("  Global"))
-	for _, kb := range m.globalKeybinds() {
-		globalLines = append(globalLines, "  "+styleWarn.Render(kb.key)+"  "+kb.desc)
-	}
-
-	// View-specific keys
+	// View keys (incluyen las comunes: ya no hay sección global)
 	var viewLines []string
-	viewLines = append(viewLines, "")
 	viewLines = append(viewLines, styleColumnHeader.Render("  "+m.currentView.String()))
-	for _, kb := range m.viewKeybinds() {
+	for _, kb := range keybindsForView(m.currentView) {
 		viewLines = append(viewLines, "  "+styleWarn.Render(kb.key)+"  "+kb.desc)
 	}
 
@@ -102,7 +43,7 @@ func (m *Model) renderHelpModal(content string) string {
 
 	footer := styleDim.Render("  Press ? or Esc to close")
 
-	body := strings.Join(append(globalLines, viewLines...), "\n")
+	body := strings.Join(viewLines, "\n")
 
 	// Calculate modal dimensions
 	modalWidth := 46

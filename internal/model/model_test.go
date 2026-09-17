@@ -26,6 +26,29 @@ func TestParseWorkflowWithSpaces(t *testing.T) {
 	}
 }
 
+func TestValidateListOrder(t *testing.T) {
+	wf := []string{"todo", "doing", "review", "done"}
+
+	if err := ValidateListOrder(wf, []string{"review", "doing", "todo"}); err != nil {
+		t.Errorf("valid list_order rejected: %v", err)
+	}
+	if err := ValidateListOrder(wf, nil); err != nil {
+		t.Errorf("empty list_order rejected: %v", err)
+	}
+	if err := ValidateListOrder(wf, []string{"review", "cancelled"}); err != nil {
+		t.Errorf("cancelled should be allowed: %v", err)
+	}
+	if err := ValidateListOrder(wf, []string{"review", "review"}); err == nil {
+		t.Error("duplicate status accepted")
+	}
+	if err := ValidateListOrder(wf, []string{"nope"}); err == nil {
+		t.Error("status not in workflow accepted")
+	}
+	if err := ValidateListOrder(wf, []string{""}); err == nil {
+		t.Error("empty status accepted")
+	}
+}
+
 func TestHasStatus(t *testing.T) {
 	wf := []string{"backlog", "todo", "done"}
 	if !HasStatus(wf, "todo") {
@@ -109,11 +132,41 @@ func TestPrevStatus(t *testing.T) {
 }
 
 func TestValidateWorkflow(t *testing.T) {
-	if err := ValidateWorkflow([]string{"a", "b", "c"}); err != nil {
+	if err := ValidateWorkflow([]string{"a", "b", "done"}); err != nil {
 		t.Errorf("valid workflow errored: %v", err)
 	}
-	if err := ValidateWorkflow([]string{"a", "a"}); err == nil {
+	if err := ValidateWorkflow([]string{"a", "done", "a"}); err == nil {
 		t.Error("duplicate workflow should error")
+	}
+	if err := ValidateWorkflow([]string{"a", "b"}); err == nil {
+		t.Error("workflow without done should error")
+	}
+}
+
+// TestDefaultWorkflowAndListOrderMismaComposicion verifica que ambos defaults
+// tengan los mismos estados, en distinto orden.
+func TestDefaultWorkflowAndListOrderMismaComposicion(t *testing.T) {
+	if len(DefaultWorkflow) != len(DefaultListOrder) {
+		t.Fatalf("len workflow=%d, list_order=%d, quieren iguales",
+			len(DefaultWorkflow), len(DefaultListOrder))
+	}
+	if err := ValidateWorkflow(DefaultWorkflow); err != nil {
+		t.Errorf("DefaultWorkflow inválido: %v", err)
+	}
+	if err := ValidateListOrder(DefaultWorkflow, DefaultListOrder); err != nil {
+		t.Errorf("DefaultListOrder inválido: %v", err)
+	}
+	seen := map[string]int{}
+	for _, s := range DefaultWorkflow {
+		seen[s]++
+	}
+	for _, s := range DefaultListOrder {
+		seen[s]--
+	}
+	for s, n := range seen {
+		if n != 0 {
+			t.Errorf("estado %q no está en ambos defaults", s)
+		}
 	}
 }
 

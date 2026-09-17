@@ -134,7 +134,8 @@ func (m Model) handleNewTaskKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderNewTaskModal renderiza el modal de creación de tarea.
+// renderNewTaskModal renderiza el modal de creación de tarea dentro de una caja
+// con borde. Los keybinds van en la barra inferior, no duplicados dentro.
 func (m *Model) renderNewTaskModal(content string) string {
 	w := m.width
 
@@ -156,12 +157,7 @@ func (m *Model) renderNewTaskModal(content string) string {
 		assigneeInput += "_"
 	}
 
-	sep := styleSep.Render(strings.Repeat("─", w-4))
-
 	lines := []string{
-		"",
-		styleTitle.Render("  New Task"),
-		sep,
 		fmt.Sprintf("  Title:     %s", titleInput),
 		fmt.Sprintf("  Priority:  %s    (← → or 1-4)", prioDisplay),
 		fmt.Sprintf("  Assignee:  %s", assigneeInput),
@@ -187,20 +183,8 @@ func (m *Model) renderNewTaskModal(content string) string {
 		}
 	}
 
-	lines = append(lines, sep)
-	lines = append(lines, styleHelp.Render("  Enter confirm    Esc cancel    Tab next field    ↑↓ suggestions"))
-
-	modalContent := strings.Join(lines, "\n")
-
-	// Centrar verticalmente
-	totalLines := len(lines)
-	h := m.height
-	if totalLines < h {
-		topPad := (h - totalLines) / 2
-		modalContent = strings.Repeat("\n", topPad) + modalContent
-	}
-
-	return modalContent
+	totalWidth := modalWidthFor(50, w)
+	return overlayModal(content, renderModalBox(" New Task ", lines, totalWidth), totalWidth, w)
 }
 
 // openEditorForNewTask abre nvim con template prellenado para la nueva tarea.

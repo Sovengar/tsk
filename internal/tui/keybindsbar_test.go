@@ -7,20 +7,76 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func TestKeybindsBarNormalViewShowsGlobal(t *testing.T) {
+func TestKeybindsBarNormalViewShowsCommonAndViewKeys(t *testing.T) {
 	var kb KeybindsBar
 	kb.SetWidth(120)
 	kb.SetView(viewList)
 
 	out := ansi.Strip(kb.View())
+	// Teclas comunes, ahora parte de la lista de la vista.
 	if !strings.Contains(out, "quit") {
-		t.Errorf("la vista normal debe mostrar keybinds globales:\n%s", out)
+		t.Errorf("la vista normal debe mostrar las teclas comunes:\n%s", out)
 	}
 	if !strings.Contains(out, "insert task") {
 		t.Errorf("la vista List debe mostrar sus keybinds:\n%s", out)
 	}
+	// List no usa Tab: no debe aparecer (antes venía de la fila global).
+	if strings.Contains(out, "switch") || strings.Contains(out, "cycle project") {
+		t.Errorf("List no debe mostrar keybinds de Tab:\n%s", out)
+	}
 	if !strings.Contains(out, "Keybinds") {
 		t.Errorf("falta el título del pane:\n%s", out)
+	}
+}
+
+// TestKeybindsForViewCommonFirst verifica que las teclas antes globales
+// encabezan la lista (son las más repetidas) en todas las vistas.
+func TestKeybindsForViewCommonFirst(t *testing.T) {
+	want := []string{"1/2/3", "hjkl", "H", "?", "q"}
+	for _, v := range []viewKind{viewDashboard, viewList, viewKanban} {
+		kbs := keybindsForView(v)
+		for i, key := range want {
+			if i >= len(kbs) || kbs[i].key != key {
+				t.Fatalf("vista %s: keybind[%d].key = %q, want %q", v, i, kbs[i].key, key)
+			}
+		}
+	}
+}
+
+// TestKeybindsBarMaxSevenPerRow verifica que ninguna fila supera 7 acciones.
+func TestKeybindsBarMaxSevenPerRow(t *testing.T) {
+	for _, v := range []viewKind{viewDashboard, viewList, viewKanban} {
+		var kb KeybindsBar
+		kb.SetWidth(200)
+		kb.SetView(v)
+
+		out := ansi.Strip(kb.View())
+		for _, line := range strings.Split(out, "\n") {
+			// 7 acciones => 6 separadores "·".
+			if n := strings.Count(line, "·"); n > keybindsPerRow-1 {
+				t.Errorf("vista %s: fila con más de %d acciones:\n%s", v, keybindsPerRow, line)
+			}
+		}
+	}
+}
+
+// TestKeybindsBarDetailSingleRow verifica que el detalle muestra sus 7 acciones
+// en una sola fila.
+func TestKeybindsBarDetailSingleRow(t *testing.T) {
+	var kb KeybindsBar
+	kb.SetWidth(200)
+	kb.SetView(viewList)
+	kb.SetOverlay(overlayDetail)
+
+	out := ansi.Strip(kb.View())
+	// 1 fila de contenido => 3 líneas (borde superior, contenido, borde inferior).
+	if lines := strings.Count(out, "\n") + 1; lines != 3 {
+		t.Errorf("detail debe ocupar una sola fila de keybinds, got %d líneas:\n%s", lines, out)
+	}
+	for _, want := range []string{"j/k", "select comment", "new comment", "delete/done", "edit task", "start", "cancel", "close"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("falta %q en el detalle:\n%s", want, out)
+		}
 	}
 }
 
@@ -37,7 +93,7 @@ func TestKeybindsBarDetailOverlay(t *testing.T) {
 			t.Errorf("falta %q en el overlay de detalle:\n%s", want, out)
 		}
 	}
-	// Las globales y de la vista ya no aplican.
+	// Las comunes y de la vista ya no aplican.
 	for _, unwanted := range []string{"quit", "insert task", "filter"} {
 		if strings.Contains(out, unwanted) {
 			t.Errorf("no debería mostrarse %q en el detalle:\n%s", unwanted, out)
