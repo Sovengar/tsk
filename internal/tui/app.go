@@ -36,6 +36,11 @@ type Model struct {
 	kanbanCol int // column index in kanban
 	kanbanRow int // row index within column
 
+	// Gantt state
+	offdays         []model.OffDay
+	ganttCursor     int // row index in the gantt
+	ganttOffsetDays int // horizontal scroll (days from the projection start)
+
 	// Dashboard state
 	dashProjectIdx    int // selected project index in dashboard
 	showArchived      bool
@@ -122,6 +127,10 @@ type projectsLoadedMsg struct {
 	archivedProjects []model.Project
 }
 
+type offdaysLoadedMsg struct {
+	offdays []model.OffDay
+}
+
 // ---- Commands ----
 
 func (m *Model) loadProjects() tea.Cmd {
@@ -145,6 +154,17 @@ func (m *Model) loadTasks() tea.Cmd {
 			return tasksLoadedMsg{}
 		}
 		return tasksLoadedMsg{tasks: tasks}
+	}
+}
+
+// loadOffDays trae todos los off-days para la proyección del Gantt.
+func (m *Model) loadOffDays() tea.Cmd {
+	return func() tea.Msg {
+		offdays, err := m.database.ListOffDays("")
+		if err != nil {
+			return offdaysLoadedMsg{}
+		}
+		return offdaysLoadedMsg{offdays: offdays}
 	}
 }
 
@@ -321,6 +341,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.invalidateFilterCache()
 		return m, nil
 
+	case offdaysLoadedMsg:
+		m.offdays = msg.offdays
+		return m, nil
+
 	case editorFinishedMsg:
 		if msg.err != nil {
 			return m, nil
@@ -400,6 +424,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleListKey(key)
 	case viewKanban:
 		return m.handleKanbanKey(key)
+	case viewGantt:
+		return m.handleGanttKey(key)
 	}
 
 	return m, nil
@@ -753,6 +779,11 @@ func (m *Model) selectedTask() *model.Task {
 		if m.kanbanRow >= 0 && m.kanbanRow < len(tasks) {
 			return &tasks[m.kanbanRow]
 		}
+	case viewGantt:
+		rows := m.ganttRows()
+		if m.ganttCursor >= 0 && m.ganttCursor < len(rows) && rows[m.ganttCursor].kind == ganttTaskRow {
+			return &rows[m.ganttCursor].entry.Task
+		}
 	}
 	return nil
 }
@@ -816,6 +847,8 @@ func (m Model) View() tea.View {
 		content = m.renderDashboard(budget)
 	case viewKanban:
 		content = m.renderKanban(budget)
+	case viewGantt:
+		content = m.renderGantt(budget)
 	case viewList:
 		content = m.renderList(budget)
 	default:

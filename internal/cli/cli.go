@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"tsk/internal/config"
 	"tsk/internal/db"
@@ -38,6 +39,10 @@ func Run(args []string) bool {
 		cmdShow(args[1])
 	case "comment":
 		cmdComment(args[1:])
+	case "offday":
+		cmdOffDay(args[1:])
+	case "gantt":
+		cmdGantt(args[1:])
 	case "update":
 		if len(args) < 2 {
 			outputError("usage: tsk update <id> [--title ...] [--description ...] [--priority N] [--assignee @name]")
@@ -419,6 +424,7 @@ func cmdAdd(args []string) {
 	title := args[0]
 	var project, assignee, status string
 	priority := 0
+	estimate := 0.0
 
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
@@ -445,6 +451,14 @@ func cmdAdd(args []string) {
 				status = args[i+1]
 				i++
 			}
+		case "--estimate":
+			if i+1 < len(args) {
+				e, err := strconv.ParseFloat(args[i+1], 64)
+				if err == nil && e >= 0 {
+					estimate = e
+				}
+				i++
+			}
 		}
 	}
 
@@ -455,7 +469,7 @@ func cmdAdd(args []string) {
 	database := openDB()
 	defer database.Close()
 
-	t, err := database.CreateTask(project, title, "", assignee, priority, status)
+	t, err := database.CreateTaskWithEstimate(project, title, "", assignee, priority, status, estimate)
 	if err != nil {
 		outputError(err.Error())
 	}
@@ -606,6 +620,287 @@ func cmdComment(args []string) {
 	}
 }
 
+// ---- Off-day commands ----
+
+// cmdOffDay gestiona los subcomandos de días no laborables: add, list, remove.
+func cmdOffDay(args []string) {
+	if len(args) == 0 {
+		outputError("usage: tsk offday (add|list|remove) ...")
+	}
+
+	switch args[0] {
+	case "add":
+		if len(args) < 3 {
+			outputError(`usage: tsk offday add <assignee> <start> [end] [--note "..."]`)
+		}
+		assignee, start := args[1], args[2]
+		end, note := "", ""
+		if len(args) > 3 && !strings.HasPrefix(args[3], "--") {
+			end = args[3]
+		}
+		for i := 3; i < len(args); i++ {
+			if args[i] == "--note" && i+1 < len(args) {
+				note = args[i+1]
+				i++
+			}
+		}
+
+		database := openDB()
+		defer database.Close()
+
+		o, err := database.AddOffDay(assignee, start, end, note)
+		if err != nil {
+			outputError(err.Error())
+		}
+		outputJSON(map[string]any{"ok": true, "offday": o})
+	case "list":
+		var assignee string
+		jsonOutput := false
+		for i := 1; i < len(args); i++ {
+			switch args[i] {
+			case "--assignee":
+				if i+1 < len(args) {
+					assignee = args[i+1]
+					i++
+				}
+			case "--json":
+				jsonOutput = true
+			}
+		}
+
+		database := openDB()
+		defer database.Close()
+
+		offdays, err := database.ListOffDays(assignee)
+		if err != nil {
+			outputError(err.Error())
+		}
+		if offdays == nil {
+			offdays = []model.OffDay{}
+		}
+
+		if jsonOutput {
+			outputJSON(map[string]any{"offdays": offdays})
+			return
+		}
+		if len(offdays) == 0 {
+			fmt.Println("No off-days registered.")
+			return
+		}
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "ID\tASSIGNEE\tFROM\tTO\tNOTE")
+		for _, o := range offdays {
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", o.ID, o.Assignee, o.StartDate, o.EndDate, o.Note)
+		}
+		w.Flush()
+	case "remove":
+		if len(args) < 2 {
+			outputError("usage: tsk offday remove <id>")
+		}
+		id := parseID(args[1])
+
+		database := openDB()
+		defer database.Close()
+
+		if err := database.DeleteOffDay(id); err != nil {
+			outputError(err.Error())
+		}
+		outputJSON(map[string]any{"ok": true, "id": id})
+	default:
+		outputError("usage: tsk offday (add|list|remove) ...")
+	}
+}
+
+// ---- Gantt ----
+
+// cmdGantt proyecta la cola de cada persona y la imprime como Gantt (texto) o
+// como estructura JSON con fechas de inicio/fin por tarea.
+func cmdGantt(args []string) {
+	var project, assignee, fromStr string
+	weeks := 0
+	jsonOutput := false
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--project":
+			if i+1 < len(args) {
+				project = args[i+1]
+				i++
+			}
+		case "--assignee":
+			if i+1 < len(args) {
+				assignee = args[i+1]
+				i++
+			}
+		case "--from":
+			if i+1 < len(args) {
+				fromStr = args[i+1]
+				i++
+			}
+		case "--weeks":
+			if i+1 < len(args) {
+				if n, err := strconv.Atoi(args[i+1]); err == nil && n > 0 {
+					weeks = n
+				}
+				i++
+			}
+		case "--json":
+			jsonOutput = true
+		}
+	}
+
+	cfg := config.Load()
+	if weeks <= 0 {
+		weeks = cfg.GanttWeeks
+	}
+
+	now := time.Now()
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	if fromStr != "" {
+		d, err := model.ParseDate(fromStr)
+		if err != nil {
+			outputError(fmt.Sprintf("invalid --from %q (want YYYY-MM-DD)", fromStr))
+		}
+		start = d
+	}
+
+	database := openDB()
+	defer database.Close()
+
+	tasks, err := database.ListTasks(project, "", assignee)
+	if err != nil {
+		outputError(err.Error())
+	}
+	offdays, err := database.ListOffDays(assignee)
+	if err != nil {
+		outputError(err.Error())
+	}
+
+	sched := model.BuildSchedule(tasks, offdays, start, cfg.DefaultEstimateDays)
+	if sched.Unassigned == nil {
+		sched.Unassigned = []model.Task{}
+	}
+
+	if jsonOutput {
+		outputJSON(sched)
+		return
+	}
+	fmt.Print(renderGanttText(sched, weeks))
+}
+
+// renderGanttText dibuja el Gantt en texto: una fila por tarea, una columna
+// por día, agrupadas por persona. Los días no laborables quedan dentro de la
+// barra (la barra cubre el rango calendario real de la tarea).
+func renderGanttText(s *model.Schedule, weeks int) string {
+	start, err := model.ParseDate(s.Start)
+	if err != nil {
+		return ""
+	}
+	totalDays := weeks * 7
+	const labelW = 30
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Gantt · start %s · %d weeks\n\n", s.Start, weeks)
+
+	dayIndex := func(dateStr string) int {
+		d, err := model.ParseDate(dateStr)
+		if err != nil {
+			return -1
+		}
+		return int(d.Sub(start).Hours() / 24)
+	}
+
+	// Regla de semanas: etiqueta "1SEP" (semana del mes + mes) alineada a cada
+	// lunes.
+	ruler := make([]rune, labelW+1+totalDays)
+	for i := range ruler {
+		ruler[i] = ' '
+	}
+	for d := 0; d < totalDays; d++ {
+		day := start.AddDate(0, 0, d)
+		if day.Weekday() != time.Monday {
+			continue
+		}
+		label := model.WeekOfMonthLabel(day)
+		col := labelW + 1 + d
+		for i, r := range label {
+			if col+i < len(ruler) {
+				ruler[col+i] = r
+			}
+		}
+	}
+	b.WriteString(strings.TrimRight(string(ruler), " "))
+	b.WriteString("\n")
+
+	axis := make([]rune, labelW+1)
+	for i := range axis {
+		axis[i] = ' '
+	}
+	b.WriteString(string(axis))
+	for d := 0; d < totalDays; d++ {
+		if start.AddDate(0, 0, d).Weekday() == time.Monday {
+			b.WriteString("|")
+		} else {
+			b.WriteString("-")
+		}
+	}
+	b.WriteString("\n")
+
+	for _, a := range s.Assignees {
+		fmt.Fprintf(&b, "%s  ends %s\n", a.Assignee, a.End)
+		for _, e := range a.Entries {
+			row := make([]rune, totalDays)
+			for i := range row {
+				row[i] = ' '
+			}
+			d0, d1 := dayIndex(e.Start), dayIndex(e.End)
+			for d := d0; d <= d1 && d < totalDays; d++ {
+				if d >= 0 {
+					row[d] = '█'
+				}
+			}
+			mark := ""
+			if e.EstimateDefaulted {
+				mark = " ~"
+			}
+			fmt.Fprintf(&b, "%s %s  %s→%s [%s]%s\n",
+				padRight(truncateLabel(fmt.Sprintf("  #%d %s", e.Task.ID, e.Task.Title), labelW), labelW),
+				string(row), e.Start, e.End, model.FormatEstimate(e.Estimate), mark)
+		}
+		b.WriteString("\n")
+	}
+
+	if len(s.Unassigned) > 0 {
+		fmt.Fprintf(&b, "Unassigned (%d):\n", len(s.Unassigned))
+		for _, t := range s.Unassigned {
+			fmt.Fprintf(&b, "  #%d %s\n", t.ID, t.Title)
+		}
+	}
+	return b.String()
+}
+
+// truncateLabel corta un texto a w runas, con ".." si sobra.
+func truncateLabel(s string, w int) string {
+	r := []rune(s)
+	if len(r) <= w {
+		return s
+	}
+	if w <= 2 {
+		return string(r[:w])
+	}
+	return string(r[:w-2]) + ".."
+}
+
+// padRight rellena con espacios hasta w runas (no bytes, así los títulos UTF-8
+// no desalinean las columnas).
+func padRight(s string, w int) string {
+	n := len([]rune(s))
+	if n >= w {
+		return s
+	}
+	return s + strings.Repeat(" ", w-n)
+}
+
 func cmdUpdate(args []string) {
 	id := parseID(args[0])
 	updates := map[string]any{}
@@ -633,6 +928,14 @@ func cmdUpdate(args []string) {
 		case "--assignee":
 			if i+1 < len(args) {
 				updates["assignee"] = args[i+1]
+				i++
+			}
+		case "--estimate":
+			if i+1 < len(args) {
+				e, err := strconv.ParseFloat(args[i+1], 64)
+				if err == nil && e >= 0 {
+					updates["estimate"] = e
+				}
 				i++
 			}
 		}
@@ -807,10 +1110,10 @@ _tsk_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="project add list show update move start review done cancel comment stats migrate completion help"
+    commands="project add list show update move start review done cancel comment offday gantt stats migrate completion help"
 
     if [[ ${cur} == -* ]] ; then
-        COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --workflow --list-order --force --archived --name" -- ${cur}) )
+        COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --estimate --from --weeks --note --workflow --list-order --force --archived --name" -- ${cur}) )
         return 0
     fi
 
@@ -823,7 +1126,11 @@ _tsk_completions() {
             COMPREPLY=( $(compgen -W "add list remove" -- ${cur}) )
             return 0
             ;;
-        add|list|show|update|move|start|review|done|cancel|stats)
+        offday)
+            COMPREPLY=( $(compgen -W "add list remove" -- ${cur}) )
+            return 0
+            ;;
+        add|list|show|update|move|start|review|done|cancel|gantt|stats)
             return 0
             ;;
     esac
@@ -838,7 +1145,7 @@ const zshCompletion = `#compdef tsk
 
 _tsk() {
     _arguments \
-        '1:command:(project add list show update move start review done cancel comment stats migrate completion help)' \
+        '1:command:(project add list show update move start review done cancel comment offday gantt stats migrate completion help)' \
         '*::arg:->args'
 }
 
@@ -864,6 +1171,11 @@ complete -c tsk -n '__fish_use_subcommand' -a review -d 'Move to review'
 complete -c tsk -n '__fish_use_subcommand' -a done -d 'Complete a task'
 complete -c tsk -n '__fish_use_subcommand' -a cancel -d 'Cancel a task'
 complete -c tsk -n '__fish_use_subcommand' -a comment -d 'Manage task comments'
+complete -c tsk -n '__fish_use_subcommand' -a offday -d 'Manage off-days'
+complete -c tsk -n '__fish_seen_subcommand_from offday' -a add -d 'Add off-days'
+complete -c tsk -n '__fish_seen_subcommand_from offday' -a list -d 'List off-days'
+complete -c tsk -n '__fish_seen_subcommand_from offday' -a remove -d 'Delete off-day'
+complete -c tsk -n '__fish_use_subcommand' -a gantt -d 'Project the schedule'
 complete -c tsk -n '__fish_use_subcommand' -a stats -d 'Show statistics'
 complete -c tsk -n '__fish_use_subcommand' -a migrate -d 'Run migrations'
 complete -c tsk -n '__fish_use_subcommand' -a completion -d 'Generate shell completions'
@@ -873,6 +1185,10 @@ complete -c tsk -l project -d 'Filter by project'
 complete -c tsk -l priority -d 'Set priority (0-3)'
 complete -c tsk -l assignee -d 'Set assignee'
 complete -c tsk -l status -d 'Filter by status'
+complete -c tsk -l estimate -d 'Estimate in days (0.25 steps)'
+complete -c tsk -l from -d 'Gantt start date (YYYY-MM-DD)'
+complete -c tsk -l weeks -d 'Gantt horizon in weeks'
+complete -c tsk -l note -d 'Off-day note'
 complete -c tsk -l archived -d 'List archived projects'
 `
 
@@ -882,25 +1198,29 @@ func cmdHelp() {
 		"tsk project add <name> [--workflow] [--list-order]": "register a project",
 		"tsk project list":        "list all projects",
 		"tsk project show <name>": "show project detail + workflow",
-		"tsk project update <name> [--name] [--workflow] [--list-order]": "update project (rename/workflow/list order)",
-		"tsk project remove <name>":                                      "delete project + tasks",
-		"tsk project archive <name>":                                     "archive project (hides tasks, reversible)",
-		"tsk project unarchive <name>":                                   "restore an archived project",
-		"tsk project list [--archived]":                                  "list active or archived projects",
-		"tsk add <title> --project X [--priority N] [--assignee @name]":  "create a task",
-		"tsk list [--project X] [--status S] [--assignee A]":             "list tasks",
+		"tsk project update <name> [--name] [--workflow] [--list-order]":               "update project (rename/workflow/list order)",
+		"tsk project remove <name>":                                                    "delete project + tasks",
+		"tsk project archive <name>":                                                   "archive project (hides tasks, reversible)",
+		"tsk project unarchive <name>":                                                 "restore an archived project",
+		"tsk project list [--archived]":                                                "list active or archived projects",
+		"tsk add <title> --project X [--priority N] [--assignee @name] [--estimate N]": "create a task",
+		"tsk list [--project X] [--status S] [--assignee A]":                           "list tasks",
 		"tsk show <id>": "show task detail",
-		"tsk update <id> [--title] [--description] [--priority N] [--assignee @name]": "update task metadata",
-		"tsk move <id> <status>":               "move task to a specific status",
-		"tsk start <id>":                       "move task to 2nd workflow status",
-		"tsk review <id>":                      "move task to review status",
-		"tsk done <id>":                        "move task to terminal status",
-		"tsk cancel <id>":                      "cancel a task",
-		"tsk comment add <task-id> \"<text>\"": "add a comment to a task",
-		"tsk comment list <task-id>":           "list comments of a task",
-		"tsk comment remove <comment-id>":      "delete a comment",
-		"tsk stats [--project X]":              "show statistics",
-		"tsk migrate":                          "run pending migrations",
+		"tsk update <id> [--title] [--description] [--priority N] [--assignee @name] [--estimate N]": "update task metadata",
+		"tsk move <id> <status>":                               "move task to a specific status",
+		"tsk start <id>":                                       "move task to 2nd workflow status",
+		"tsk review <id>":                                      "move task to review status",
+		"tsk done <id>":                                        "move task to terminal status",
+		"tsk cancel <id>":                                      "cancel a task",
+		"tsk comment add <task-id> \"<text>\"":                 "add a comment to a task",
+		"tsk comment list <task-id>":                           "list comments of a task",
+		"tsk comment remove <comment-id>":                      "delete a comment",
+		"tsk offday add <assignee> <start> [end] [--note ...]": "mark non-working days for a person",
+		"tsk offday list [--assignee A] [--json]":              "list off-days",
+		"tsk offday remove <id>":                               "delete an off-day",
+		"tsk gantt [--project X] [--assignee A] [--from DATE] [--weeks N] [--json]": "project the schedule per person",
+		"tsk stats [--project X]": "show statistics",
+		"tsk migrate":             "run pending migrations",
 	}
 
 	// Group by category

@@ -30,8 +30,9 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 	// Metadata
 	meta := []string{
 		fmt.Sprintf("  Status:     %-20s Project:   %s", t.Status, t.ProjectName),
-		fmt.Sprintf("  Assignee:   %-20s Created:   %s", t.Assignee, formatTime(t.CreatedAt)),
-		fmt.Sprintf("  Updated:    %-20s Completed: %s", formatTime(t.UpdatedAt), formatCompleted(t.CompletedAt)),
+		fmt.Sprintf("  Assignee:   %-20s Estimate:  %s", t.Assignee, model.FormatEstimate(t.Estimate)),
+		fmt.Sprintf("  Created:    %-20s Updated:   %s", formatTime(t.CreatedAt), formatTime(t.UpdatedAt)),
+		fmt.Sprintf("  Completed:  %s", formatCompleted(t.CompletedAt)),
 	}
 
 	// Description
@@ -51,10 +52,10 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 
 	// Reparto de alto entre descripción y comentarios.
 	// fixed = líneas que no son contenido:
-	//   caja tarea:      2 bordes + 3 meta + sep + "Description:" = 7
+	//   caja tarea:      2 bordes + 4 meta + sep + "Description:" = 8
 	//   separación:      1
 	//   caja comentarios: 2 bordes = 2
-	const fixed = 10
+	const fixed = 11
 	avail := h - fixed
 	if avail < 3 {
 		avail = 3

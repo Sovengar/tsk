@@ -32,8 +32,8 @@ func TestKeybindsBarNormalViewShowsCommonAndViewKeys(t *testing.T) {
 // TestKeybindsForViewCommonFirst verifica que las teclas antes globales
 // encabezan la lista (son las más repetidas) en todas las vistas.
 func TestKeybindsForViewCommonFirst(t *testing.T) {
-	want := []string{"1/2/3", "hjkl", "H", "?", "q"}
-	for _, v := range []viewKind{viewDashboard, viewList, viewKanban} {
+	want := []string{"1/2/3/4", "hjkl", "H", "?", "q"}
+	for _, v := range []viewKind{viewDashboard, viewList, viewKanban, viewGantt} {
 		kbs := keybindsForView(v)
 		for i, key := range want {
 			if i >= len(kbs) || kbs[i].key != key {
@@ -45,7 +45,7 @@ func TestKeybindsForViewCommonFirst(t *testing.T) {
 
 // TestKeybindsBarMaxSevenPerRow verifica que ninguna fila supera 7 acciones.
 func TestKeybindsBarMaxSevenPerRow(t *testing.T) {
-	for _, v := range []viewKind{viewDashboard, viewList, viewKanban} {
+	for _, v := range []viewKind{viewDashboard, viewList, viewKanban, viewGantt} {
 		var kb KeybindsBar
 		kb.SetWidth(200)
 		kb.SetView(v)

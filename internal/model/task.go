@@ -10,17 +10,18 @@ const (
 
 // Task representa una tarea en un proyecto.
 type Task struct {
-	ID          int64  `json:"id"`
-	ProjectID   int64  `json:"project_id"`
-	ProjectName string `json:"project,omitempty"`
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Status      string `json:"status"`
-	Priority    int    `json:"priority"`
-	Assignee    string `json:"assignee"`
-	CreatedAt   string `json:"created_at"`
-	UpdatedAt   string `json:"updated_at"`
-	CompletedAt string `json:"completed_at,omitempty"`
+	ID          int64   `json:"id"`
+	ProjectID   int64   `json:"project_id"`
+	ProjectName string  `json:"project,omitempty"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	Status      string  `json:"status"`
+	Priority    int     `json:"priority"`
+	Assignee    string  `json:"assignee"`
+	Estimate    float64 `json:"estimate"`
+	CreatedAt   string  `json:"created_at"`
+	UpdatedAt   string  `json:"updated_at"`
+	CompletedAt string  `json:"completed_at,omitempty"`
 }
 
 // PriorityLabel devuelve la etiqueta legible de la prioridad.

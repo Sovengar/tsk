@@ -15,6 +15,7 @@ const (
 	viewDashboard viewKind = iota
 	viewList
 	viewKanban
+	viewGantt
 )
 
 func (v viewKind) String() string {
@@ -25,6 +26,8 @@ func (v viewKind) String() string {
 		return "Tasklist"
 	case viewKanban:
 		return "Kanban"
+	case viewGantt:
+		return "Gantt"
 	}
 	return "?"
 }
@@ -39,7 +42,7 @@ func keybindsForView(v viewKind) []keybind {
 	// Comunes: aplican en casi cualquier vista, pero se listan dentro de cada
 	// una (no como fila "global") para poder omitirlas donde no aplican.
 	common := []keybind{
-		{"1/2/3", "Dash / List / Kanban"},
+		{"1/2/3/4", "Dash / List / Kanban / Gantt"},
 		{"hjkl", "arrows"},
 		{"H", "hidden"},
 		{"?", "help"},
@@ -80,6 +83,13 @@ func keybindsForView(v viewKind) []keybind {
 			{"e", "edit task"},
 			{"Ctrl+p", "priority"},
 		}
+	case viewGantt:
+		viewKeys = []keybind{
+			{"j/k", "task"},
+			{"h/l", "move dates"},
+			{"g/G", "first/last"},
+			{"Enter", "detail"},
+		}
 	}
 	return append(common, viewKeys...)
 }
@@ -101,6 +111,11 @@ func handleGlobalKeys(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	case "3":
 		m.currentView = viewKanban
 		return m, m.loadTasks(), true
+	case "4":
+		m.currentView = viewGantt
+		m.ganttCursor = 0
+		m.ganttOffsetDays = 0
+		return m, tea.Batch(m.loadTasks(), m.loadOffDays()), true
 	case "esc":
 		if m.helpOpen {
 			m.helpOpen = false

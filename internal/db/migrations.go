@@ -74,6 +74,24 @@ const schemaV6 = `
 ALTER TABLE projects DROP COLUMN path;
 `
 
+// schemaV7 agrega la cuantificación de tareas (estimate, en días) y los
+// off-days personales (vacaciones, feriados, ausencias). Un off-day cubre el
+// rango inclusivo [start_date, end_date]; sin motivo, solo importa que la
+// persona no estará disponible.
+const schemaV7 = `
+ALTER TABLE tasks ADD COLUMN estimate REAL NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS offdays (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    assignee   TEXT NOT NULL,
+    start_date TEXT NOT NULL,
+    end_date   TEXT NOT NULL,
+    note       TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_offdays_assignee ON offdays(assignee, start_date);
+`
+
 // migrations es la lista de migraciones en orden.
 var migrations = []struct {
 	version string
@@ -85,4 +103,5 @@ var migrations = []struct {
 	{"004", schemaV4},
 	{"005", schemaV5},
 	{"006", schemaV6},
+	{"007", schemaV7},
 }

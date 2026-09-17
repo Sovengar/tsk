@@ -37,11 +37,12 @@ func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
 	}
 
 	// Escribir formato editable
-	content := fmt.Sprintf("# %s\n\n%s\n\n---\nassignee: %s\npriority: %d\n",
+	content := fmt.Sprintf("# %s\n\n%s\n\n---\nassignee: %s\npriority: %d\nestimate: %g\n",
 		task.Title,
 		task.Description,
 		task.Assignee,
 		task.Priority,
+		task.Estimate,
 	)
 	if _, err := tmpFile.WriteString(content); err != nil {
 		tmpFile.Close()
@@ -77,7 +78,7 @@ func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
 
 // newTaskCmd lanza el editor con un template vacío para crear una tarea nueva.
 func newTaskCmd(projectName, editorCmd string) tea.Cmd {
-	content := "# \n\nDescripción aquí\n\n---\nassignee: unassigned\npriority: 0\n"
+	content := "# \n\nDescripción aquí\n\n---\nassignee: unassigned\npriority: 0\nestimate: 1\n"
 	return newTaskCmdWithContent(projectName, editorCmd, content, 0)
 }
 
@@ -125,7 +126,7 @@ func newTaskCmdWithContent(projectName, editorCmd, content string, cursorLine in
 }
 
 // parseEditFile parsea el contenido del archivo editado.
-func parseEditFile(content string) (title, description, assignee string, priority int) {
+func parseEditFile(content string) (title, description, assignee string, priority int, estimate float64) {
 	mainPart := content
 	metadataPart := ""
 	if idx := strings.Index(content, "---\n"); idx >= 0 {
@@ -152,6 +153,7 @@ func parseEditFile(content string) (title, description, assignee string, priorit
 
 	assignee = ""
 	priority = 0
+	estimate = 0
 	if metadataPart != "" {
 		for _, line := range strings.Split(metadataPart, "\n") {
 			line = strings.TrimSpace(line)
@@ -160,6 +162,10 @@ func parseEditFile(content string) (title, description, assignee string, priorit
 			} else if strings.HasPrefix(line, "priority:") {
 				if p, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "priority:"))); err == nil {
 					priority = p
+				}
+			} else if strings.HasPrefix(line, "estimate:") {
+				if e, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(line, "estimate:")), 64); err == nil && e >= 0 {
+					estimate = e
 				}
 			}
 		}
@@ -171,13 +177,14 @@ func parseEditFile(content string) (title, description, assignee string, priorit
 // updateTaskFromEdit actualiza la tarea con los datos editados.
 func (m *Model) updateTaskFromEdit(taskID int64, content string) tea.Cmd {
 	return func() tea.Msg {
-		title, description, assignee, priority := parseEditFile(content)
+		title, description, assignee, priority, estimate := parseEditFile(content)
 
 		updates := map[string]any{
 			"title":       title,
 			"description": description,
 			"assignee":    assignee,
 			"priority":    priority,
+			"estimate":    estimate,
 		}
 
 		_, err := m.database.UpdateTask(taskID, updates)
@@ -195,14 +202,14 @@ func (m *Model) updateTaskFromEdit(taskID int64, content string) tea.Cmd {
 // createTaskFromEdit crea una tarea nueva con los datos del editor.
 func (m *Model) createTaskFromEdit(projectName, content string) tea.Cmd {
 	return func() tea.Msg {
-		title, description, assignee, priority := parseEditFile(content)
+		title, description, assignee, priority, estimate := parseEditFile(content)
 
 		title = strings.TrimSpace(title)
 		if title == "" {
 			title = "(untitled)"
 		}
 
-		_, err := m.database.CreateTask(projectName, title, description, assignee, priority, "")
+		_, err := m.database.CreateTaskWithEstimate(projectName, title, description, assignee, priority, "", estimate)
 		if err != nil {
 			return nil
 		}

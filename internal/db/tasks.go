@@ -8,8 +8,13 @@ import (
 	"tsk/internal/model"
 )
 
-// CreateTask crea una tarea nueva.
+// CreateTask crea una tarea nueva sin estimación.
 func (db *DB) CreateTask(projectName, title, description, assignee string, priority int, status string) (*model.Task, error) {
+	return db.CreateTaskWithEstimate(projectName, title, description, assignee, priority, status, 0)
+}
+
+// CreateTaskWithEstimate crea una tarea nueva con estimate en días.
+func (db *DB) CreateTaskWithEstimate(projectName, title, description, assignee string, priority int, status string, estimate float64) (*model.Task, error) {
 	p, err := db.GetProject(projectName)
 	if err != nil {
 		return nil, err
@@ -30,9 +35,9 @@ func (db *DB) CreateTask(projectName, title, description, assignee string, prior
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	result, err := db.conn.Exec(
-		`INSERT INTO tasks (project_id, title, description, status, priority, assignee, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, title, description, status, priority, assignee, now, now,
+		`INSERT INTO tasks (project_id, title, description, status, priority, assignee, estimate, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, title, description, status, priority, assignee, estimate, now, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create task: %w", err)
@@ -48,6 +53,7 @@ func (db *DB) CreateTask(projectName, title, description, assignee string, prior
 		Status:      status,
 		Priority:    priority,
 		Assignee:    assignee,
+		Estimate:    estimate,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}, nil
@@ -59,11 +65,11 @@ func (db *DB) GetTask(id int64) (*model.Task, error) {
 	var completedAt sql.NullString
 	err := db.conn.QueryRow(`
 		SELECT t.id, t.project_id, p.name, t.title, t.description, t.status, t.priority, t.assignee,
-		       t.created_at, t.updated_at, t.completed_at
+		       t.estimate, t.created_at, t.updated_at, t.completed_at
 		FROM tasks t JOIN projects p ON t.project_id = p.id
 		WHERE t.id = ?`, id,
 	).Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.Title, &t.Description, &t.Status,
-		&t.Priority, &t.Assignee, &t.CreatedAt, &t.UpdatedAt, &completedAt)
+		&t.Priority, &t.Assignee, &t.Estimate, &t.CreatedAt, &t.UpdatedAt, &completedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("task not found: %d", id)
 	}
@@ -85,7 +91,7 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 	query := `
 		WITH ranked AS (
 			SELECT t.id, t.project_id, p.name, t.title, t.description, t.status, t.priority, t.assignee,
-			       t.created_at, t.updated_at, t.completed_at,
+			       t.estimate, t.created_at, t.updated_at, t.completed_at,
 			       (SELECT je.key FROM json_each(p.list_order) AS je WHERE je.value = t.status) AS lo_rank,
 			       (SELECT COUNT(*) FROM json_each(p.list_order)) AS lo_len,
 			       (SELECT je.key FROM json_each(p.workflow) AS je WHERE je.value = t.status) AS wf_rank
@@ -109,7 +115,7 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 	query += `
 		)
 		SELECT id, project_id, name, title, description, status, priority, assignee,
-		       created_at, updated_at, completed_at
+		       estimate, created_at, updated_at, completed_at
 		FROM ranked
 		ORDER BY priority DESC,
 		         CASE
@@ -132,7 +138,7 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 		var t model.Task
 		var completedAt sql.NullString
 		if err := rows.Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.Title, &t.Description,
-			&t.Status, &t.Priority, &t.Assignee, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
+			&t.Status, &t.Priority, &t.Assignee, &t.Estimate, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
 			return nil, err
 		}
 		if completedAt.Valid {

@@ -13,11 +13,20 @@ const FileName = "config.toml"
 // DefaultPageSize es el número de tareas por página por defecto en la vista List.
 const DefaultPageSize = 10
 
+// DefaultEstimateDays es la estimación por defecto (en días) para tareas sin
+// estimate, usada por la proyección del Gantt.
+const DefaultEstimateDays = 1.0
+
+// DefaultGanttWeeks es el horizonte visible por defecto del Gantt, en semanas.
+const DefaultGanttWeeks = 6
+
 // Config es la configuración global de tsk.
 type Config struct {
-	Database     DatabaseConfig `toml:"database"`
-	Editor       EditorConfig   `toml:"editor"`
-	ListPageSize int            `toml:"list_page_size"`
+	Database            DatabaseConfig `toml:"database"`
+	Editor              EditorConfig   `toml:"editor"`
+	ListPageSize        int            `toml:"list_page_size"`
+	DefaultEstimateDays float64        `toml:"default_estimate_days"`
+	GanttWeeks          int            `toml:"gantt_weeks"`
 }
 
 // DatabaseConfig configura la base de datos.
@@ -39,7 +48,9 @@ func Defaults() Config {
 		Editor: EditorConfig{
 			Command: "nvim",
 		},
-		ListPageSize: DefaultPageSize,
+		ListPageSize:        DefaultPageSize,
+		DefaultEstimateDays: DefaultEstimateDays,
+		GanttWeeks:          DefaultGanttWeeks,
 	}
 }
 
@@ -74,6 +85,12 @@ func Load() Config {
 	}
 	if cfg.ListPageSize <= 0 {
 		cfg.ListPageSize = DefaultPageSize
+	}
+	if cfg.DefaultEstimateDays <= 0 {
+		cfg.DefaultEstimateDays = DefaultEstimateDays
+	}
+	if cfg.GanttWeeks <= 0 {
+		cfg.GanttWeeks = DefaultGanttWeeks
 	}
 	return cfg
 }
