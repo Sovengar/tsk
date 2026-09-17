@@ -36,6 +36,7 @@ func (m *Model) viewKeybinds() []keybind {
 			{"Enter", "Open detail"},
 			{"i", "Insert new task"},
 			{"e", "Edit task in $EDITOR"},
+			{"Ctrl+p", "Cycle priority (backlog: includes none)"},
 			{"s", "Start task (advance status)"},
 			{"d", "Mark done"},
 			{"x", "Cancel task"},
@@ -51,9 +52,23 @@ func (m *Model) viewKeybinds() []keybind {
 			{"d", "Mark done"},
 			{"x", "Cancel task"},
 			{"Enter", "Open detail"},
+			{"Ctrl+p", "Cycle priority (backlog: includes none)"},
 		}
 	}
 	return nil
+}
+
+// detailKeybinds devuelve los keybinds del modal de detalle de tarea.
+func detailKeybinds() []keybind {
+	return []keybind{
+		{"c", "New comment ($EDITOR)"},
+		{"j/k", "Select comment"},
+		{"d", "Delete selected comment / Done"},
+		{"e", "Edit task in $EDITOR"},
+		{"s", "Start task"},
+		{"x", "Cancel task"},
+		{"Esc", "Deselect comment / close"},
+	}
 }
 
 func (m *Model) renderHelpModal(content string) string {
@@ -75,6 +90,13 @@ func (m *Model) renderHelpModal(content string) string {
 	viewLines = append(viewLines, "")
 	viewLines = append(viewLines, styleColumnHeader.Render("  "+m.currentView.String()))
 	for _, kb := range m.viewKeybinds() {
+		viewLines = append(viewLines, "  "+styleWarn.Render(kb.key)+"  "+kb.desc)
+	}
+
+	// Detail modal keys
+	viewLines = append(viewLines, "")
+	viewLines = append(viewLines, styleColumnHeader.Render("  Task detail (modal)"))
+	for _, kb := range detailKeybinds() {
 		viewLines = append(viewLines, "  "+styleWarn.Render(kb.key)+"  "+kb.desc)
 	}
 

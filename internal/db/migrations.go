@@ -36,10 +36,24 @@ CREATE INDEX IF NOT EXISTS idx_tasks_project_status ON tasks(project_id, status)
 CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority DESC);
 `
 
+// schemaV2 añade los comentarios de tarea.
+const schemaV2 = `
+CREATE TABLE IF NOT EXISTS comments (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id    INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    body       TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_task ON comments(task_id);
+CREATE INDEX IF NOT EXISTS idx_comments_task_created ON comments(task_id, created_at);
+`
+
 // migrations es la lista de migraciones en orden.
 var migrations = []struct {
 	version string
 	query   string
 }{
 	{"001", schemaV1},
+	{"002", schemaV2},
 }

@@ -268,7 +268,7 @@ func (m *Model) newTask() tea.Cmd {
 	m.newTaskOpen = true
 	m.newTaskTitle = ""
 	m.newTaskPriority = 0
-	m.newTaskAssignee = "unassigned"
+	m.newTaskAssignee = "Me"
 	m.newTaskAssigneeSuggIdx = -1
 	m.newTaskProject = projectName
 	m.newTaskFieldIdx = 0

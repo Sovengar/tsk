@@ -8,10 +8,21 @@ import (
 	"tsk/internal/tui/bordered"
 )
 
+// overlayKind identifica un modal activo que captura las teclas.
+type overlayKind int
+
+const (
+	overlayNone overlayKind = iota
+	overlayDetail
+	overlayNewTask
+	overlayFilter
+)
+
 // KeybindsBar renderiza los keybinds en un pane con bordes.
 type KeybindsBar struct {
 	width   int
 	view    viewKind
+	overlay overlayKind
 	focused bool
 }
 
@@ -25,20 +36,26 @@ func (s *KeybindsBar) SetView(v viewKind) {
 	s.view = v
 }
 
+// SetOverlay indica si hay un modal activo que captura las teclas.
+func (s *KeybindsBar) SetOverlay(o overlayKind) {
+	s.overlay = o
+}
+
 // SetWidth actualiza el ancho.
 func (s *KeybindsBar) SetWidth(w int) {
 	s.width = w
 }
 
-// View renderiza el KeybindsBar con dos filas de keybinds.
+// View renderiza el KeybindsBar con una o dos filas de keybinds.
 func (s KeybindsBar) View() string {
-	// Row 1: global keybinds
-	global := s.renderGlobal()
-
-	// Row 2: view-specific keybinds
-	viewSpecific := s.renderViewSpecific()
-
-	content := global + "\n" + viewSpecific
+	var content string
+	if s.overlay != overlayNone {
+		// Modal activo: solo las teclas que funcionan en ese contexto.
+		content = strings.Join(s.renderOverlay(), "\n")
+	} else {
+		// Vista normal: fila global + filas específicas de la vista.
+		content = s.renderGlobal() + "\n" + s.renderViewSpecific()
+	}
 
 	// Border color
 	var borderFg color.Color
@@ -52,10 +69,66 @@ func (s KeybindsBar) View() string {
 		lipgloss.RoundedBorder(),
 		borderFg,
 		bordered.AlignLeft,
-		" Keybinds ",
+		s.title(),
 		content,
 		s.width,
 	)
+}
+
+// title devuelve el título del pane según el contexto activo.
+func (s KeybindsBar) title() string {
+	switch s.overlay {
+	case overlayDetail:
+		return " Keybinds · Detail "
+	case overlayNewTask:
+		return " Keybinds · New task "
+	case overlayFilter:
+		return " Keybinds · Filters "
+	}
+	return " Keybinds "
+}
+
+// renderOverlay formatea las teclas del modal activo.
+func (s KeybindsBar) renderOverlay() []string {
+	sep := styleStatusSep.Render(" · ")
+	join := func(parts ...string) string { return strings.Join(parts, sep) }
+
+	switch s.overlay {
+	case overlayDetail:
+		return []string{
+			join(
+				s.renderKey("c", "comment"),
+				s.renderKey("j/k", "select"),
+				s.renderKey("d", "delete/done"),
+				s.renderKey("Esc", "close"),
+			),
+			join(
+				s.renderKey("e", "edit"),
+				s.renderKey("s", "start"),
+				s.renderKey("x", "cancel"),
+			),
+		}
+	case overlayNewTask:
+		return []string{
+			join(
+				s.renderKey("Enter", "create"),
+				s.renderKey("Esc", "cancel"),
+				s.renderKey("Tab", "next field"),
+				s.renderKey("←→/1-4", "priority"),
+				s.renderKey("↑↓", "suggestions"),
+			),
+		}
+	case overlayFilter:
+		return []string{
+			join(
+				s.renderKey("Tab/↑↓", "field"),
+				s.renderKey("←→", "change"),
+				s.renderKey("Enter", "close"),
+				s.renderKey("Esc", "cancel"),
+			),
+		}
+	}
+	return nil
 }
 
 // renderGlobal formatea los keybinds globales.
@@ -87,6 +160,7 @@ func (s KeybindsBar) renderViewSpecific() string {
 			s.renderKey("e", "edit"),
 			s.renderKey("i", "insert task"),
 			s.renderKey("/", "filter"),
+			s.renderKey("Ctrl+p", "priority"),
 		}
 		row2 = []string{
 			s.renderKey("s", "start"),
@@ -99,6 +173,7 @@ func (s KeybindsBar) renderViewSpecific() string {
 			s.renderKey("e", "edit"),
 			s.renderKey("d", "done"),
 			s.renderKey("x", "cancel"),
+			s.renderKey("Ctrl+p", "priority"),
 		}
 		row2 = []string{
 			s.renderKey("i", "insert task"),

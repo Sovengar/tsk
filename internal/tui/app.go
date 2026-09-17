@@ -40,8 +40,10 @@ type Model struct {
 	dashProjectIdx int // selected project index in dashboard
 
 	// Detail modal
-	detailOpen bool
-	detailTask *model.Task
+	detailOpen       bool
+	detailTask       *model.Task
+	detailComments   []model.Comment
+	detailCommentSel int // -1 = ninguno seleccionado
 
 	// Help modal
 	helpOpen bool
@@ -79,6 +81,7 @@ func New(database *db.DB, cfg config.Config) Model {
 		filterPriority:   -1,
 		filterActiveOnly: true,
 		pageSize:         pageSize,
+		detailCommentSel: -1,
 		width:            80,
 		height:           24,
 		statusbar:        NewKeybindsBar(80),
@@ -293,6 +296,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case commentsLoadedMsg:
+		if m.detailOpen && m.detailTask != nil && m.detailTask.ID == msg.taskID {
+			m.detailComments = msg.comments
+			m.detailCommentSel = msg.selectIdx
+		}
+		return m, nil
+
+	case commentFinishedMsg:
+		if msg.err != nil || msg.body == "" {
+			return m, nil
+		}
+		return m, m.addCommentCmd(msg.taskID, msg.body)
+
 	case tea.KeyMsg:
 		return m.handleKey(msg)
 	}
@@ -404,6 +420,9 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			t := tasks[m.cursor]
 			m.detailOpen = true
 			m.detailTask = &t
+			m.detailComments = nil
+			m.detailCommentSel = -1
+			return m, m.loadCommentsCmd(t.ID)
 		}
 	case "s":
 		// Start: move to next status
@@ -424,6 +443,21 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		// Open filter modal
 		m.filterOpen = true
 		m.filterFieldIdx = 0
+	case "ctrl+p":
+		if m.cursor < len(tasks) {
+			t := tasks[m.cursor]
+			var next int
+			if t.Status == "backlog" {
+				// backlog: none→LOW→MED→HIGH→none
+				next = (t.Priority + 1) % 4
+			} else {
+				// fuera de backlog: LOW→MED→HIGH→LOW
+				next = (t.Priority % 3) + 1
+			}
+			return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
+				return m.database.UpdateTask(id, map[string]any{"priority": next})
+			})
+		}
 	}
 
 	return m, nil
@@ -502,6 +536,24 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 			t := colTasks[m.kanbanRow]
 			m.detailOpen = true
 			m.detailTask = &t
+			m.detailComments = nil
+			m.detailCommentSel = -1
+			return m, m.loadCommentsCmd(t.ID)
+		}
+	case "ctrl+p":
+		if m.kanbanRow < len(colTasks) {
+			t := colTasks[m.kanbanRow]
+			var next int
+			if t.Status == "backlog" {
+				// backlog: none→LOW→MED→HIGH→none
+				next = (t.Priority + 1) % 4
+			} else {
+				// fuera de backlog: LOW→MED→HIGH→LOW
+				next = (t.Priority % 3) + 1
+			}
+			return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
+				return m.database.UpdateTask(id, map[string]any{"priority": next})
+			})
 		}
 	}
 
@@ -525,9 +577,41 @@ func (m Model) tasksInColumn(status string) []model.Task {
 func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
+		// Primero deselecciona el comentario; si no hay, cierra el modal.
+		if m.detailCommentSel >= 0 {
+			m.detailCommentSel = -1
+			return m, nil
+		}
 		m.detailOpen = false
 		m.detailTask = nil
+		m.detailComments = nil
 		return m, nil
+	case "j", "down":
+		if len(m.detailComments) == 0 {
+			return m, nil
+		}
+		if m.detailCommentSel < 0 {
+			m.detailCommentSel = 0
+		} else if m.detailCommentSel < len(m.detailComments)-1 {
+			m.detailCommentSel++
+		}
+		return m, nil
+	case "k", "up":
+		if m.detailCommentSel > 0 {
+			m.detailCommentSel--
+		} else if m.detailCommentSel == 0 {
+			m.detailCommentSel = -1
+		}
+		return m, nil
+	case "c":
+		// Nuevo comentario en el editor externo.
+		if m.detailTask != nil {
+			editorCmd := m.config.Editor.Command
+			if editorCmd == "" {
+				editorCmd = "nvim"
+			}
+			return m, commentCmd(m.detailTask.ID, editorCmd)
+		}
 	case "e":
 		// Edit task in editor
 		if m.detailTask != nil {
@@ -548,17 +632,26 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 			return m, m.taskActionCmd(id, m.database.StartTask)
 		}
 	case "d":
-		if m.detailTask != nil {
-			id := m.detailTask.ID
-			m.detailOpen = false
-			m.detailTask = nil
-			return m, m.taskActionCmd(id, m.database.DoneTask)
+		if m.detailTask == nil {
+			return m, nil
 		}
+		// Con un comentario seleccionado, borra el comentario.
+		if m.detailCommentSel >= 0 && m.detailCommentSel < len(m.detailComments) {
+			comment := m.detailComments[m.detailCommentSel]
+			return m, m.deleteCommentCmd(m.detailTask.ID, comment.ID, m.detailCommentSel)
+		}
+		// Sin selección, marca la tarea como done.
+		id := m.detailTask.ID
+		m.detailOpen = false
+		m.detailTask = nil
+		m.detailComments = nil
+		return m, m.taskActionCmd(id, m.database.DoneTask)
 	case "x":
 		if m.detailTask != nil {
 			id := m.detailTask.ID
 			m.detailOpen = false
 			m.detailTask = nil
+			m.detailComments = nil
 			return m, m.taskActionCmd(id, m.database.CancelTask)
 		}
 	}
@@ -567,9 +660,10 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 
 func (m Model) uniqueAssignees() []string {
 	seen := make(map[string]bool)
-	var result []string
+	result := []string{"Me"} // siempre presente, es el usuario
+	seen["Me"] = true
 	for _, t := range m.tasks {
-		if !seen[t.Assignee] {
+		if !seen[t.Assignee] && t.Assignee != "" {
 			seen[t.Assignee] = true
 			result = append(result, t.Assignee)
 		}
@@ -611,9 +705,24 @@ func (m Model) previewBudget(keybindsHeight int) int {
 	return budget
 }
 
+// overlayKind devuelve el modal activo, en el mismo orden de prioridad que
+// handleKey: nueva tarea, detalle, filtros.
+func (m Model) overlayKind() overlayKind {
+	switch {
+	case m.newTaskOpen:
+		return overlayNewTask
+	case m.detailOpen:
+		return overlayDetail
+	case m.filterOpen:
+		return overlayFilter
+	}
+	return overlayNone
+}
+
 func (m Model) View() tea.View {
 	// KeybindsBar siempre al fondo.
 	m.statusbar.SetView(m.currentView)
+	m.statusbar.SetOverlay(m.overlayKind())
 	keybinds := m.statusbar.View()
 	keybindsHeight := lineCount(keybinds)
 
@@ -621,6 +730,11 @@ func (m Model) View() tea.View {
 	m.preview.SetTask(m.selectedTask())
 	m.preview.SetMaxLines(m.previewBudget(keybindsHeight))
 	preview := m.preview.View()
+
+	// El detalle ya muestra la descripción: sin preview duplicado.
+	if m.detailOpen {
+		preview = ""
+	}
 
 	budget := contentBudget(m.height, lineCount(preview), keybindsHeight)
 

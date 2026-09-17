@@ -36,6 +36,8 @@ func Run(args []string) bool {
 			outputError("usage: tsk show <id>")
 		}
 		cmdShow(args[1])
+	case "comment":
+		cmdComment(args[1:])
 	case "update":
 		if len(args) < 2 {
 			outputError("usage: tsk update <id> [--title ...] [--description ...] [--priority N] [--assignee @name]")
@@ -463,7 +465,72 @@ func cmdShow(idStr string) {
 		outputError(err.Error())
 	}
 
-	outputJSON(map[string]any{"task": t})
+	comments, err := database.ListComments(id)
+	if err != nil {
+		outputError(err.Error())
+	}
+	if comments == nil {
+		comments = []model.Comment{}
+	}
+
+	outputJSON(map[string]any{"task": t, "comments": comments})
+}
+
+// cmdComment gestiona los subcomandos de comentarios: add, list, remove.
+func cmdComment(args []string) {
+	if len(args) == 0 {
+		outputError("usage: tsk comment (add|list|remove) ...")
+	}
+
+	switch args[0] {
+	case "add":
+		if len(args) < 3 {
+			outputError(`usage: tsk comment add <task-id> "<text>"`)
+		}
+		id := parseID(args[1])
+		body := strings.Join(args[2:], " ")
+
+		database := openDB()
+		defer database.Close()
+
+		c, err := database.AddComment(id, body)
+		if err != nil {
+			outputError(err.Error())
+		}
+		outputJSON(model.CommentResponse{OK: true, Comment: *c})
+	case "list":
+		if len(args) < 2 {
+			outputError("usage: tsk comment list <task-id>")
+		}
+		id := parseID(args[1])
+
+		database := openDB()
+		defer database.Close()
+
+		comments, err := database.ListComments(id)
+		if err != nil {
+			outputError(err.Error())
+		}
+		if comments == nil {
+			comments = []model.Comment{}
+		}
+		outputJSON(model.CommentListResponse{Comments: comments})
+	case "remove":
+		if len(args) < 2 {
+			outputError("usage: tsk comment remove <comment-id>")
+		}
+		id := parseID(args[1])
+
+		database := openDB()
+		defer database.Close()
+
+		if err := database.DeleteComment(id); err != nil {
+			outputError(err.Error())
+		}
+		outputJSON(map[string]any{"ok": true, "id": id})
+	default:
+		outputError("usage: tsk comment (add|list|remove) ...")
+	}
 }
 
 func cmdUpdate(args []string) {
@@ -684,7 +751,7 @@ _tsk_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="project add list show update move start review done cancel reorder stats migrate completion help"
+    commands="project add list show update move start review done cancel reorder comment stats migrate completion help"
 
     if [[ ${cur} == -* ]] ; then
         COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --path --workflow --force" -- ${cur}) )
@@ -694,6 +761,10 @@ _tsk_completions() {
     case ${prev} in
         project)
             COMPREPLY=( $(compgen -W "add list show update remove" -- ${cur}) )
+            return 0
+            ;;
+        comment)
+            COMPREPLY=( $(compgen -W "add list remove" -- ${cur}) )
             return 0
             ;;
         add|list|show|update|move|start|review|done|cancel|reorder|stats)
@@ -711,7 +782,7 @@ const zshCompletion = `#compdef tsk
 
 _tsk() {
     _arguments \
-        '1:command:(project add list show update move start review done cancel reorder stats migrate completion help)' \
+        '1:command:(project add list show update move start review done cancel reorder comment stats migrate completion help)' \
         '*::arg:->args'
 }
 
@@ -730,6 +801,7 @@ complete -c tsk -n '__fish_use_subcommand' -a review -d 'Move to review'
 complete -c tsk -n '__fish_use_subcommand' -a done -d 'Complete a task'
 complete -c tsk -n '__fish_use_subcommand' -a cancel -d 'Cancel a task'
 complete -c tsk -n '__fish_use_subcommand' -a reorder -d 'Reorder task'
+complete -c tsk -n '__fish_use_subcommand' -a comment -d 'Manage task comments'
 complete -c tsk -n '__fish_use_subcommand' -a stats -d 'Show statistics'
 complete -c tsk -n '__fish_use_subcommand' -a migrate -d 'Run migrations'
 complete -c tsk -n '__fish_use_subcommand' -a completion -d 'Generate shell completions'
@@ -759,6 +831,9 @@ func cmdHelp() {
 		"tsk done <id>":                               "move task to terminal status",
 		"tsk cancel <id>":                             "cancel a task",
 		"tsk reorder <id> <position>":                 "reorder task within column",
+		"tsk comment add <task-id> \"<text>\"":         "add a comment to a task",
+		"tsk comment list <task-id>":                  "list comments of a task",
+		"tsk comment remove <comment-id>":             "delete a comment",
 		"tsk stats [--project X]":                     "show statistics",
 		"tsk migrate":                                 "run pending migrations",
 	}

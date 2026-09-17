@@ -36,15 +36,13 @@ func (m Model) handleNewTaskKey(key string) (tea.Model, tea.Cmd) {
 		m.newTaskOpen = false
 		return m, nil
 
-	case "tab", "down":
+	case "down":
 		if m.newTaskFieldIdx == 2 && len(m.assigneeSuggestions(m.newTaskAssignee)) > 0 {
 			suggs := m.assigneeSuggestions(m.newTaskAssignee)
 			m.newTaskAssigneeSuggIdx = (m.newTaskAssigneeSuggIdx + 1) % len(suggs)
 			return m, nil
 		}
-		m.newTaskAssigneeSuggIdx = -1
-		m.newTaskFieldIdx = (m.newTaskFieldIdx + 1) % numFields
-	case "shift+tab", "up":
+	case "up":
 		if m.newTaskFieldIdx == 2 && len(m.assigneeSuggestions(m.newTaskAssignee)) > 0 {
 			suggs := m.assigneeSuggestions(m.newTaskAssignee)
 			if m.newTaskAssigneeSuggIdx <= 0 {
@@ -54,6 +52,17 @@ func (m Model) handleNewTaskKey(key string) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+	case "tab":
+		// Autocompletar si hay sugerencia seleccionada, luego avanzar campo
+		if m.newTaskFieldIdx == 2 && m.newTaskAssigneeSuggIdx >= 0 {
+			suggs := m.assigneeSuggestions(m.newTaskAssignee)
+			if m.newTaskAssigneeSuggIdx < len(suggs) {
+				m.newTaskAssignee = suggs[m.newTaskAssigneeSuggIdx]
+			}
+		}
+		m.newTaskAssigneeSuggIdx = -1
+		m.newTaskFieldIdx = (m.newTaskFieldIdx + 1) % numFields
+	case "shift+tab":
 		m.newTaskAssigneeSuggIdx = -1
 		m.newTaskFieldIdx = (m.newTaskFieldIdx + numFields - 1) % numFields
 
@@ -179,7 +188,7 @@ func (m *Model) renderNewTaskModal(content string) string {
 	}
 
 	lines = append(lines, sep)
-	lines = append(lines, styleHelp.Render("  Enter confirm    Esc cancel    Tab/↑↓ field"))
+	lines = append(lines, styleHelp.Render("  Enter confirm    Esc cancel    Tab next field    ↑↓ suggestions"))
 
 	modalContent := strings.Join(lines, "\n")
 
