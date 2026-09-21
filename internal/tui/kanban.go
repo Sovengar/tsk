@@ -65,7 +65,8 @@ func (m *Model) kanbanColumns() []kanbanColumn {
 }
 
 // clampKanbanCursor mantiene el cursor dentro del board actual. Las columnas
-// cambian al togglear tareas ocultas (H), así que el índice puede quedar fuera.
+// cambian al filtrar por estado (p. ej. "all active" vacía done/cancelled), así
+// que el índice puede quedar fuera.
 func (m *Model) clampKanbanCursor() {
 	cols := m.kanbanColumns()
 	if len(cols) == 0 {

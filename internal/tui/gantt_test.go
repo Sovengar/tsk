@@ -61,20 +61,6 @@ func TestRenderGanttRespectsHeight(t *testing.T) {
 	}
 }
 
-// TestGanttHiddenKeyDisabled verifica que H (hidden) no tenga efecto en el
-// Gantt: la proyección ya excluye done/cancelled, así que el toggle no debe
-// cambiar el estado de filtros.
-func TestGanttHiddenKeyDisabled(t *testing.T) {
-	m := newTestModel(t)
-	m, _ = press(m, "3")
-
-	before := m.filterActiveOnly
-	m, _ = press(m, "H")
-	if m.filterActiveOnly != before {
-		t.Errorf("H no debe alternar filterActiveOnly en Gantt: %v -> %v", before, m.filterActiveOnly)
-	}
-}
-
 func TestGanttNavigation(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "3")

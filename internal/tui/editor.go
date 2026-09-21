@@ -18,13 +18,6 @@ type editorFinishedMsg struct {
 	file   string
 }
 
-// newTaskFinishedMsg se envía cuando el editor termina (creación).
-type newTaskFinishedMsg struct {
-	err         error
-	projectName string
-	file        string
-}
-
 // editTaskCmd lanza el editor con los datos de la tarea.
 // Prepara el archivo temporal y devuelve tea.ExecProcess directamente.
 func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
@@ -73,55 +66,6 @@ func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
 		return editorFinishedMsg{
 			taskID: task.ID,
 			file:   string(data),
-		}
-	})
-}
-
-// newTaskCmd lanza el editor con un template vacío para crear una tarea nueva.
-func newTaskCmd(projectName, editorCmd string) tea.Cmd {
-	content := "# \n\nDescripción aquí\n\n---\nassignee: unassigned\npriority: 0\nestimate: 1\ntags: \n"
-	return newTaskCmdWithContent(projectName, editorCmd, content, 0)
-}
-
-// newTaskCmdWithContent lanza el editor con contenido prellenado.
-// cursorLine indica la línea donde posicionar el cursor (0 = sin posición).
-func newTaskCmdWithContent(projectName, editorCmd, content string, cursorLine int) tea.Cmd {
-	tmpFile, err := os.CreateTemp("", "tsk-new-*.md")
-	if err != nil {
-		return func() tea.Msg {
-			return newTaskFinishedMsg{err: err, projectName: projectName}
-		}
-	}
-
-	if _, err := tmpFile.WriteString(content); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
-		return func() tea.Msg {
-			return newTaskFinishedMsg{err: err, projectName: projectName}
-		}
-	}
-	tmpFile.Close()
-
-	args := strings.Fields(editorCmd)
-	cmdArgs := append(args[1:], tmpFile.Name())
-	if cursorLine > 0 {
-		cmdArgs = append(cmdArgs, fmt.Sprintf("+%d", cursorLine))
-	}
-	cmd := exec.Command(args[0], cmdArgs...)
-
-	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
-		if execErr != nil {
-			os.Remove(tmpFile.Name())
-			return newTaskFinishedMsg{err: execErr, projectName: projectName}
-		}
-		data, readErr := os.ReadFile(tmpFile.Name())
-		os.Remove(tmpFile.Name())
-		if readErr != nil {
-			return newTaskFinishedMsg{err: readErr, projectName: projectName}
-		}
-		return newTaskFinishedMsg{
-			projectName: projectName,
-			file:        string(data),
 		}
 	})
 }
@@ -203,28 +147,6 @@ func (m *Model) updateTaskFromEdit(taskID int64, content string) tea.Cmd {
 	}
 }
 
-// createTaskFromEdit crea una tarea nueva con los datos del editor.
-func (m *Model) createTaskFromEdit(projectName, content string) tea.Cmd {
-	return func() tea.Msg {
-		title, description, assignee, priority, estimate, tags := parseEditFile(content)
-
-		title = strings.TrimSpace(title)
-		if title == "" {
-			title = "(untitled)"
-		}
-
-		_, err := m.database.CreateTaskFull(projectName, title, description, assignee, priority, "", estimate, tags)
-		if err != nil {
-			return nil
-		}
-		tasks, err := m.database.ListTasks("", "", "")
-		if err != nil {
-			return nil
-		}
-		return tasksLoadedMsg{tasks: tasks}
-	}
-}
-
 // selectedEditableTask devuelve la tarea seleccionada en la vista actual, o
 // nil si no hay ninguna. Fuente única para el editor externo y el inline.
 func (m *Model) selectedEditableTask() *model.Task {
@@ -273,12 +195,17 @@ func (m *Model) newTask() tea.Cmd {
 	}
 
 	m.newTaskOpen = true
+	m.newTaskFieldIdx = newTaskFieldPriority
+	m.newTaskPriority = model.PriorityLow
 	m.newTaskTitle = ""
-	m.newTaskPriority = 0
 	m.newTaskAssignee = "Me"
 	m.newTaskAssigneeSuggIdx = -1
+	m.newTaskTags = nil
+	m.newTaskTagInput = ""
+	m.newTaskTagSuggIdx = -1
 	m.newTaskProject = projectName
-	m.newTaskFieldIdx = 0
+	m.newTaskErr = ""
+	m.newTaskTextarea = m.buildNewTaskTextarea("")
 	return nil
 }
 

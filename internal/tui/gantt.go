@@ -49,8 +49,7 @@ func (m *Model) ganttSchedule() *model.Schedule {
 // proyección global: sólo decide qué filas se ven, sin recalcular fechas.
 func (m *Model) ganttDisplay() *model.Schedule {
 	return model.FilterSchedule(m.ganttSchedule(), func(t model.Task) bool {
-		// En el Gantt no se ocultan done/cancelled: BuildSchedule ya los excluye.
-		return m.taskMatchesFilter(t, false)
+		return m.taskMatchesFilter(t)
 	})
 }
 
@@ -139,8 +138,7 @@ func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 
 	switch key {
 	case "/":
-		m.filterOpen = true
-		m.filterFieldIdx = 0
+		return m, m.openFilterModal()
 	case "tab":
 		// Cambiar de proyecto ciclando el filtro Project, como en el Dashboard.
 		m.cycleProjectFilter(1)

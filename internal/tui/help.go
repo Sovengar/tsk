@@ -42,6 +42,20 @@ func (m *Model) renderHelpModal(content string) string {
 		viewLines = append(viewLines, "  "+styleWarn.Render(kb.key)+"  "+kb.desc)
 	}
 
+	// New task modal keys
+	viewLines = append(viewLines, "")
+	viewLines = append(viewLines, styleColumnHeader.Render("  New task (modal)"))
+	for _, kb := range newTaskKeybinds() {
+		viewLines = append(viewLines, "  "+styleWarn.Render(kb.key)+"  "+kb.desc)
+	}
+
+	// Filter modal keys
+	viewLines = append(viewLines, "")
+	viewLines = append(viewLines, styleColumnHeader.Render("  Filters (modal)"))
+	for _, kb := range filterKeybinds() {
+		viewLines = append(viewLines, "  "+styleWarn.Render(kb.key)+"  "+kb.desc)
+	}
+
 	footer := styleDim.Render("  Press ? or Esc to close")
 
 	body := strings.Join(viewLines, "\n")

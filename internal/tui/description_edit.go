@@ -35,22 +35,10 @@ func (m *Model) resizeDescEditor() {
 	m.descEditTextarea.SetWidth(m.descEditorWidth())
 }
 
-// openDescEditor abre el detalle en modo edición de descripción. Si el detalle
-// no estaba abierto, lo abre (y carga sus comentarios) para poder integrar el
-// textarea dentro de la misma caja, sin superponer modales.
-func (m *Model) openDescEditor() tea.Cmd {
-	src := m.descEditTarget()
-	if src == nil {
-		return nil
-	}
-	t := *src // copia: no aliasar el cache de tareas filtradas
-
-	firstOpen := !m.detailOpen
-	m.detailOpen = true
-	m.detailTask = &t
-	m.detailCommentSel = -1
-	m.descEditHadDetail = !firstOpen
-
+// newDescTextarea construye el textarea del editor de descripción con los
+// estilos sobrios compartidos por el detalle y el alta de tarea. Es la única
+// fuente de configuración del editor inline.
+func newDescTextarea(value string, width, height int) textarea.Model {
 	ta := textarea.New()
 	ta.ShowLineNumbers = false
 	ta.Prompt = ""
@@ -68,10 +56,30 @@ func (m *Model) openDescEditor() tea.Cmd {
 	st.Focused.Text = lipgloss.NewStyle()
 	ta.SetStyles(st)
 
-	ta.SetValue(t.Description)
-	ta.SetWidth(m.descEditorWidth())
-	ta.SetHeight(descEditorHeight)
+	ta.SetValue(value)
+	ta.SetWidth(width)
+	ta.SetHeight(height)
 	ta.CursorEnd()
+	return ta
+}
+
+// openDescEditor abre el detalle en modo edición de descripción. Si el detalle
+// no estaba abierto, lo abre (y carga sus comentarios) para poder integrar el
+// textarea dentro de la misma caja, sin superponer modales.
+func (m *Model) openDescEditor() tea.Cmd {
+	src := m.descEditTarget()
+	if src == nil {
+		return nil
+	}
+	t := *src // copia: no aliasar el cache de tareas filtradas
+
+	firstOpen := !m.detailOpen
+	m.detailOpen = true
+	m.detailTask = &t
+	m.detailCommentSel = -1
+	m.descEditHadDetail = !firstOpen
+
+	ta := newDescTextarea(t.Description, m.descEditorWidth(), descEditorHeight)
 
 	m.descEditOpen = true
 	m.descEditTaskID = t.ID

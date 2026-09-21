@@ -150,20 +150,9 @@ func (s KeybindsBar) renderOverlay() []string {
 			{"Esc", "close"},
 		})
 	case overlayNewTask:
-		return s.renderRows([]keybind{
-			{"Enter", "create"},
-			{"Esc", "cancel"},
-			{"Tab", "next field"},
-			{"←→/1-4", "priority"},
-			{"↑↓", "suggestions"},
-		})
+		return s.renderRows(newTaskKeybinds())
 	case overlayFilter:
-		return s.renderRows([]keybind{
-			{"Tab/↑↓", "field"},
-			{"←→", "change"},
-			{"Enter", "close"},
-			{"Esc", "cancel"},
-		})
+		return s.renderRows(filterKeybinds())
 	case overlayProject:
 		return s.renderRows([]keybind{
 			{"Enter", "save"},

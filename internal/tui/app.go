@@ -26,14 +26,13 @@ type Model struct {
 	pageSize    int // tareas por página en la vista List
 
 	// Filters
-	filterProject    string
-	filterStatus     string
-	filterAssignee   string
-	filterTag        string
-	filterPriority   int // -1 = all
-	filterActive     bool
-	filterText       string
-	filterActiveOnly bool // ocultar done/cancelled por defecto
+	filterProject  string
+	filterStatus   string // "" = all; statusFilterAllActive = activos; otro = estado exacto
+	filterAssignee string
+	filterTag      string
+	filterPriority int // -1 = all
+	filterActive   bool
+	filterText     string
 
 	// Kanban state
 	kanbanCol int // column index in kanban
@@ -104,17 +103,24 @@ type Model struct {
 	helpOpen bool
 
 	// Filter modal
-	filterOpen     bool
-	filterFieldIdx int // 0=project, 1=status, 2=assignee, 3=priority, 4=tag
+	filterOpen      bool
+	filterFieldIdx  int    // 0=project, 1=status, 2=assignee, 3=priority, 4=tag
+	filterSearch    string // búsqueda fuzzy del campo activo
+	filterOptionIdx int    // cursor de opciones del campo activo
 
 	// New task modal
 	newTaskOpen            bool
-	newTaskTitle           string
+	newTaskFieldIdx        int // 0=priority, 1=title, 2=description, 3=assignee, 4=tags
 	newTaskPriority        int
+	newTaskTitle           string
 	newTaskAssignee        string
 	newTaskAssigneeSuggIdx int // -1 = none selected
+	newTaskTags            []string
+	newTaskTagInput        string
+	newTaskTagSuggIdx      int // -1 = none selected
 	newTaskProject         string
-	newTaskFieldIdx        int // 0=title, 1=priority, 2=assignee
+	newTaskErr             string // validación inline (ej. título requerido)
+	newTaskTextarea        textarea.Model
 
 	// KeybindsBar
 	statusbar KeybindsBar
@@ -134,7 +140,7 @@ func New(database *db.DB, cfg config.Config) Model {
 		config:           cfg,
 		currentView:      viewList,
 		filterPriority:   -1,
-		filterActiveOnly: true,
+		filterStatus:     statusFilterAllActive,
 		pageSize:         pageSize,
 		detailCommentSel: -1,
 		tagSuggestIdx:    -1,
@@ -159,6 +165,9 @@ type projectsLoadedMsg struct {
 type offdaysLoadedMsg struct {
 	offdays []model.OffDay
 }
+
+// taskCreateFailedMsg resulta de fallar la creación de una tarea desde el modal.
+type taskCreateFailedMsg struct{ err error }
 
 // offdaySavedMsg resulta de un alta o baja de off-day. err != nil indica fallo.
 type offdaySavedMsg struct {
@@ -311,20 +320,25 @@ func (m *Model) commonWorkflow() []string {
 	return result
 }
 
-// taskMatchesFilter indica si una tarea pasa los filtros activos. hideDone
-// oculta done/cancelled cuando no se filtró por estado, que es el
-// comportamiento por defecto de la List. Lo comparten List, Kanban y Gantt para
-// que la cabecera de filtros sea consistente en todas las vistas.
-func (m *Model) taskMatchesFilter(t model.Task, hideDone bool) bool {
-	if hideDone && m.filterStatus == "" {
-		if t.Status == "done" || t.Status == "cancelled" {
+// taskMatchesFilter indica si una tarea pasa los filtros activos. El estado se
+// resuelve en un único lugar: statusFilterAllActive (default) deja fuera los
+// terminales, "" (all) no restringe, y cualquier otro valor exige coincidencia
+// exacta. Lo comparten List, Kanban y Gantt para que la cabecera de filtros sea
+// consistente en todas las vistas.
+func (m *Model) taskMatchesFilter(t model.Task) bool {
+	switch m.filterStatus {
+	case statusFilterAllActive:
+		if !t.IsActive() {
+			return false
+		}
+	case "":
+		// "all": sin restricción de estado
+	default:
+		if t.Status != m.filterStatus {
 			return false
 		}
 	}
 	if m.filterProject != "" && t.ProjectName != m.filterProject {
-		return false
-	}
-	if m.filterStatus != "" && t.Status != m.filterStatus {
 		return false
 	}
 	if m.filterAssignee != "" && t.Assignee != m.filterAssignee {
@@ -347,7 +361,7 @@ func (m *Model) filteredTasks() []model.Task {
 
 	var result []model.Task
 	for _, t := range m.tasks {
-		if m.taskMatchesFilter(t, m.filterActiveOnly) {
+		if m.taskMatchesFilter(t) {
 			result = append(result, t)
 		}
 	}
@@ -443,6 +457,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.descEditOpen {
 			m.resizeDescEditor()
 		}
+		if m.newTaskOpen {
+			m.newTaskTextarea.SetWidth(m.newTaskTextareaWidth())
+		}
 		return m, nil
 
 	case projectsLoadedMsg:
@@ -496,12 +513,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case newTaskFinishedMsg:
+	case taskCreateFailedMsg:
 		if msg.err != nil {
-			return m, nil
-		}
-		if msg.file != "" {
-			return m, m.createTaskFromEdit(msg.projectName, msg.file)
+			return m, m.setToast(msg.err.Error(), "error")
 		}
 		return m, nil
 
@@ -519,9 +533,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.addCommentCmd(msg.taskID, msg.body)
 
 	case tea.PasteMsg:
-		// El textarea del editor inline maneja el pegado por sí mismo.
+		// Los textarea del editor inline y del alta de tarea manejan el pegado.
 		if m.descEditOpen {
 			return m.handleDescEditKey(msg)
+		}
+		if m.newTaskOpen {
+			return m.handleNewTaskPaste(msg)
 		}
 		if m.tagOpen {
 			return m.handleTagPaste(msg.Content)
@@ -537,6 +554,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// tea.KeyMsg ni tea.PasteMsg, así que hay que reenviarlos a su Update.
 		if m.descEditOpen {
 			return m.handleDescEditKey(msg)
+		}
+		if m.newTaskOpen && m.newTaskFieldIdx == newTaskFieldDescription {
+			var cmd tea.Cmd
+			m.newTaskTextarea, cmd = m.newTaskTextarea.Update(msg)
+			return m, cmd
 		}
 	}
 
@@ -558,7 +580,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	// New task modal takes priority
 	if m.newTaskOpen {
-		return m.handleNewTaskKey(key)
+		return m.handleNewTaskKey(msg)
 	}
 
 	// Editor inline de descripción (puede superponerse al detalle)
@@ -722,8 +744,7 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		}
 	case "/":
 		// Open filter modal
-		m.filterOpen = true
-		m.filterFieldIdx = 0
+		return m, m.openFilterModal()
 	case "ctrl+p":
 		if m.cursor < len(tasks) {
 			t := tasks[m.cursor]
@@ -750,9 +771,7 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 	// Abrir filtros antes del corte por columnas vacías, para que funcione
 	// aunque el board no tenga nada.
 	if key == "/" {
-		m.filterOpen = true
-		m.filterFieldIdx = 0
-		return m, nil
+		return m, m.openFilterModal()
 	}
 
 	// Tab cambia de proyecto ciclando el filtro Project (como el Dashboard).
@@ -868,7 +887,7 @@ func (m Model) tasksInColumn(status string) []model.Task {
 		if t.Status != status {
 			continue
 		}
-		if !m.taskMatchesFilter(t, m.filterActiveOnly) {
+		if !m.taskMatchesFilter(t) {
 			continue
 		}
 		result = append(result, t)

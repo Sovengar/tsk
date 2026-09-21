@@ -75,9 +75,10 @@ func TestKanbanColumnWidthsTooNarrow(t *testing.T) {
 	}
 }
 
-// TestKanbanHiddenToggle verifica que H tenga efecto en el board: con tareas
-// ocultas activas la columna done se vacía; con H apagado vuelven a mostrarse.
-func TestKanbanHiddenToggle(t *testing.T) {
+// TestKanbanTerminalColumnFilteredByStatus verifica que el filtro de estado
+// controle la columna done: con el default "all active" queda vacía; con "all"
+// vuelven a mostrarse las terminales.
+func TestKanbanTerminalColumnFilteredByStatus(t *testing.T) {
 	m := newTestModel(t)
 	markFirstDone(t, m)
 	m, _ = press(m, "2")
@@ -88,24 +89,24 @@ func TestKanbanHiddenToggle(t *testing.T) {
 	}
 
 	if n := len(m.kanbanColumns()[done].tasks); n != 0 {
-		t.Errorf("con hidden activo la columna done debe estar vacía, tiene %d", n)
+		t.Errorf("con all active la columna done debe estar vacía, tiene %d", n)
 	}
 
-	m, _ = press(m, "H")
+	m.filterApplySelection(filterFieldStatus, "all")
 
 	if n := len(m.kanbanColumns()[done].tasks); n != 1 {
-		t.Errorf("con hidden apagado la columna done debe mostrar 1 tarea, tiene %d", n)
+		t.Errorf("con all la columna done debe mostrar 1 tarea, tiene %d", n)
 	}
 }
 
-// TestKanbanHiddenCardsAreNavigable verifica que las tarjetas ocultas, al
+// TestKanbanAllStatusCardsAreNavigable verifica que las tarjetas terminales, al
 // mostrarse, sean seleccionables. Antes el render y la navegación usaban listas
 // distintas, así que la columna done mostraba tarjetas inaccesibles.
-func TestKanbanHiddenCardsAreNavigable(t *testing.T) {
+func TestKanbanAllStatusCardsAreNavigable(t *testing.T) {
 	m := newTestModel(t)
 	markFirstDone(t, m)
 	m, _ = press(m, "2")
-	m, _ = press(m, "H") // mostrar done
+	m.filterApplySelection(filterFieldStatus, "all") // mostrar done
 
 	done := kanbanColumnIndex(m, "done")
 	if done < 0 {

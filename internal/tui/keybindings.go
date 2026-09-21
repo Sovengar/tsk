@@ -35,7 +35,7 @@ func (v viewKind) String() string {
 // keybindsForView devuelve, en orden de prioridad, las teclas de una vista. Es
 // la única fuente de verdad para la KeybindsBar y el modal de ayuda.
 //
-// Las teclas comunes (1/2/3/4, hjkl, H, ?, q) van primero por ser las más
+// Las teclas comunes (1/2/3/4, hjkl, ?, q) van primero por ser las más
 // repetidas; después el resto por frecuencia de uso. La barra las reparte en
 // filas de keybindsPerRow, así que bastan 7 entradas para llenar una fila.
 func keybindsForView(v viewKind) []keybind {
@@ -44,13 +44,9 @@ func keybindsForView(v viewKind) []keybind {
 	common := []keybind{
 		{"1/2/3/4", "List / Kanban / Gantt / Dash"},
 		{"hjkl", "arrows"},
+		{"?", "help"},
+		{"q", "quit"},
 	}
-	// H oculta done/cancelled; en Gantt no aplica porque la proyección ya los
-	// excluye, así que se omite para no mostrar una tecla muerta.
-	if v != viewGantt {
-		common = append(common, keybind{"H", "hidden"})
-	}
-	common = append(common, keybind{"?", "help"}, keybind{"q", "quit"})
 
 	var viewKeys []keybind
 	switch v {
@@ -137,16 +133,6 @@ func handleGlobalKeys(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			m.filterText = ""
 			return m, nil, true
 		}
-	case "H":
-		// H oculta done/cancelled en List/Kanban. En Gantt no aplica (la
-		// proyección ya las excluye), así que la tecla queda deshabilitada.
-		if m.currentView == viewGantt {
-			return m, nil, true
-		}
-		m.filterActiveOnly = !m.filterActiveOnly
-		m.invalidateFilterCache()
-		m.clampKanbanCursor()
-		return m, nil, true
 	case "?":
 		m.helpOpen = !m.helpOpen
 		return m, nil, true

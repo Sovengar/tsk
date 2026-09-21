@@ -368,10 +368,19 @@ func TestListPriorityFilter(t *testing.T) {
 		t.Errorf("after 2 left: priority = %d, want 2", m.filterPriority)
 	}
 
-	// Close modal
+	// Enter aplica y avanza al siguiente campo; todavía no cierra.
 	m, _ = press(m, "enter")
+	if !m.filterOpen {
+		t.Fatal("enter en un campo intermedio no debe cerrar el modal")
+	}
+	if m.filterFieldIdx != filterFieldTag {
+		t.Errorf("enter debe avanzar a Tag, got %d", m.filterFieldIdx)
+	}
+
+	// Esc cierra.
+	m, _ = press(m, "esc")
 	if m.filterOpen {
-		t.Error("enter should close modal")
+		t.Error("esc should close modal")
 	}
 }
 

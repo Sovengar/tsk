@@ -43,16 +43,14 @@ func TestUpdateTaskFromEditApplied(t *testing.T) {
 	}
 }
 
-// TestCreateTaskFromEditApplied verifica que al crear una tarea desde el
-// editor, el comando devuelve un mensaje que refresca la lista.
-func TestCreateTaskFromEditApplied(t *testing.T) {
+// TestCreateTaskCmdApplied verifica que al crear una tarea desde el modal, el
+// comando la persiste y devuelve un mensaje que refresca la lista.
+func TestCreateTaskCmdApplied(t *testing.T) {
 	m := newTestModel(t)
 
-	content := "# Brand New\n\nsome desc\n\n---\nassignee: @ana\npriority: 1\n"
-
-	cmd := m.createTaskFromEdit("api", content)
+	cmd := m.createTaskCmd("api", "Brand New", "some desc", "@ana", 1, []string{"backend"})
 	if cmd == nil {
-		t.Fatal("createTaskFromEdit devolvió nil")
+		t.Fatal("createTaskCmd devolvió nil")
 	}
 
 	msg := cmd()
@@ -63,12 +61,13 @@ func TestCreateTaskFromEditApplied(t *testing.T) {
 
 	found := false
 	for _, task := range loaded.tasks {
-		if task.Title == "Brand New" && task.Assignee == "@ana" && task.Priority == 1 {
+		if task.Title == "Brand New" && task.Assignee == "@ana" && task.Priority == 1 &&
+			task.Description == "some desc" && len(task.Tags) == 1 && task.Tags[0] == "backend" {
 			found = true
 		}
 	}
 	if !found {
-		t.Error("la tarea creada no aparece en las tareas recargadas")
+		t.Error("la tarea creada no aparece con sus datos en las tareas recargadas")
 	}
 }
 

@@ -18,6 +18,15 @@ const (
 // filterFieldCount es la cantidad de campos del modal de filtros.
 const filterFieldCount = 5
 
+// filterMaxVisibleOptions acota las opciones listadas del campo activo para que
+// el modal no crezca sin control con muchas tags o assignees.
+const filterMaxVisibleOptions = 6
+
+// statusFilterAllActive es el valor por defecto del filtro de estado: muestra
+// todas las tareas salvo las terminales (done/cancelled). El valor "" (mostrado
+// como "all") es el que no restringe el estado.
+const statusFilterAllActive = "all active"
+
 // filterFieldOptions retorna las opciones disponibles para un campo.
 func (m *Model) filterFieldOptions(field int) []string {
 	switch field {
@@ -28,7 +37,7 @@ func (m *Model) filterFieldOptions(field int) []string {
 		}
 		return opts
 	case filterFieldStatus:
-		opts := []string{"all"}
+		opts := []string{statusFilterAllActive, "all"}
 		// El estado es un concepto por-proyecto: si hay uno seleccionado, sólo
 		// se ofrecen sus estados; en "all projects", sólo los comunes a todos.
 		if m.filterProject != "" {
@@ -192,90 +201,251 @@ func (m *Model) clearInvalidStatusFilter() {
 	m.filterStatus = ""
 }
 
-// handleFilterModalKey procesa teclas del modal de filtros.
+// filterKeybinds lista las teclas del modal de filtros. Es la fuente única para
+// la barra de keybinds y el modal de ayuda.
+func filterKeybinds() []keybind {
+	return []keybind{
+		{"Tab", "field"},
+		{"↑↓", "option"},
+		{"←→", "cycle"},
+		{"Enter", "apply / next"},
+		{"Ctrl+R", "reset"},
+		{"Esc", "close"},
+	}
+}
+
+// openFilterModal abre el modal con el foco en el primer campo y el cursor de
+// opciones sincronizado con el valor aplicado.
+func (m *Model) openFilterModal() tea.Cmd {
+	m.filterOpen = true
+	m.filterFieldIdx = filterFieldProject
+	m.filterSyncOption()
+	return nil
+}
+
+// filterVisibleOptions devuelve las opciones del campo activo, filtradas por la
+// búsqueda fuzzy. Los modos agregados ("all active"/"all") quedan siempre
+// disponibles para poder volver atrás sin borrar la búsqueda.
+func (m *Model) filterVisibleOptions() []string {
+	opts := m.filterFieldOptions(m.filterFieldIdx)
+	if m.filterSearch == "" {
+		return opts
+	}
+	var matches, aggregators []string
+	for _, o := range opts {
+		if o == statusFilterAllActive || o == "all" {
+			aggregators = append(aggregators, o)
+			continue
+		}
+		if _, ok := fuzzyScore(m.filterSearch, o); ok {
+			matches = append(matches, o)
+		}
+	}
+	// Los matches van primero para que el cursor quede sobre el mejor candidato;
+	// los modos agregados quedan al final, siempre accesibles.
+	return append(matches, aggregators...)
+}
+
+// filterSyncOption limpia la búsqueda y posiciona el cursor sobre el valor
+// aplicado del campo activo.
+func (m *Model) filterSyncOption() {
+	m.filterSearch = ""
+	opts := m.filterFieldOptions(m.filterFieldIdx)
+	current := m.filterCurrentValue(m.filterFieldIdx)
+	m.filterOptionIdx = 0
+	for i, o := range opts {
+		if o == current {
+			m.filterOptionIdx = i
+			break
+		}
+	}
+}
+
+// clampFilterOption mantiene el cursor de opciones dentro de la lista visible.
+func (m *Model) clampFilterOption() {
+	opts := m.filterVisibleOptions()
+	if len(opts) == 0 {
+		m.filterOptionIdx = 0
+		return
+	}
+	if m.filterOptionIdx >= len(opts) {
+		m.filterOptionIdx = len(opts) - 1
+	}
+	if m.filterOptionIdx < 0 {
+		m.filterOptionIdx = 0
+	}
+}
+
+// filterMoveField mueve el foco entre campos y resincroniza el cursor.
+func (m Model) filterMoveField(delta int) (tea.Model, tea.Cmd) {
+	m.filterFieldIdx = (m.filterFieldIdx + delta + filterFieldCount) % filterFieldCount
+	m.filterSyncOption()
+	return m, nil
+}
+
+// filterMoveOption mueve el cursor dentro de las opciones visibles.
+func (m *Model) filterMoveOption(delta int) {
+	opts := m.filterVisibleOptions()
+	if len(opts) == 0 {
+		return
+	}
+	m.filterOptionIdx = (m.filterOptionIdx + delta + len(opts)) % len(opts)
+}
+
+// filterCycle aplica en vivo la opción anterior/siguiente del campo activo.
+func (m *Model) filterCycle(forward bool) {
+	opts := m.filterVisibleOptions()
+	if len(opts) == 0 {
+		return
+	}
+	idx := m.filterOptionIdx
+	if idx < 0 || idx >= len(opts) {
+		idx = 0
+	}
+	if forward {
+		idx = (idx + 1) % len(opts)
+	} else {
+		idx = (idx - 1 + len(opts)) % len(opts)
+	}
+	m.filterApplySelection(m.filterFieldIdx, opts[idx])
+	m.filterSyncOption()
+}
+
+// resetFilters vuelve todos los filtros a su valor por defecto, incluido el
+// estado "all active".
+func (m *Model) resetFilters() {
+	m.filterProject = ""
+	m.filterStatus = statusFilterAllActive
+	m.filterAssignee = ""
+	m.filterTag = ""
+	m.filterPriority = -1
+	m.invalidateFilterCache()
+	m.clampKanbanCursor()
+	m.filterSyncOption()
+}
+
+// handleFilterModalKey procesa las teclas del modal de filtros. Tab/Shift+Tab
+// mueven el foco, ↑↓ mueven el cursor de opciones, ←→ ciclan el valor aplicado
+// en vivo, escribir filtra las opciones, Enter aplica y avanza, Ctrl+R resetea
+// todo y Esc cierra.
 func (m Model) handleFilterModalKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
 		m.filterOpen = false
 		return m, nil
 
-	case "tab", "down":
-		m.filterFieldIdx = (m.filterFieldIdx + 1) % filterFieldCount
+	case "tab":
+		return m.filterMoveField(1)
+	case "shift+tab":
+		return m.filterMoveField(-1)
+
+	case "up":
+		m.filterMoveOption(-1)
+		return m, nil
+	case "down":
+		m.filterMoveOption(1)
 		return m, nil
 
-	case "shift+tab", "up":
-		m.filterFieldIdx = (m.filterFieldIdx + filterFieldCount - 1) % filterFieldCount
+	case "left":
+		m.filterCycle(false)
+		return m, nil
+	case "right":
+		m.filterCycle(true)
 		return m, nil
 
-	case "left", "right":
-		opts := m.filterFieldOptions(m.filterFieldIdx)
-		current := m.filterCurrentValue(m.filterFieldIdx)
-		idx := 0
-		for i, o := range opts {
-			if o == current {
-				idx = i
-				break
-			}
-		}
-		if key == "right" {
-			idx = (idx + 1) % len(opts)
-		} else {
-			idx = (idx - 1 + len(opts)) % len(opts)
-		}
-		m.filterApplySelection(m.filterFieldIdx, opts[idx])
+	case "ctrl+r":
+		m.resetFilters()
 		return m, nil
 
 	case "enter":
-		m.filterOpen = false
+		if opts := m.filterVisibleOptions(); len(opts) > 0 {
+			m.filterApplySelection(m.filterFieldIdx, opts[m.filterOptionIdx])
+		}
+		// En el último campo, Enter cierra; en el resto, avanza.
+		if m.filterFieldIdx == filterFieldTag {
+			m.filterOpen = false
+			return m, nil
+		}
+		return m.filterMoveField(1)
+
+	case "backspace":
+		if m.filterSearch != "" {
+			m.filterSearch = m.filterSearch[:len(m.filterSearch)-1]
+			m.filterOptionIdx = 0
+		}
 		return m, nil
 	}
 
+	// Texto imprimible: filtra las opciones del campo activo.
+	if len(key) == 1 && key[0] >= 33 && key[0] < 127 {
+		m.filterSearch += key
+		m.filterOptionIdx = 0
+	}
 	return m, nil
 }
 
-// renderFilterModal renderiza el modal flotante de filtros.
+// renderFilterModal renderiza el modal de filtros: filas con foco resaltado y,
+// en el campo activo, un input de búsqueda y el listado de opciones con el valor
+// aplicado (●) y el cursor (▸). El título muestra el conteo en vivo.
 func (m *Model) renderFilterModal(content string) string {
 	w := m.width
+	m.clampFilterOption()
+
 	fields := []int{filterFieldProject, filterFieldStatus, filterFieldAssignee, filterFieldPriority, filterFieldTag}
 
-	var lines []string
-	lines = append(lines, "")
-
+	lines := []string{""}
 	for _, field := range fields {
-		label := filterFieldLabel(field)
+		focused := field == m.filterFieldIdx
+		label := cellWidth(filterFieldLabel(field), 10)
 		current := m.filterCurrentValue(field)
-		opts := m.filterFieldOptions(field)
 
-		// Build option display: Label ← Value →
-		optPrefix := fmt.Sprintf("%-12s ← ", label)
-		optSuffix := " →"
-		valueStr := styleStatusKey.Render(current)
-		optDisplay := styleFilterDim.Render(optPrefix) + valueStr + styleFilterDim.Render(optSuffix)
-		if field == m.filterFieldIdx {
-			lines = append(lines, styleSelected.Render("  > ")+" "+optDisplay)
+		if focused {
+			input := m.filterSearch
+			if input == "" {
+				input = styleDim.Render(current)
+			} else {
+				input = styleTitle.Render(input)
+			}
+			lines = append(lines, "  ▸ "+styleTitle.Render(label)+" "+input+styleTitle.Render(cursorGlyph))
 		} else {
-			lines = append(lines, "      "+optDisplay)
+			lines = append(lines, "    "+styleStatusDesc.Render(label)+" "+styleStatusKey.Render(current))
 		}
 
-		// Show options as vertical list on selected field
-		if field == m.filterFieldIdx && len(opts) > 2 {
-			maxShow := 5
-			if len(opts) < maxShow {
-				maxShow = len(opts)
+		if !focused {
+			continue
+		}
+
+		opts := m.filterVisibleOptions()
+		if len(opts) == 0 {
+			lines = append(lines, styleDim.Render("        (no matches)"))
+			continue
+		}
+		start, end := visibleRange(m.filterOptionIdx, len(opts), filterMaxVisibleOptions)
+		for i := start; i < end; i++ {
+			applied := opts[i] == current
+			mark := "  "
+			if applied {
+				mark = "● "
 			}
-			for _, opt := range opts[:maxShow] {
-				if opt == current {
-					lines = append(lines, styleSelected.Render("        > "+opt))
-				} else {
-					lines = append(lines, "          "+opt)
-				}
+			switch {
+			case i == m.filterOptionIdx:
+				lines = append(lines, styleSelected.Render("    ▸ "+mark+opts[i]))
+			case applied:
+				lines = append(lines, styleStatusKey.Render("      "+mark+opts[i]))
+			default:
+				lines = append(lines, "      "+mark+opts[i])
 			}
-			if len(opts) > maxShow {
-				lines = append(lines, styleDim.Render(fmt.Sprintf("          ... %d more", len(opts)-maxShow)))
-			}
+		}
+		if len(opts) > filterMaxVisibleOptions {
+			lines = append(lines, styleDim.Render(fmt.Sprintf("      %d/%d", m.filterOptionIdx+1, len(opts))))
 		}
 	}
 
-	totalWidth := modalWidthFor(48, w)
-	return overlayModal(content, renderModalBox(" Filters ", lines, totalWidth), totalWidth, w)
+	totalWidth := modalWidthFor(54, w)
+	innerWidth := totalWidth - 2
+	for i := range lines {
+		lines[i] = truncateLines(lines[i], innerWidth)
+	}
+	title := fmt.Sprintf(" Filters · %d tasks ", len(m.filteredTasks()))
+	return overlayModal(content, renderModalBox(title, lines, totalWidth), totalWidth, w)
 }

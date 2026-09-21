@@ -9,7 +9,8 @@ import (
 
 func TestKeybindsBarNormalViewShowsCommonAndViewKeys(t *testing.T) {
 	var kb KeybindsBar
-	kb.SetWidth(120)
+	// Ancho amplio para que cada fila de keybinds no se parta al envolver.
+	kb.SetWidth(200)
 	kb.SetView(viewList)
 
 	out := ansi.Strip(kb.View())
@@ -30,29 +31,15 @@ func TestKeybindsBarNormalViewShowsCommonAndViewKeys(t *testing.T) {
 }
 
 // TestKeybindsForViewCommonFirst verifica que las teclas antes globales
-// encabezan la lista (son las más repetidas) en todas las vistas. En Gantt, H
-// (hidden) no aplica y por tanto no se lista.
+// encabezan la lista (son las más repetidas) en todas las vistas.
 func TestKeybindsForViewCommonFirst(t *testing.T) {
-	for _, v := range []viewKind{viewDashboard, viewList, viewKanban} {
-		want := []string{"1/2/3/4", "hjkl", "H", "?", "q"}
+	for _, v := range []viewKind{viewDashboard, viewList, viewKanban, viewGantt} {
+		want := []string{"1/2/3/4", "hjkl", "?", "q"}
 		kbs := keybindsForView(v)
 		for i, key := range want {
 			if i >= len(kbs) || kbs[i].key != key {
 				t.Fatalf("vista %s: keybind[%d].key = %q, want %q", v, i, kbs[i].key, key)
 			}
-		}
-	}
-
-	kbs := keybindsForView(viewGantt)
-	want := []string{"1/2/3/4", "hjkl", "?", "q"}
-	for i, key := range want {
-		if i >= len(kbs) || kbs[i].key != key {
-			t.Fatalf("vista Gantt: keybind[%d].key = %q, want %q", i, kbs[i].key, key)
-		}
-	}
-	for _, kb := range kbs {
-		if kb.key == "H" {
-			t.Errorf("Gantt no debe listar H (hidden): %+v", kb)
 		}
 	}
 }
@@ -136,7 +123,7 @@ func TestKeybindsBarFilterOverlay(t *testing.T) {
 	kb.SetOverlay(overlayFilter)
 
 	out := ansi.Strip(kb.View())
-	if !strings.Contains(out, "change") || strings.Contains(out, "quit") {
+	if !strings.Contains(out, "cycle") || strings.Contains(out, "quit") {
 		t.Errorf("overlay de filtros incorrecto:\n%s", out)
 	}
 }
