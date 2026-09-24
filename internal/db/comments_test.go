@@ -4,7 +4,7 @@ import "testing"
 
 func TestAddAndListComments(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	if _, err := db.AddComment(task.ID, "primer comentario"); err != nil {
@@ -35,7 +35,7 @@ func TestAddAndListComments(t *testing.T) {
 
 func TestAddCommentTrimsBody(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	c, err := db.AddComment(task.ID, "  con espacios  ")
@@ -49,7 +49,7 @@ func TestAddCommentTrimsBody(t *testing.T) {
 
 func TestAddCommentEmptyBody(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	if _, err := db.AddComment(task.ID, "   "); err == nil {
@@ -66,7 +66,7 @@ func TestAddCommentUnknownTask(t *testing.T) {
 
 func TestDeleteComment(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	c, _ := db.AddComment(task.ID, "para borrar")
@@ -89,9 +89,9 @@ func TestDeleteCommentNotFound(t *testing.T) {
 
 func TestCommentsCascadeOnProjectDelete(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
-	db.AddComment(task.ID, "nota")
+	mustAddComment(t, db, task.ID, "nota")
 
 	if err := db.DeleteProject("api"); err != nil {
 		t.Fatal(err)

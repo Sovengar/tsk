@@ -41,7 +41,7 @@ func TestTaskTagsRoundtrip(t *testing.T) {
 
 func TestAddRemoveSetTaskTags(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "@a", 0, "")
 
 	if _, err := db.AddTaskTags(task.ID, []string{"blocked"}); err != nil {
