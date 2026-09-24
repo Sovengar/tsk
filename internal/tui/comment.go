@@ -32,18 +32,23 @@ func commentCmd(taskID int64, editorCmd string) tea.Cmd {
 		}
 	}
 
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpFile.Name())
+		return func() tea.Msg {
+			return commentFinishedMsg{err: err, taskID: taskID}
+		}
+	}
 
 	args := strings.Fields(editorCmd)
 	cmd := exec.Command(args[0], append(args[1:], tmpFile.Name())...)
 
 	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
 		if execErr != nil {
-			os.Remove(tmpFile.Name())
+			_ = os.Remove(tmpFile.Name())
 			return commentFinishedMsg{err: execErr, taskID: taskID}
 		}
 		data, readErr := os.ReadFile(tmpFile.Name())
-		os.Remove(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name())
 		if readErr != nil {
 			return commentFinishedMsg{err: readErr, taskID: taskID}
 		}
