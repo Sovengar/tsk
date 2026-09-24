@@ -75,7 +75,9 @@ jobs:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
-      # Same test set as `make test` plus an atomic coverage profile.
+      # The same test suite as `make test` (`go test -race -count=1 ./...`), plus an
+      # atomic coverage profile for the summary step below. `-race` and the coverage
+      # profile are why this is not merely a copy of the Makefile invocation.
       - name: Test
         run: go test -race -count=1 -coverprofile=coverage.out ./...
       - name: Coverage summary
