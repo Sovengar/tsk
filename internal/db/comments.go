@@ -45,7 +45,7 @@ func (db *DB) ListComments(taskID int64) ([]model.Comment, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var comments []model.Comment
 	for rows.Next() {

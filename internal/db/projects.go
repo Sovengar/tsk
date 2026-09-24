@@ -123,7 +123,7 @@ func (db *DB) listProjectsWhere(where string) ([]model.Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var projects []model.Project
 	for rows.Next() {
