@@ -434,6 +434,9 @@ func TestListAssigneeFilter(t *testing.T) {
 			t.Errorf("task %d has assignee %q, want %q", task.ID, task.Assignee, m.filterAssignee)
 		}
 	}
+
+	// cierra el modal
+	_, _ = press(m, "enter")
 }
 
 // --- Kanban navigation ---
