@@ -61,8 +61,8 @@ func asModel(v tea.Model) *Model {
 func TestDetailCommentSelection(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	m.database.AddComment(task.ID, "uno")
-	m.database.AddComment(task.ID, "dos")
+	mustAddComment(t, m.database, task.ID, "uno")
+	mustAddComment(t, m.database, task.ID, "dos")
 	openDetail(m, task)
 
 	if m.detailCommentSel != -1 {
@@ -98,8 +98,8 @@ func TestDetailCommentSelection(t *testing.T) {
 func TestDetailDeleteComment(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	m.database.AddComment(task.ID, "uno")
-	m.database.AddComment(task.ID, "dos")
+	mustAddComment(t, m.database, task.ID, "uno")
+	mustAddComment(t, m.database, task.ID, "dos")
 	openDetail(m, task)
 
 	// Selecciona el primero y lo borra con d
@@ -132,7 +132,7 @@ func TestDetailDeleteComment(t *testing.T) {
 func TestDetailDeleteLastCommentClearsSelection(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	m.database.AddComment(task.ID, "único")
+	mustAddComment(t, m.database, task.ID, "único")
 	openDetail(m, task)
 
 	m, _ = press(m, "j")
@@ -150,7 +150,7 @@ func TestDetailDeleteLastCommentClearsSelection(t *testing.T) {
 func TestDetailDoneWithoutCommentSelection(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	m.database.AddComment(task.ID, "nota")
+	mustAddComment(t, m.database, task.ID, "nota")
 	openDetail(m, task)
 
 	// Sin selección, d marca done y cierra el modal.
@@ -172,7 +172,7 @@ func TestDetailDoneWithoutCommentSelection(t *testing.T) {
 func TestDetailEscDeselectsThenCloses(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	m.database.AddComment(task.ID, "nota")
+	mustAddComment(t, m.database, task.ID, "nota")
 	openDetail(m, task)
 
 	m, _ = press(m, "j")
@@ -200,7 +200,7 @@ func TestRenderDetailCommentWindowRespectsHeight(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
 	for i := 0; i < 20; i++ {
-		m.database.AddComment(task.ID, "comentario "+string(rune('A'+i)))
+		mustAddComment(t, m.database, task.ID, "comentario "+string(rune('A'+i)))
 	}
 	openDetail(m, task)
 	m.detailCommentSel = 15
@@ -331,7 +331,7 @@ func TestCommentCmdEmptyBodyAddsNothing(t *testing.T) {
 func TestCommentAddedSelectsNewest(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	m.database.AddComment(task.ID, "viejo")
+	mustAddComment(t, m.database, task.ID, "viejo")
 	openDetail(m, task)
 
 	m = applyMsg(m, commentFinishedMsg{taskID: task.ID, body: "nuevo"})

@@ -17,7 +17,7 @@ func newTestModel(t *testing.T) *Model {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { database.Close() })
+	t.Cleanup(func() { _ = database.Close() })
 	createFixtures(t, database)
 
 	cfg := config.Defaults()
@@ -36,13 +36,37 @@ func newTestModel(t *testing.T) *Model {
 
 func createFixtures(t *testing.T, database *db.DB) {
 	t.Helper()
-	database.CreateProject("api", nil)
-	database.CreateProject("web", []string{"todo", "doing", "done"})
+	mustCreateProject(t, database, "api", nil)
+	mustCreateProject(t, database, "web", []string{"todo", "doing", "done"})
 
-	database.CreateTask("api", "Fix N+1 query", "desc", "@juan", 3, "doing")
-	database.CreateTask("api", "Add caching", "", "@maria", 2, "backlog")
-	database.CreateTask("api", "Update README", "", "@juan", 1, "reviewing")
-	database.CreateTask("web", "Fix checkout", "", "@maria", 3, "todo")
+	mustCreateTask(t, database, "api", "Fix N+1 query", "desc", "@juan", 3, "doing")
+	mustCreateTask(t, database, "api", "Add caching", "", "@maria", 2, "backlog")
+	mustCreateTask(t, database, "api", "Update README", "", "@juan", 1, "reviewing")
+	mustCreateTask(t, database, "web", "Fix checkout", "", "@maria", 3, "todo")
+}
+
+// Helpers de setup: fallan el test si el alta falla, en vez de descartar el
+// error silenciosamente.
+
+func mustCreateProject(t *testing.T, database *db.DB, name string, workflow []string) {
+	t.Helper()
+	if _, err := database.CreateProject(name, workflow); err != nil {
+		t.Fatalf("CreateProject(%q): %v", name, err)
+	}
+}
+
+func mustCreateTask(t *testing.T, database *db.DB, projectName, title, description, assignee string, priority int, status string) {
+	t.Helper()
+	if _, err := database.CreateTask(projectName, title, description, assignee, priority, status); err != nil {
+		t.Fatalf("CreateTask(%q): %v", title, err)
+	}
+}
+
+func mustAddComment(t *testing.T, database *db.DB, taskID int64, body string) {
+	t.Helper()
+	if _, err := database.AddComment(taskID, body); err != nil {
+		t.Fatalf("AddComment(%d): %v", taskID, err)
+	}
 }
 
 func press(m *Model, key string) (*Model, tea.Cmd) {
@@ -410,9 +434,6 @@ func TestListAssigneeFilter(t *testing.T) {
 			t.Errorf("task %d has assignee %q, want %q", task.ID, task.Assignee, m.filterAssignee)
 		}
 	}
-
-	// Close modal
-	m, _ = press(m, "enter")
 }
 
 // --- Kanban navigation ---
@@ -536,7 +557,7 @@ func TestMergedWorkflowEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 	cfg := config.Defaults()
 	m := New(database, cfg)
 	m.width = 120
