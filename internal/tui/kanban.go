@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -162,7 +161,7 @@ func (m *Model) renderKanban(maxHeight int) string {
 	content = truncateLines(content, w-2)
 
 	// Envolver con borde redondeado
-	var borderFg color.Color = lipgloss.Color("8")
+	borderFg := lipgloss.Color("8")
 	return bordered.RenderWithTitleEx(
 		lipgloss.RoundedBorder(),
 		borderFg,

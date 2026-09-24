@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"image/color"
 	"sort"
 	"strings"
 
@@ -79,13 +78,14 @@ func (m *Model) renderDashboard(maxHeight int) string {
 		if selectedProject != "" && t.ProjectName != selectedProject {
 			continue
 		}
-		if t.Status == "cancelled" {
+		switch t.Status {
+		case "cancelled":
 			totalCancelled++
 			byStatus["cancelled"]++
-		} else if t.Status == "done" {
+		case "done":
 			totalDone++
 			byStatus["done"]++
-		} else {
+		default:
 			totalActive++
 			byStatus[t.Status]++
 		}
@@ -195,7 +195,7 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	)
 
 	// Envolver con borde redondeado
-	var borderFg color.Color = lipgloss.Color("8")
+	borderFg := lipgloss.Color("8")
 	return bordered.RenderWithTitleEx(
 		lipgloss.RoundedBorder(),
 		borderFg,

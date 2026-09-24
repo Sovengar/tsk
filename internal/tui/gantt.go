@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"image/color"
 	"strings"
 	"time"
 
@@ -235,7 +234,7 @@ func (m *Model) renderGantt(maxHeight int) string {
 	content := strings.Join(lines, "\n")
 	content = truncateLines(content, innerW)
 
-	var borderFg color.Color = lipgloss.Color("8")
+	borderFg := lipgloss.Color("8")
 	return bordered.RenderWithTitlesEx(
 		lipgloss.RoundedBorder(),
 		borderFg,
