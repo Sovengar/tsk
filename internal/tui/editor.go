@@ -39,13 +39,18 @@ func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
 		strings.Join(task.Tags, ","),
 	)
 	if _, err := tmpFile.WriteString(content); err != nil {
-		tmpFile.Close()
-		os.Remove(tmpFile.Name())
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
 		return func() tea.Msg {
 			return editorFinishedMsg{err: err, taskID: task.ID}
 		}
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpFile.Name())
+		return func() tea.Msg {
+			return editorFinishedMsg{err: err, taskID: task.ID}
+		}
+	}
 
 	// Construir comando del editor
 	args := strings.Fields(editorCmd)
@@ -54,12 +59,12 @@ func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
 	// Devolver tea.ExecProcess directamente — es un tea.Cmd
 	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
 		if execErr != nil {
-			os.Remove(tmpFile.Name())
+			_ = os.Remove(tmpFile.Name())
 			return editorFinishedMsg{err: execErr, taskID: task.ID}
 		}
 		// Leer el archivo modificado
 		data, readErr := os.ReadFile(tmpFile.Name())
-		os.Remove(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name())
 		if readErr != nil {
 			return editorFinishedMsg{err: readErr, taskID: task.ID}
 		}

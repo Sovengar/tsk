@@ -124,6 +124,13 @@ func openDB() *db.DB {
 	return database
 }
 
+// closeDB cierra la base de datos al final de un comando. El error de Close se
+// ignora a propósito: es limpieza de fin de proceso y no debe alterar el output
+// que el comando ya emitió.
+func closeDB(database *db.DB) {
+	_ = database.Close()
+}
+
 // ---- Project commands ----
 
 func cmdProject(args []string) {
@@ -188,7 +195,7 @@ func cmdProjectAdd(args []string) {
 	}
 
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	var wf, lo []string
 	if workflow != "" {
@@ -230,7 +237,7 @@ func cmdProjectList(args []string) {
 	}
 
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	var projects []model.Project
 	var err error
@@ -279,13 +286,13 @@ func cmdProjectList(args []string) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tWORKFLOW\tLIST ORDER\tTASKS")
+	_, _ = fmt.Fprintln(w, "NAME\tWORKFLOW\tLIST ORDER\tTASKS")
 	for _, p := range result {
 		wf := strings.Join(p.Workflow, ",")
 		lo := strings.Join(p.ListOrder, ",")
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", p.Name, wf, lo, p.TaskCount)
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%d\n", p.Name, wf, lo, p.TaskCount)
 	}
-	w.Flush()
+	_ = w.Flush()
 }
 
 func cmdProjectShow(args []string) {
@@ -298,7 +305,7 @@ func cmdProjectShow(args []string) {
 	}
 
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	p, err := database.GetProject(name)
 	if err != nil {
@@ -350,7 +357,7 @@ func cmdProjectUpdate(args []string) {
 	}
 
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	updates := map[string]any{}
 	if newName != "" {
@@ -380,7 +387,7 @@ func cmdProjectUpdate(args []string) {
 
 func cmdProjectRemove(name string) {
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	if err := database.DeleteProject(name); err != nil {
 		outputError(err.Error())
@@ -393,7 +400,7 @@ func cmdProjectRemove(name string) {
 // sus comentarios sin borrarlos.
 func cmdProjectArchive(name string) {
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	if err := database.ArchiveProject(name); err != nil {
 		outputError(err.Error())
@@ -405,7 +412,7 @@ func cmdProjectArchive(name string) {
 // cmdProjectUnarchive restaura un proyecto archivado.
 func cmdProjectUnarchive(name string) {
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	if err := database.UnarchiveProject(name); err != nil {
 		outputError(err.Error())
@@ -473,7 +480,7 @@ func cmdAdd(args []string) {
 	}
 
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	t, err := database.CreateTaskFull(project, title, "", assignee, priority, status, estimate, tags)
 	if err != nil {
@@ -515,7 +522,7 @@ func cmdList(args []string) {
 	}
 
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	tasks, err := database.ListTasks(project, status, assignee)
 	if err != nil {
@@ -550,9 +557,9 @@ func cmdList(args []string) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tPRIORITY\tSTATUS\tASSIGNEE\tTAGS\tTITLE")
+	_, _ = fmt.Fprintln(w, "ID\tPRIORITY\tSTATUS\tASSIGNEE\tTAGS\tTITLE")
 	for _, t := range tasks {
-		fmt.Fprintf(w, "%d\t%s %s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%d\t%s %s\t%s\t%s\t%s\t%s\n",
 			t.ID,
 			model.PriorityBar(t.Priority),
 			model.PriorityLabel(t.Priority),
@@ -562,13 +569,13 @@ func cmdList(args []string) {
 			t.Title,
 		)
 	}
-	w.Flush()
+	_ = w.Flush()
 	fmt.Printf("\nTotal: %d tasks\n", len(tasks))
 }
 
 func cmdShow(idStr string) {
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	id := parseID(idStr)
 	t, err := database.GetTask(id)
@@ -602,7 +609,7 @@ func cmdComment(args []string) {
 		body := strings.Join(args[2:], " ")
 
 		database := openDB()
-		defer database.Close()
+		defer closeDB(database)
 
 		c, err := database.AddComment(id, body)
 		if err != nil {
@@ -616,7 +623,7 @@ func cmdComment(args []string) {
 		id := parseID(args[1])
 
 		database := openDB()
-		defer database.Close()
+		defer closeDB(database)
 
 		comments, err := database.ListComments(id)
 		if err != nil {
@@ -633,7 +640,7 @@ func cmdComment(args []string) {
 		id := parseID(args[1])
 
 		database := openDB()
-		defer database.Close()
+		defer closeDB(database)
 
 		if err := database.DeleteComment(id); err != nil {
 			outputError(err.Error())
@@ -670,7 +677,7 @@ func cmdOffDay(args []string) {
 		}
 
 		database := openDB()
-		defer database.Close()
+		defer closeDB(database)
 
 		o, err := database.AddOffDay(assignee, start, end, note)
 		if err != nil {
@@ -693,7 +700,7 @@ func cmdOffDay(args []string) {
 		}
 
 		database := openDB()
-		defer database.Close()
+		defer closeDB(database)
 
 		offdays, err := database.ListOffDays(assignee)
 		if err != nil {
@@ -712,11 +719,11 @@ func cmdOffDay(args []string) {
 			return
 		}
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "ID\tASSIGNEE\tFROM\tTO\tNOTE")
+		_, _ = fmt.Fprintln(w, "ID\tASSIGNEE\tFROM\tTO\tNOTE")
 		for _, o := range offdays {
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", o.ID, o.Assignee, o.StartDate, o.EndDate, o.Note)
+			_, _ = fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", o.ID, o.Assignee, o.StartDate, o.EndDate, o.Note)
 		}
-		w.Flush()
+		_ = w.Flush()
 	case "remove":
 		if len(args) < 2 {
 			outputError("usage: tsk offday remove <id>")
@@ -724,7 +731,7 @@ func cmdOffDay(args []string) {
 		id := parseID(args[1])
 
 		database := openDB()
-		defer database.Close()
+		defer closeDB(database)
 
 		if err := database.DeleteOffDay(id); err != nil {
 			outputError(err.Error())
@@ -789,7 +796,7 @@ func cmdGantt(args []string) {
 	}
 
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	// La cola se calcula SIEMPRE con todas las tareas y off-days de cada
 	// persona: su capacidad es una sola y se reparte entre proyectos. --project
@@ -993,7 +1000,7 @@ func cmdUpdate(args []string) {
 	}
 
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	if len(updates) > 0 {
 		if _, err := database.UpdateTask(id, updates); err != nil {
@@ -1026,7 +1033,7 @@ func cmdUpdate(args []string) {
 
 func cmdMove(idStr, status string) {
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	id := parseID(idStr)
 	t, err := database.MoveTask(id, status)
@@ -1039,7 +1046,7 @@ func cmdMove(idStr, status string) {
 
 func cmdStart(idStr string) {
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	id := parseID(idStr)
 	t, err := database.StartTask(id)
@@ -1062,7 +1069,7 @@ func cmdStart(idStr string) {
 
 func cmdReview(idStr string) {
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	id := parseID(idStr)
 	t, err := database.ReviewTask(id)
@@ -1075,7 +1082,7 @@ func cmdReview(idStr string) {
 
 func cmdDone(idStr string) {
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	id := parseID(idStr)
 	t, err := database.DoneTask(id)
@@ -1088,7 +1095,7 @@ func cmdDone(idStr string) {
 
 func cmdCancel(idStr string) {
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	id := parseID(idStr)
 	t, err := database.CancelTask(id)
@@ -1115,7 +1122,7 @@ func cmdStats(args []string) {
 	}
 
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 
 	stats, err := database.Stats(project)
 	if err != nil {
@@ -1139,22 +1146,22 @@ func cmdStats(args []string) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for status, count := range byStatus {
 		bar := strings.Repeat("█", count)
-		fmt.Fprintf(w, "  %s\t%d\t%s\n", status, count, bar)
+		_, _ = fmt.Fprintf(w, "  %s\t%d\t%s\n", status, count, bar)
 	}
-	w.Flush()
+	_ = w.Flush()
 
 	fmt.Println()
 	fmt.Println("By Assignee:")
 	w2 := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	for assignee, count := range byAssignee {
-		fmt.Fprintf(w2, "  %s\t%d\n", assignee, count)
+		_, _ = fmt.Fprintf(w2, "  %s\t%d\n", assignee, count)
 	}
-	w2.Flush()
+	_ = w2.Flush()
 }
 
 func cmdMigrate() {
 	database := openDB()
-	defer database.Close()
+	defer closeDB(database)
 	outputJSON(map[string]any{"ok": true, "message": "migrations applied"})
 }
 

@@ -196,7 +196,7 @@ func TestDescEditorCtrlCCopiesSelection(t *testing.T) {
 	}
 
 	m.descEditTextarea.SelectAll()
-	m, cmd = send(m, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	_, cmd = send(m, tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	if cmd == nil {
 		t.Fatal("Ctrl+C con selección debe devolver cmd de copiado")
 	}

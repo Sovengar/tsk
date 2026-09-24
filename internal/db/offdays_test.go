@@ -4,7 +4,7 @@ import "testing"
 
 func TestCreateTaskWithEstimate(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 
 	task, err := db.CreateTaskWithEstimate("api", "Fix auth", "", "@juan", 2, "", 0.5)
 	if err != nil {
@@ -25,7 +25,7 @@ func TestCreateTaskWithEstimate(t *testing.T) {
 
 func TestCreateTaskDefaultsToZeroEstimate(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 
 	task, _ := db.CreateTask("api", "task", "", "@a", 0, "")
 	if task.Estimate != 0 {
@@ -35,8 +35,8 @@ func TestCreateTaskDefaultsToZeroEstimate(t *testing.T) {
 
 func TestListTasksIncludesEstimate(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateTaskWithEstimate("api", "task", "", "@a", 0, "", 1.25)
+	mustCreateProject(t, db, "api", nil)
+	mustCreateTaskWithEstimate(t, db, "api", "task", "", "@a", 0, "", 1.25)
 
 	tasks, err := db.ListTasks("", "", "")
 	if err != nil {
@@ -49,7 +49,7 @@ func TestListTasksIncludesEstimate(t *testing.T) {
 
 func TestUpdateTaskEstimate(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "@a", 0, "")
 
 	updated, err := db.UpdateTask(task.ID, map[string]any{"estimate": 2.0})

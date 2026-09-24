@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -140,7 +139,7 @@ func (m *Model) renderList(maxHeight int) string {
 
 	// Envolver con borde redondeado. La leyenda de paginación va incrustada en
 	// el borde inferior, alineada a la derecha.
-	var borderFg color.Color = lipgloss.Color("8") // gris por defecto
+	borderFg := lipgloss.Color("8") // gris por defecto
 	return bordered.RenderWithTitlesEx(
 		lipgloss.RoundedBorder(),
 		borderFg,

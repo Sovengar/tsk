@@ -75,7 +75,7 @@ func TestDefaultWorkflowIncludesDelivered(t *testing.T) {
 	if delivered < 0 {
 		t.Fatalf("DefaultWorkflow no incluye delivered: %v", DefaultWorkflow)
 	}
-	if !(doing < delivered && delivered < reviewing) {
+	if doing >= delivered || delivered >= reviewing {
 		t.Errorf("delivered debe ir entre doing y reviewing: %v", DefaultWorkflow)
 	}
 	if !HasStatus(DefaultListOrder, "delivered") {

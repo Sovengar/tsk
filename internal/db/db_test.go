@@ -85,7 +85,7 @@ func TestCreateProjectInvalidListOrder(t *testing.T) {
 
 func TestUpdateProjectListOrder(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("web", nil)
+	mustCreateProject(t, db, "web", nil)
 
 	if err := db.UpdateProject("web", map[string]any{
 		"list_order": []string{"reviewing", "backlog"},
@@ -109,7 +109,7 @@ func TestUpdateProjectListOrder(t *testing.T) {
 
 func TestUpdateProjectWorkflowFiltersListOrder(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProjectWithListOrder("web",
+	mustCreateProjectWithListOrder(t, db, "web",
 		[]string{"todo", "doing", "reviewing", "done"},
 		[]string{"reviewing", "doing", "todo"})
 
@@ -127,8 +127,8 @@ func TestUpdateProjectWorkflowFiltersListOrder(t *testing.T) {
 
 func TestListProjects(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("a", nil)
-	db.CreateProject("b", nil)
+	mustCreateProject(t, db, "a", nil)
+	mustCreateProject(t, db, "b", nil)
 
 	projects, err := db.ListProjects()
 	if err != nil {
@@ -145,7 +145,7 @@ func TestListProjects(t *testing.T) {
 
 func TestUpdateProjectWorkflow(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 
 	err := db.UpdateProject("api", map[string]any{
 		"workflow": []string{"todo", "done"},
@@ -162,8 +162,8 @@ func TestUpdateProjectWorkflow(t *testing.T) {
 
 func TestUpdateProjectRejectRemoveStatusWithTasks(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateTask("api", "task1", "", "", 0, "reviewing")
+	mustCreateProject(t, db, "api", nil)
+	mustCreateTask(t, db, "api", "task1", "", "", 0, "reviewing")
 
 	err := db.UpdateProject("api", map[string]any{
 		"workflow": []string{"todo", "doing", "done"},
@@ -175,8 +175,8 @@ func TestUpdateProjectRejectRemoveStatusWithTasks(t *testing.T) {
 
 func TestUpdateProjectForce(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateTask("api", "task1", "", "", 0, "reviewing")
+	mustCreateProject(t, db, "api", nil)
+	mustCreateTask(t, db, "api", "task1", "", "", 0, "reviewing")
 
 	err := db.UpdateProject("api", map[string]any{
 		"workflow": []string{"todo", "doing", "done"},
@@ -198,8 +198,8 @@ func TestUpdateProjectForce(t *testing.T) {
 
 func TestDeleteProject(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateTask("api", "task1", "", "", 0, "")
+	mustCreateProject(t, db, "api", nil)
+	mustCreateTask(t, db, "api", "task1", "", "", 0, "")
 
 	err := db.DeleteProject("api")
 	if err != nil {
@@ -249,8 +249,8 @@ func TestGetProjectByID(t *testing.T) {
 func TestProjectTaskCount(t *testing.T) {
 	db := newTestDB(t)
 	p, _ := db.CreateProject("api", nil)
-	db.CreateTask("api", "t1", "", "", 0, "")
-	db.CreateTask("api", "t2", "", "", 0, "")
+	mustCreateTask(t, db, "api", "t1", "", "", 0, "")
+	mustCreateTask(t, db, "api", "t2", "", "", 0, "")
 
 	count, err := db.ProjectTaskCount(p.ID)
 	if err != nil {
@@ -265,7 +265,7 @@ func TestProjectTaskCount(t *testing.T) {
 
 func TestCreateTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 
 	task, err := db.CreateTask("api", "Fix auth", "description here", "@juan", 3, "")
 	if err != nil {
@@ -290,7 +290,7 @@ func TestCreateTask(t *testing.T) {
 
 func TestCreateTaskCustomStatus(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 
 	task, err := db.CreateTask("api", "task", "", "", 0, "doing")
 	if err != nil {
@@ -303,7 +303,7 @@ func TestCreateTaskCustomStatus(t *testing.T) {
 
 func TestCreateTaskInvalidStatus(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 
 	_, err := db.CreateTask("api", "task", "", "", 0, "invalid")
 	if err == nil {
@@ -321,7 +321,7 @@ func TestCreateTaskUnknownProject(t *testing.T) {
 
 func TestGetTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	created, _ := db.CreateTask("api", "Fix N+1", "desc", "@juan", 3, "")
 
 	got, err := db.GetTask(created.ID)
@@ -346,11 +346,11 @@ func TestGetTaskNotFound(t *testing.T) {
 
 func TestListTasksFilters(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateProject("web", nil)
-	db.CreateTask("api", "t1", "", "@juan", 3, "backlog")
-	db.CreateTask("api", "t2", "", "@maria", 2, "doing")
-	db.CreateTask("web", "t3", "", "@juan", 1, "todo")
+	mustCreateProject(t, db, "api", nil)
+	mustCreateProject(t, db, "web", nil)
+	mustCreateTask(t, db, "api", "t1", "", "@juan", 3, "backlog")
+	mustCreateTask(t, db, "api", "t2", "", "@maria", 2, "doing")
+	mustCreateTask(t, db, "web", "t3", "", "@juan", 1, "todo")
 
 	// Filter by project
 	tasks, _ := db.ListTasks("api", "", "")
@@ -379,10 +379,10 @@ func TestListTasksFilters(t *testing.T) {
 
 func TestListTasksOrderByPriority(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateTask("api", "low", "", "", 1, "")
-	db.CreateTask("api", "high", "", "", 3, "")
-	db.CreateTask("api", "med", "", "", 2, "")
+	mustCreateProject(t, db, "api", nil)
+	mustCreateTask(t, db, "api", "low", "", "", 1, "")
+	mustCreateTask(t, db, "api", "high", "", "", 3, "")
+	mustCreateTask(t, db, "api", "med", "", "", 2, "")
 
 	tasks, _ := db.ListTasks("", "", "")
 	if len(tasks) != 3 {
@@ -396,14 +396,14 @@ func TestListTasksOrderByPriority(t *testing.T) {
 
 func TestListTasksOrderByPriorityStatusAssignee(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateTask("api", "backlog-a", "", "@a", 2, "backlog")
-	db.CreateTask("api", "backlog-b", "", "@b", 2, "backlog")
-	db.CreateTask("api", "todo-a", "", "@a", 2, "todo")
-	db.CreateTask("api", "in-progress", "", "@a", 2, "doing")
-	db.CreateTask("api", "reviewing", "", "@a", 2, "reviewing")
-	db.CreateTask("api", "done", "", "@a", 2, "done")
-	db.CreateTask("api", "low", "", "@a", 1, "todo")
+	mustCreateProject(t, db, "api", nil)
+	mustCreateTask(t, db, "api", "backlog-a", "", "@a", 2, "backlog")
+	mustCreateTask(t, db, "api", "backlog-b", "", "@b", 2, "backlog")
+	mustCreateTask(t, db, "api", "todo-a", "", "@a", 2, "todo")
+	mustCreateTask(t, db, "api", "in-progress", "", "@a", 2, "doing")
+	mustCreateTask(t, db, "api", "reviewing", "", "@a", 2, "reviewing")
+	mustCreateTask(t, db, "api", "done", "", "@a", 2, "done")
+	mustCreateTask(t, db, "api", "low", "", "@a", 1, "todo")
 
 	// Prioridad desc, luego el orden literal del workflow (backlog > todo >
 	// doing > reviewing > done), luego assignee asc.
@@ -422,11 +422,11 @@ func TestListTasksOrderByPriorityStatusAssignee(t *testing.T) {
 func TestListTasksOrderCustomWorkflow(t *testing.T) {
 	db := newTestDB(t)
 	// El array del proyecto define el orden del listado tal cual.
-	db.CreateProject("web", []string{"reviewing", "doing", "todo", "done"})
-	db.CreateTask("web", "todo", "", "@a", 2, "todo")
-	db.CreateTask("web", "doing", "", "@a", 2, "doing")
-	db.CreateTask("web", "reviewing", "", "@a", 2, "reviewing")
-	db.CreateTask("web", "done", "", "@a", 2, "done")
+	mustCreateProject(t, db, "web", []string{"reviewing", "doing", "todo", "done"})
+	mustCreateTask(t, db, "web", "todo", "", "@a", 2, "todo")
+	mustCreateTask(t, db, "web", "doing", "", "@a", 2, "doing")
+	mustCreateTask(t, db, "web", "reviewing", "", "@a", 2, "reviewing")
+	mustCreateTask(t, db, "web", "done", "", "@a", 2, "done")
 
 	tasks, _ := db.ListTasks("", "", "")
 	want := []string{"reviewing", "doing", "todo", "done"}
@@ -443,15 +443,15 @@ func TestListTasksOrderCustomWorkflow(t *testing.T) {
 func TestListTasksOrderByListOrder(t *testing.T) {
 	db := newTestDB(t)
 	// workflow = progresión (acciones); list_order = orden de presentación.
-	db.CreateProjectWithListOrder("web",
+	mustCreateProjectWithListOrder(t, db, "web",
 		[]string{"todo", "doing", "reviewing", "done"},
 		[]string{"reviewing", "doing", "todo"})
-	db.CreateTask("web", "todo", "", "@a", 2, "todo")
-	db.CreateTask("web", "doing", "", "@a", 2, "doing")
-	db.CreateTask("web", "reviewing", "", "@a", 2, "reviewing")
-	db.CreateTask("web", "done", "", "@a", 2, "done")
+	mustCreateTask(t, db, "web", "todo", "", "@a", 2, "todo")
+	mustCreateTask(t, db, "web", "doing", "", "@a", 2, "doing")
+	mustCreateTask(t, db, "web", "reviewing", "", "@a", 2, "reviewing")
+	mustCreateTask(t, db, "web", "done", "", "@a", 2, "done")
 	cancelled, _ := db.CreateTask("web", "cancelled", "", "@a", 2, "todo")
-	db.MoveTask(cancelled.ID, "cancelled")
+	mustMoveTask(t, db, cancelled.ID, "cancelled")
 
 	// reviewing > doing > todo (list_order), luego done (no listado pero en el
 	// workflow) y al final cancelled (ni en list_order ni en workflow).
@@ -469,11 +469,11 @@ func TestListTasksOrderByListOrder(t *testing.T) {
 
 func TestListTasksEmptyListOrderFallsBackToWorkflow(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("web", []string{"reviewing", "doing", "todo", "done"})
-	db.CreateTask("web", "todo", "", "@a", 2, "todo")
-	db.CreateTask("web", "doing", "", "@a", 2, "doing")
-	db.CreateTask("web", "reviewing", "", "@a", 2, "reviewing")
-	db.CreateTask("web", "done", "", "@a", 2, "done")
+	mustCreateProject(t, db, "web", []string{"reviewing", "doing", "todo", "done"})
+	mustCreateTask(t, db, "web", "todo", "", "@a", 2, "todo")
+	mustCreateTask(t, db, "web", "doing", "", "@a", 2, "doing")
+	mustCreateTask(t, db, "web", "reviewing", "", "@a", 2, "reviewing")
+	mustCreateTask(t, db, "web", "done", "", "@a", 2, "done")
 
 	tasks, _ := db.ListTasks("", "", "")
 	want := []string{"reviewing", "doing", "todo", "done"}
@@ -489,7 +489,7 @@ func TestListTasksEmptyListOrderFallsBackToWorkflow(t *testing.T) {
 
 func TestMoveTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	moved, err := db.MoveTask(task.ID, "doing")
@@ -503,7 +503,7 @@ func TestMoveTask(t *testing.T) {
 
 func TestMoveTaskInvalidStatus(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	_, err := db.MoveTask(task.ID, "invalid")
@@ -514,7 +514,7 @@ func TestMoveTaskInvalidStatus(t *testing.T) {
 
 func TestMoveTaskSetsCompletedAt(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	done, err := db.MoveTask(task.ID, "done")
@@ -528,7 +528,7 @@ func TestMoveTaskSetsCompletedAt(t *testing.T) {
 
 func TestMoveTaskCancelledSetsCompletedAt(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	cancelled, err := db.MoveTask(task.ID, model.CancelledStatus)
@@ -542,7 +542,7 @@ func TestMoveTaskCancelledSetsCompletedAt(t *testing.T) {
 
 func TestStartTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil) // workflow: backlog,todo,doing,reviewing,done
+	mustCreateProject(t, db, "api", nil) // workflow: backlog,todo,doing,reviewing,done
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	started, err := db.StartTask(task.ID)
@@ -556,7 +556,7 @@ func TestStartTask(t *testing.T) {
 
 func TestStartTaskWithoutBacklog(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("simple", []string{"todo", "doing", "done"})
+	mustCreateProject(t, db, "simple", []string{"todo", "doing", "done"})
 	task, _ := db.CreateTask("simple", "task", "", "", 0, "")
 
 	started, err := db.StartTask(task.ID)
@@ -570,7 +570,7 @@ func TestStartTaskWithoutBacklog(t *testing.T) {
 
 func TestDoneTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "doing")
 
 	done, err := db.DoneTask(task.ID)
@@ -587,7 +587,7 @@ func TestDoneTask(t *testing.T) {
 
 func TestCancelTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
 	cancelled, err := db.CancelTask(task.ID)
@@ -601,7 +601,7 @@ func TestCancelTask(t *testing.T) {
 
 func TestReviewTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "doing")
 
 	reviewed, err := db.ReviewTask(task.ID)
@@ -615,7 +615,7 @@ func TestReviewTask(t *testing.T) {
 
 func TestReviewTaskNoReviewStatus(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("simple", []string{"todo", "done"})
+	mustCreateProject(t, db, "simple", []string{"todo", "done"})
 	task, _ := db.CreateTask("simple", "task", "", "", 0, "")
 
 	_, err := db.ReviewTask(task.ID)
@@ -626,7 +626,7 @@ func TestReviewTaskNoReviewStatus(t *testing.T) {
 
 func TestUpdateTask(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "old title", "old desc", "@juan", 1, "")
 
 	updated, err := db.UpdateTask(task.ID, map[string]any{
@@ -656,11 +656,11 @@ func TestUpdateTask(t *testing.T) {
 
 func TestStatsGlobal(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateProject("web", nil)
-	db.CreateTask("api", "t1", "", "@juan", 3, "backlog")
-	db.CreateTask("api", "t2", "", "@maria", 2, "doing")
-	db.CreateTask("web", "t3", "", "@juan", 1, "done")
+	mustCreateProject(t, db, "api", nil)
+	mustCreateProject(t, db, "web", nil)
+	mustCreateTask(t, db, "api", "t1", "", "@juan", 3, "backlog")
+	mustCreateTask(t, db, "api", "t2", "", "@maria", 2, "doing")
+	mustCreateTask(t, db, "web", "t3", "", "@juan", 1, "done")
 
 	stats, err := db.Stats("")
 	if err != nil {
@@ -683,11 +683,11 @@ func TestStatsGlobal(t *testing.T) {
 
 func TestStatsByProject(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateProject("web", nil)
-	db.CreateTask("api", "t1", "", "@juan", 0, "")
-	db.CreateTask("api", "t2", "", "@maria", 0, "")
-	db.CreateTask("web", "t3", "", "@juan", 0, "")
+	mustCreateProject(t, db, "api", nil)
+	mustCreateProject(t, db, "web", nil)
+	mustCreateTask(t, db, "api", "t1", "", "@juan", 0, "")
+	mustCreateTask(t, db, "api", "t2", "", "@maria", 0, "")
+	mustCreateTask(t, db, "web", "t3", "", "@juan", 0, "")
 
 	stats, err := db.Stats("api")
 	if err != nil {
@@ -702,10 +702,10 @@ func TestStatsByProject(t *testing.T) {
 
 func TestArchiveProjectHidesTasksAndStats(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateProject("web", nil)
-	db.CreateTask("api", "t1", "", "@juan", 0, "")
-	db.CreateTask("web", "t2", "", "@maria", 0, "")
+	mustCreateProject(t, db, "api", nil)
+	mustCreateProject(t, db, "web", nil)
+	mustCreateTask(t, db, "api", "t1", "", "@juan", 0, "")
+	mustCreateTask(t, db, "web", "t2", "", "@maria", 0, "")
 
 	if err := db.ArchiveProject("api"); err != nil {
 		t.Fatal(err)
@@ -737,9 +737,9 @@ func TestArchiveProjectHidesTasksAndStats(t *testing.T) {
 
 func TestUnarchiveProjectRestores(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateTask("api", "t1", "", "", 0, "")
-	db.ArchiveProject("api")
+	mustCreateProject(t, db, "api", nil)
+	mustCreateTask(t, db, "api", "t1", "", "", 0, "")
+	mustArchiveProject(t, db, "api")
 
 	if err := db.UnarchiveProject("api"); err != nil {
 		t.Fatal(err)
@@ -759,8 +759,8 @@ func TestUnarchiveProjectRestores(t *testing.T) {
 
 func TestCreateTaskOnArchivedProjectFails(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.ArchiveProject("api")
+	mustCreateProject(t, db, "api", nil)
+	mustArchiveProject(t, db, "api")
 
 	if _, err := db.CreateTask("api", "t", "", "", 0, ""); err == nil {
 		t.Error("expected error creating task on archived project")
@@ -769,7 +769,7 @@ func TestCreateTaskOnArchivedProjectFails(t *testing.T) {
 
 func TestArchiveProjectErrors(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 
 	if err := db.ArchiveProject("api"); err != nil {
 		t.Fatal(err)
@@ -784,8 +784,8 @@ func TestArchiveProjectErrors(t *testing.T) {
 
 func TestUpdateProjectRename(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateTask("api", "t1", "", "", 0, "")
+	mustCreateProject(t, db, "api", nil)
+	mustCreateTask(t, db, "api", "t1", "", "", 0, "")
 
 	if err := db.UpdateProject("api", map[string]any{"name": "backend"}); err != nil {
 		t.Fatal(err)
@@ -806,8 +806,8 @@ func TestUpdateProjectRename(t *testing.T) {
 
 func TestUpdateProjectDuplicateName(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
-	db.CreateProject("web", nil)
+	mustCreateProject(t, db, "api", nil)
+	mustCreateProject(t, db, "web", nil)
 
 	if err := db.UpdateProject("api", map[string]any{"name": "web"}); err == nil {
 		t.Error("expected duplicate name error")
@@ -816,7 +816,7 @@ func TestUpdateProjectDuplicateName(t *testing.T) {
 
 func TestUpdateProjectEmptyNameRejected(t *testing.T) {
 	db := newTestDB(t)
-	db.CreateProject("api", nil)
+	mustCreateProject(t, db, "api", nil)
 
 	if err := db.UpdateProject("api", map[string]any{"name": "  "}); err == nil {
 		t.Error("expected empty name error")
@@ -831,6 +831,6 @@ func newTestDB(t *testing.T) *DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { database.Close() })
+	t.Cleanup(func() { _ = database.Close() })
 	return database
 }

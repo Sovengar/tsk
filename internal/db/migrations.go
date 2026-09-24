@@ -142,7 +142,7 @@ func migrateAddDelivered(db *DB) error {
 	for rows.Next() {
 		var p projectRow
 		if err := rows.Scan(&p.id, &p.workflow, &p.listOrder); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		projects = append(projects, p)
@@ -229,7 +229,7 @@ func migrateRepositionDelivered(db *DB) error {
 	for rows.Next() {
 		var p projectRow
 		if err := rows.Scan(&p.id, &p.workflow); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		projects = append(projects, p)
@@ -309,7 +309,7 @@ func migrateRenameReview(db *DB) error {
 	for rows.Next() {
 		var p projectRow
 		if err := rows.Scan(&p.id, &p.workflow, &p.listOrder); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		projects = append(projects, p)

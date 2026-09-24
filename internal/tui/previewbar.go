@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -52,7 +51,7 @@ func (p PreviewBar) View() string {
 
 	content := strings.Join(p.descriptionLines(p.task.Description), "\n")
 
-	var borderFg color.Color = lipgloss.Color("8")
+	borderFg := lipgloss.Color("8")
 	return bordered.RenderWithTitleEx(
 		lipgloss.RoundedBorder(),
 		borderFg,

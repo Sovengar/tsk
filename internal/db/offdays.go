@@ -65,7 +65,7 @@ func (db *DB) ListOffDays(assignee string) ([]model.OffDay, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var offdays []model.OffDay
 	for rows.Next() {

@@ -42,6 +42,30 @@ Sin este paso, cualquier verificación que haga el usuario sobre la TUI usa la
 versión vieja. Ejecutarlo SIEMPRE al terminar una tarea de código, después de
 la verificación (`make test`).
 
+## CI y protección de `main`
+
+El workflow `.github/workflows/ci.yml` corre en cada PR, en cada push a `main`
+y manualmente (`workflow_dispatch`). Tiene tres jobs, todos en `ubuntu-24.04`:
+
+- **Build** — `go build ./...` + `go vet ./...`
+- **Lint** — `make lint` (golangci-lint v2.13.2 pineado en el `Makefile`)
+- **Test** — `go test -race -count=1 -coverprofile=coverage.out ./...` + resumen de cobertura
+
+`main` está protegida por el ruleset **`protect-main`**: requiere un PR con esos
+tres checks en verde, y bloquea force-push y borrado de la rama. El bypass del
+rol admin es deliberado (escape hatch del dueño): un admin puede mergear un PR
+en rojo o forzar push, así que el gate es absoluto solo para no-admins.
+
+Para (re)aplicar la protección (idempotente, requiere `gh` admin + `jq`):
+
+```bash
+scripts/setup-repo-protection.sh            # aplica
+scripts/setup-repo-protection.sh --dry-run  # muestra sin mutar
+```
+
+El script deriva la rama por defecto y los contexts de los checks reales; no
+hardcodea `main` ni nombres de checks.
+
 ## Arquitectura
 
 ```

@@ -140,7 +140,7 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var tasks []model.Task
 	for rows.Next() {
@@ -331,7 +331,7 @@ func (db *DB) Stats(projectName string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	byStatus := map[string]int{}
 	for rows.Next() {
@@ -349,7 +349,7 @@ func (db *DB) Stats(projectName string) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows2.Close()
+	defer func() { _ = rows2.Close() }()
 
 	byAssignee := map[string]int{}
 	for rows2.Next() {
