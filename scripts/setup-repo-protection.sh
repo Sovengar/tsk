@@ -37,11 +37,12 @@
 #   scripts/setup-repo-protection.sh [--dry-run] [--contexts Build,Lint,Test] [--sha <commit>]
 #
 # Env overrides:
-#   RULESET_NAME=protect-main   BRANCH=<default branch>   GH_ACTIONS_APP_ID=15368
+#   RULESET_NAME=protect-<branch>   BRANCH=<default branch>   GH_ACTIONS_APP_ID=15368
 
 set -euo pipefail
 
-RULESET_NAME="${RULESET_NAME:-protect-main}"
+# Empty => derived from the protected branch after it is resolved (protect-<branch>).
+RULESET_OVERRIDE="${RULESET_NAME:-}"
 # Empty => derive from the repository's real default branch after REPO is known.
 BRANCH_OVERRIDE="${BRANCH:-}"
 # GitHub Actions is the integration that reports our CI check runs.
@@ -92,6 +93,9 @@ else
     exit 1
   fi
 fi
+
+# Ruleset name follows the protected branch (no hardcoded branch in the name).
+RULESET_NAME="${RULESET_OVERRIDE:-protect-${BRANCH}}"
 
 # find_ruleset_id prints the id of the ruleset named RULESET_NAME, or nothing.
 # The list is paginated (per_page=100) so a large collection cannot make us miss
