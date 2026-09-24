@@ -38,7 +38,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, "tsk:", err)
 		os.Exit(1)
 	}
-	defer database.Close()
+	// El error de Close se ignora: es limpieza antes de salir.
+	defer func() { _ = database.Close() }()
 
 	model := tui.New(database, cfg)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
