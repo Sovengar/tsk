@@ -34,8 +34,8 @@ arrancar y cerrar tareas por shell (`tsk add`, `tsk start`, `tsk done`, …).
 Requiere **Go 1.26+**.
 
 ```bash
-make build      # compila e instala en ~/.local/bin/tsk
-make install    # alias de build
+make build      # compila a bin/tsk (artefacto local del repo)
+make install    # instala en ~/.local/bin/tsk ($(PREFIX) por defecto)
 ```
 
 O directamente:
@@ -138,10 +138,11 @@ Un config malformado no rompe nada: se aplican los defaults.
 `make check` es el equivalente local del gate de CI (jobs Build/Lint/Test):
 
 ```bash
-make check   # golangci-lint + go vet + go test -race + go build ./...
+make check   # golangci-lint + go vet + go test -race + go build ./... (nunca instala)
 make test    # go vet + go test -race -count=1 ./...
 make lint    # golangci-lint v2.13.2 (pineado, vía go run)
-make build   # compila e instala en ~/.local/bin/tsk
+make build   # compila a bin/tsk (artefacto local del repo)
+make install # instala en ~/.local/bin/tsk ($(PREFIX) por defecto)
 ```
 
 Arquitectura: `cmd/tsk` (entry point), `internal/cli` (subcomandos y salida
