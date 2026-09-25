@@ -19,10 +19,12 @@ agentes IA ejecutan `tsk add`, `tsk start`, `tsk done` etc. por shell.
 ## Comandos
 
 ```bash
-make build          # build → ~/.local/bin/tsk
+make build          # compila a bin/tsk (artefacto local del repo)
+make install        # instala en $(PREFIX)/bin/tsk (default ~/.local/bin/tsk)
+make uninstall      # desinstala de $(PREFIX)/bin/tsk
 make test           # go vet + go test
 make all            # test + build
-make install        # alias de build
+make check          # build + lint + test (gate local = CI, nunca instala)
 ```
 
 ```bash
@@ -35,7 +37,7 @@ make install        # alias de build
 instalado; el usuario ejecuta el bin de `~/.local/bin`, no el repo):
 
 ```bash
-make build
+make install
 ```
 
 Sin este paso, cualquier verificación que haga el usuario sobre la TUI usa la
