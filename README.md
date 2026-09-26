@@ -21,6 +21,8 @@ arrancar y cerrar tareas por shell (`tsk add`, `tsk start`, `tsk done`, …).
   y se reparte entre proyectos.
 - **Prioridad, asignado, estimación y tags** por tarea, con filtrado por
   proyecto, estado, persona y tag.
+- **Vencimientos**: `IsOverdue` compara el vencimiento con un instante
+  dado; sin vencimiento (zero) una tarea nunca figura vencida.
 - **Comentarios** por tarea y **off-days** por persona (rango de fechas + nota).
 - **Archivado reversible de proyectos** (oculta él, sus tareas y comentarios sin
   borrarlos).
