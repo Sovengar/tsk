@@ -16,4 +16,7 @@ func TestIsOverdue(t *testing.T) {
 	if IsOverdue(time.Time{}, now) {
 		t.Fatal("zero due should never be overdue")
 	}
+	if IsOverdue(now, now) {
+		t.Fatal("exactly-now due should not be overdue")
+	}
 }
