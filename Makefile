@@ -3,7 +3,7 @@ PREFIX  ?= $(HOME)/.local
 BINDIR  := $(PREFIX)/bin
 PKG     := ./cmd/tsk
 
-.PHONY: all test lint check build install uninstall clean
+.PHONY: all test lint check build install uninstall clean overdue
 
 all: test build
 
@@ -42,3 +42,7 @@ uninstall:
 # Remove the repo-local artifact; the installed binary is `uninstall`'s job.
 clean:
 	rm -rf bin/
+
+# Imprime la ruta del helper de vencimientos (informativo).
+overdue:
+	@echo "internal/model/overdue.go"
