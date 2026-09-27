@@ -36,3 +36,7 @@ Thumbs.db
 *.db-journal
 *.db-wal
 *.db-shm
+
+# Worktrees de Worktrunk (wt): el worktree-path del config global es
+# relativo, asi que caen dentro del repo en .worktrees/.
+.worktrees/
