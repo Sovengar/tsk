@@ -3,7 +3,7 @@ PREFIX  ?= $(HOME)/.local
 BINDIR  := $(PREFIX)/bin
 PKG     := ./cmd/tsk
 
-.PHONY: all test lint check build install uninstall clean overdue
+.PHONY: all test lint check build install uninstall clean overdue mutate mutate-diff
 
 all: test build
 
@@ -38,6 +38,12 @@ install: build
 
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BINARY)
+
+mutate:
+	go tool gremlins unleash --workers 4 --timeout-coefficient 3 --output report.json
+
+mutate-diff:
+	go tool gremlins unleash --diff main --workers 4 --timeout-coefficient 3 --output report.json
 
 # Remove the repo-local artifact; the installed binary is `uninstall`'s job.
 clean:
