@@ -2,6 +2,7 @@ BINARY  := tsk
 PREFIX  ?= $(HOME)/.local
 BINDIR  := $(PREFIX)/bin
 PKG     := ./cmd/tsk
+MUTATE_BASE ?= main
 
 .PHONY: all test lint check build install uninstall clean overdue mutate mutate-diff
 
@@ -45,10 +46,10 @@ mutate:
 # gremlins silently falls back to the whole module when the diff is empty (base == HEAD),
 # so fail fast instead of running a full-module run that looks diff-scoped.
 mutate-diff:
-	@if git diff --name-only main...HEAD | grep -q '\.go$$'; then \
-		go tool gremlins unleash --diff main --workers 4 --timeout-coefficient 3 --output report.json; \
+	@if git diff --name-only $(MUTATE_BASE)...HEAD | grep -q '\.go$$'; then \
+		go tool gremlins unleash --diff $(MUTATE_BASE) --workers 4 --timeout-coefficient 3 --output report.json; \
 	else \
-		echo "no .go changes vs main - nothing to mutate"; \
+		echo "no .go changes vs $(MUTATE_BASE) - nothing to mutate"; \
 	fi
 
 # Remove the repo-local artifact; the installed binary is `uninstall`'s job.
