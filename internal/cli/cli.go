@@ -5,6 +5,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -87,16 +88,53 @@ func Run(args []string) bool {
 	return true
 }
 
+// stdout, stderr y exit son inyectables para que los tests puedan capturar la
+// salida y comprobar los caminos de error sin matar el proceso de test. En
+// produccion apuntan a os y no se tocan.
+var (
+	stdout io.Writer = os.Stdout
+	stderr io.Writer = os.Stderr
+	exit             = os.Exit
+)
+
 func outputJSON(v any) {
-	enc := json.NewEncoder(os.Stdout)
+	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(v)
 }
 
 func outputError(msg string) {
-	enc := json.NewEncoder(os.Stderr)
+	enc := json.NewEncoder(stderr)
 	_ = enc.Encode(model.ErrorResult{Error: msg})
-	os.Exit(1)
+	exit(1)
+}
+
+// flagScanner recorre los argumentos de un comando consumiendo flags y sus
+// valores. Se apoya en reslicear (rest = rest[1:]) y no en un i++ dentro del
+// post de un for: ese avance escrito a mano es justo la operación que un
+// mutador puede invertir, y al invertirse el bucle no termina nunca (el test
+// cuelga y el mutant se reporta como TIMED OUT, no como muerto).
+type flagScanner struct {
+	rest []string
+}
+
+func newFlagScanner(args []string, from int) flagScanner {
+	// from fuera de rango se recorta en vez de reventar: es un clamp, no una
+	// validación, y por eso se expresa con min/max y no con una rama que el
+	// mutador pueda volver equivalente (args[from:] y el clamp coinciden
+	// cuando from == len(args), así que un `from >= len(args)` no cambia nada).
+	return flagScanner{rest: args[min(max(from, 0), len(args)):]}
+}
+
+// next consume y devuelve el siguiente token. Se usa tanto para leer el flag
+// como, en el case correspondiente, para leer su valor.
+func (s *flagScanner) next() (string, bool) {
+	if len(s.rest) == 0 {
+		return "", false
+	}
+	tok := s.rest[0]
+	s.rest = s.rest[1:]
+	return tok, true
 }
 
 func parseID(s string) int64 {
@@ -179,17 +217,20 @@ func cmdProjectAdd(args []string) {
 	name := args[0]
 	var workflow, listOrder string
 
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
+	s := newFlagScanner(args, 1)
+	for {
+		flag, ok := s.next()
+		if !ok {
+			break
+		}
+		switch flag {
 		case "--workflow":
-			if i+1 < len(args) {
-				workflow = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				workflow = v
 			}
 		case "--list-order":
-			if i+1 < len(args) {
-				listOrder = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				listOrder = v
 			}
 		}
 	}
@@ -278,14 +319,14 @@ func cmdProjectList(args []string) {
 	// Human-readable output
 	if len(result) == 0 {
 		if showArchived {
-			fmt.Println("No archived projects.")
+			_, _ = fmt.Fprintln(stdout, "No archived projects.")
 		} else {
-			fmt.Println("No projects registered.")
+			_, _ = fmt.Fprintln(stdout, "No projects registered.")
 		}
 		return
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "NAME\tWORKFLOW\tLIST ORDER\tTASKS")
 	for _, p := range result {
 		wf := strings.Join(p.Workflow, ",")
@@ -318,16 +359,16 @@ func cmdProjectShow(args []string) {
 	}
 
 	// Human-readable
-	fmt.Printf("Project:  %s\n", p.Name)
-	fmt.Printf("Workflow: %s\n", strings.Join(p.Workflow, " → "))
+	_, _ = fmt.Fprintf(stdout, "Project:  %s\n", p.Name)
+	_, _ = fmt.Fprintf(stdout, "Workflow: %s\n", strings.Join(p.Workflow, " → "))
 	listOrder := strings.Join(p.ListOrder, " → ")
 	if listOrder == "" {
 		listOrder = "(workflow order)"
 	}
-	fmt.Printf("List:     %s\n", listOrder)
-	fmt.Printf("Archived: %t\n", p.Archived)
-	fmt.Printf("Created:  %s\n", p.CreatedAt)
-	fmt.Printf("Updated:  %s\n", p.UpdatedAt)
+	_, _ = fmt.Fprintf(stdout, "List:     %s\n", listOrder)
+	_, _ = fmt.Fprintf(stdout, "Archived: %t\n", p.Archived)
+	_, _ = fmt.Fprintf(stdout, "Created:  %s\n", p.CreatedAt)
+	_, _ = fmt.Fprintf(stdout, "Updated:  %s\n", p.UpdatedAt)
 }
 
 func cmdProjectUpdate(args []string) {
@@ -335,22 +376,24 @@ func cmdProjectUpdate(args []string) {
 	var newName, workflow, listOrder string
 	listOrderSet := false
 
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
+	s := newFlagScanner(args, 1)
+	for {
+		flag, ok := s.next()
+		if !ok {
+			break
+		}
+		switch flag {
 		case "--name":
-			if i+1 < len(args) {
-				newName = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				newName = v
 			}
 		case "--workflow":
-			if i+1 < len(args) {
-				workflow = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				workflow = v
 			}
 		case "--list-order":
-			if i+1 < len(args) {
-				listOrder = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				listOrder = v
 			}
 			listOrderSet = true
 		}
@@ -434,43 +477,42 @@ func cmdAdd(args []string) {
 	priority := 0
 	estimate := 0.0
 
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
+	s := newFlagScanner(args, 1)
+	for {
+		flag, ok := s.next()
+		if !ok {
+			break
+		}
+		switch flag {
 		case "--project":
-			if i+1 < len(args) {
-				project = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				project = v
 			}
 		case "--priority":
-			if i+1 < len(args) {
-				p, err := strconv.Atoi(args[i+1])
+			if v, ok := s.next(); ok {
+				p, err := strconv.Atoi(v)
 				if err == nil {
 					priority = p
 				}
-				i++
 			}
 		case "--assignee":
-			if i+1 < len(args) {
-				assignee = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				assignee = v
 			}
 		case "--status":
-			if i+1 < len(args) {
-				status = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				status = v
 			}
 		case "--estimate":
-			if i+1 < len(args) {
-				e, err := strconv.ParseFloat(args[i+1], 64)
+			if v, ok := s.next(); ok {
+				e, err := strconv.ParseFloat(v, 64)
 				if err == nil && e >= 0 {
 					estimate = e
 				}
-				i++
 			}
 		case "--tag", "--tags":
-			if i+1 < len(args) {
-				tags = append(tags, model.ParseTags(args[i+1])...)
-				i++
+			if v, ok := s.next(); ok {
+				tags = append(tags, model.ParseTags(v)...)
 			}
 		}
 	}
@@ -494,27 +536,28 @@ func cmdList(args []string) {
 	var project, status, assignee, tag string
 	jsonOutput := false
 
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
+	s := newFlagScanner(args, 0)
+	for {
+		flag, ok := s.next()
+		if !ok {
+			break
+		}
+		switch flag {
 		case "--project":
-			if i+1 < len(args) {
-				project = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				project = v
 			}
 		case "--status":
-			if i+1 < len(args) {
-				status = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				status = v
 			}
 		case "--assignee":
-			if i+1 < len(args) {
-				assignee = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				assignee = v
 			}
 		case "--tag":
-			if i+1 < len(args) {
-				tag = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				tag = v
 			}
 		case "--json":
 			jsonOutput = true
@@ -552,11 +595,11 @@ func cmdList(args []string) {
 
 	// Human-readable table output
 	if len(tasks) == 0 {
-		fmt.Println("No tasks found.")
+		_, _ = fmt.Fprintln(stdout, "No tasks found.")
 		return
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	_, _ = fmt.Fprintln(w, "ID\tPRIORITY\tSTATUS\tASSIGNEE\tTAGS\tTITLE")
 	for _, t := range tasks {
 		_, _ = fmt.Fprintf(w, "%d\t%s %s\t%s\t%s\t%s\t%s\n",
@@ -570,7 +613,7 @@ func cmdList(args []string) {
 		)
 	}
 	_ = w.Flush()
-	fmt.Printf("\nTotal: %d tasks\n", len(tasks))
+	_, _ = fmt.Fprintf(stdout, "\nTotal: %d tasks\n", len(tasks))
 }
 
 func cmdShow(idStr string) {
@@ -669,10 +712,16 @@ func cmdOffDay(args []string) {
 		if len(args) > 3 && !strings.HasPrefix(args[3], "--") {
 			end = args[3]
 		}
-		for i := 3; i < len(args); i++ {
-			if args[i] == "--note" && i+1 < len(args) {
-				note = args[i+1]
-				i++
+		ns := newFlagScanner(args, 3)
+		for {
+			flag, ok := ns.next()
+			if !ok {
+				break
+			}
+			if flag == "--note" {
+				if v, ok := ns.next(); ok {
+					note = v
+				}
 			}
 		}
 
@@ -687,12 +736,16 @@ func cmdOffDay(args []string) {
 	case "list":
 		var assignee string
 		jsonOutput := false
-		for i := 1; i < len(args); i++ {
-			switch args[i] {
+		s := newFlagScanner(args, 1)
+		for {
+			flag, ok := s.next()
+			if !ok {
+				break
+			}
+			switch flag {
 			case "--assignee":
-				if i+1 < len(args) {
-					assignee = args[i+1]
-					i++
+				if v, ok := s.next(); ok {
+					assignee = v
 				}
 			case "--json":
 				jsonOutput = true
@@ -715,10 +768,10 @@ func cmdOffDay(args []string) {
 			return
 		}
 		if len(offdays) == 0 {
-			fmt.Println("No off-days registered.")
+			_, _ = fmt.Fprintln(stdout, "No off-days registered.")
 			return
 		}
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		w := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 		_, _ = fmt.Fprintln(w, "ID\tASSIGNEE\tFROM\tTO\tNOTE")
 		for _, o := range offdays {
 			_, _ = fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n", o.ID, o.Assignee, o.StartDate, o.EndDate, o.Note)
@@ -751,29 +804,30 @@ func cmdGantt(args []string) {
 	weeks := 0
 	jsonOutput := false
 
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
+	s := newFlagScanner(args, 0)
+	for {
+		flag, ok := s.next()
+		if !ok {
+			break
+		}
+		switch flag {
 		case "--project":
-			if i+1 < len(args) {
-				project = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				project = v
 			}
 		case "--assignee":
-			if i+1 < len(args) {
-				assignee = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				assignee = v
 			}
 		case "--from":
-			if i+1 < len(args) {
-				fromStr = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				fromStr = v
 			}
 		case "--weeks":
-			if i+1 < len(args) {
-				if n, err := strconv.Atoi(args[i+1]); err == nil && n > 0 {
+			if v, ok := s.next(); ok {
+				if n, err := strconv.Atoi(v); err == nil && n > 0 {
 					weeks = n
 				}
-				i++
 			}
 		case "--json":
 			jsonOutput = true
@@ -825,7 +879,7 @@ func cmdGantt(args []string) {
 		outputJSON(sched)
 		return
 	}
-	fmt.Print(renderGanttText(sched, weeks))
+	_, _ = fmt.Fprint(stdout, renderGanttText(sched, weeks))
 }
 
 // renderGanttText dibuja el Gantt en texto: una fila por tarea, una columna
@@ -856,7 +910,7 @@ func renderGanttText(s *model.Schedule, weeks int) string {
 	for i := range ruler {
 		ruler[i] = ' '
 	}
-	for d := 0; d < totalDays; d++ {
+	for d := range totalDays {
 		day := start.AddDate(0, 0, d)
 		if day.Weekday() != time.Monday {
 			continue
@@ -877,7 +931,7 @@ func renderGanttText(s *model.Schedule, weeks int) string {
 		axis[i] = ' '
 	}
 	b.WriteString(string(axis))
-	for d := 0; d < totalDays; d++ {
+	for d := range totalDays {
 		if start.AddDate(0, 0, d).Weekday() == time.Monday {
 			b.WriteString("|")
 		} else {
@@ -894,10 +948,12 @@ func renderGanttText(s *model.Schedule, weeks int) string {
 				row[i] = ' '
 			}
 			d0, d1 := dayIndex(e.Start), dayIndex(e.End)
-			for d := d0; d <= d1 && d < totalDays; d++ {
-				if d >= 0 {
-					row[d] = '█'
-				}
+			// Rango efectivo dentro de la ventana: se recorta en vez de
+			// recorrer con d++ a mano, porque un `d++` invertido deja el bucle
+			// colgado y el mutant se reporta como TIMED OUT en vez de muerto.
+			lo, hi := max(d0, 0), min(d1, totalDays-1)
+			for i := range max(hi-lo+1, 0) {
+				row[lo+i] = '█'
 			}
 			mark := ""
 			if e.EstimateDefaulted {
@@ -932,13 +988,11 @@ func truncateLabel(s string, w int) string {
 }
 
 // padRight rellena con espacios hasta w runas (no bytes, así los títulos UTF-8
-// no desalinean las columnas).
+// no desalinean las columnas). Si el texto ya es más ancho se devuelve tal cual,
+// sin ramas: el `if n >= w` era un mutant equivalente (con n == w el
+// Repeat(0) devuelve la misma cadena).
 func padRight(s string, w int) string {
-	n := len([]rune(s))
-	if n >= w {
-		return s
-	}
-	return s + strings.Repeat(" ", w-n)
+	return s + strings.Repeat(" ", max(0, w-len([]rune(s))))
 }
 
 func cmdUpdate(args []string) {
@@ -947,54 +1001,51 @@ func cmdUpdate(args []string) {
 	var tagsSet, tagsAdd, tagsRemove []string
 	hasTagsSet := false
 
-	for i := 1; i < len(args); i++ {
-		switch args[i] {
+	s := newFlagScanner(args, 1)
+	for {
+		flag, ok := s.next()
+		if !ok {
+			break
+		}
+		switch flag {
 		case "--title":
-			if i+1 < len(args) {
-				updates["title"] = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				updates["title"] = v
 			}
 		case "--description":
-			if i+1 < len(args) {
-				updates["description"] = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				updates["description"] = v
 			}
 		case "--priority":
-			if i+1 < len(args) {
-				p, err := strconv.Atoi(args[i+1])
+			if v, ok := s.next(); ok {
+				p, err := strconv.Atoi(v)
 				if err == nil {
 					updates["priority"] = p
 				}
-				i++
 			}
 		case "--assignee":
-			if i+1 < len(args) {
-				updates["assignee"] = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				updates["assignee"] = v
 			}
 		case "--estimate":
-			if i+1 < len(args) {
-				e, err := strconv.ParseFloat(args[i+1], 64)
+			if v, ok := s.next(); ok {
+				e, err := strconv.ParseFloat(v, 64)
 				if err == nil && e >= 0 {
 					updates["estimate"] = e
 				}
-				i++
 			}
 		case "--tags":
-			if i+1 < len(args) {
-				tagsSet = model.ParseTags(args[i+1])
+			if v, ok := s.next(); ok {
+				tagsSet = model.ParseTags(v)
 				hasTagsSet = true
-				i++
 			}
 		case "--tag":
-			if i+1 < len(args) {
-				tagsAdd = append(tagsAdd, model.ParseTags(args[i+1])...)
-				i++
+			if v, ok := s.next(); ok {
+				tagsAdd = append(tagsAdd, model.ParseTags(v)...)
 			}
 		case "--untag":
-			if i+1 < len(args) {
-				tagsRemove = append(tagsRemove, model.ParseTags(args[i+1])...)
-				i++
+			if v, ok := s.next(); ok {
+				tagsRemove = append(tagsRemove, model.ParseTags(v)...)
 			}
 		}
 	}
@@ -1109,12 +1160,16 @@ func cmdCancel(idStr string) {
 func cmdStats(args []string) {
 	var project string
 	jsonOutput := false
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
+	s := newFlagScanner(args, 0)
+	for {
+		flag, ok := s.next()
+		if !ok {
+			break
+		}
+		switch flag {
 		case "--project":
-			if i+1 < len(args) {
-				project = args[i+1]
-				i++
+			if v, ok := s.next(); ok {
+				project = v
 			}
 		case "--json":
 			jsonOutput = true
@@ -1139,20 +1194,20 @@ func cmdStats(args []string) {
 	byStatus := stats["by_status"].(map[string]int)
 	byAssignee := stats["by_assignee"].(map[string]int)
 
-	fmt.Printf("Total: %d tasks\n", total)
-	fmt.Println()
+	_, _ = fmt.Fprintf(stdout, "Total: %d tasks\n", total)
+	_, _ = fmt.Fprintln(stdout)
 
-	fmt.Println("By Status:")
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(stdout, "By Status:")
+	w := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	for status, count := range byStatus {
 		bar := strings.Repeat("█", count)
 		_, _ = fmt.Fprintf(w, "  %s\t%d\t%s\n", status, count, bar)
 	}
 	_ = w.Flush()
 
-	fmt.Println()
-	fmt.Println("By Assignee:")
-	w2 := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(stdout)
+	_, _ = fmt.Fprintln(stdout, "By Assignee:")
+	w2 := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	for assignee, count := range byAssignee {
 		_, _ = fmt.Fprintf(w2, "  %s\t%d\n", assignee, count)
 	}
@@ -1173,11 +1228,11 @@ func cmdCompletion(args []string) {
 
 	switch shell {
 	case "bash":
-		fmt.Print(bashCompletion)
+		_, _ = fmt.Fprint(stdout, bashCompletion)
 	case "zsh":
-		fmt.Print(zshCompletion)
+		_, _ = fmt.Fprint(stdout, zshCompletion)
 	case "fish":
-		fmt.Print(fishCompletion)
+		_, _ = fmt.Fprint(stdout, fishCompletion)
 	default:
 		outputError("usage: tsk completion (bash|zsh|fish)")
 	}
@@ -1313,15 +1368,15 @@ func cmdHelp() {
 		}
 	}
 
-	fmt.Println("tsk — Task Manager TUI + CLI")
-	fmt.Println("")
-	fmt.Println("Projects:")
+	_, _ = fmt.Fprintln(stdout, "tsk — Task Manager TUI + CLI")
+	_, _ = fmt.Fprintln(stdout, "")
+	_, _ = fmt.Fprintln(stdout, "Projects:")
 	for _, cmd := range projectCmds {
-		fmt.Printf("  %-55s %s\n", cmd, commands[cmd])
+		_, _ = fmt.Fprintf(stdout, "  %-55s %s\n", cmd, commands[cmd])
 	}
-	fmt.Println("")
-	fmt.Println("Tasks:")
+	_, _ = fmt.Fprintln(stdout, "")
+	_, _ = fmt.Fprintln(stdout, "Tasks:")
 	for _, cmd := range taskCmds {
-		fmt.Printf("  %-55s %s\n", cmd, commands[cmd])
+		_, _ = fmt.Fprintf(stdout, "  %-55s %s\n", cmd, commands[cmd])
 	}
 }
