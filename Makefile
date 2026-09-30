@@ -4,13 +4,21 @@ BINDIR  := $(PREFIX)/bin
 PKG     := ./cmd/tsk
 MUTATE_BASE ?= main
 
+# Timeout coefficient for gremlins (x the measured baseline test duration).
+# CI runners are slower and noisier than a local box, and the db suite alone
+# takes ~10s here. The first calibration used 3 and timed out 201 mutants on a
+# loaded machine; every timeout is a mutant with an unknown result that the
+# gate then cannot see, so this is deliberately generous. Raise it rather than
+# loosening the gate.
+MUTATE_TIMEOUT ?= 8
+
 # Mutation gate scope. Only packages with real test coverage are gated. A full-module
-# baseline measured: internal/tui (472 surviving mutants, 25% uncovered) and
-# internal/cli (345 mutants, 100% uncovered). Uncovered code produces no mutants at
-# all, so gating it would be a green check that cannot fail. Those are excluded until
-# they have tests; today the gate protects internal/db, internal/model and
-# internal/config only.
-MUTATE_EXCLUDE ?= internal/tui/|internal/cli/|cmd/
+# baseline measured: internal/tui (472 surviving mutants, 25% uncovered) and cmd/ are
+# still untested, so gating them would be a green check that cannot fail. Those are
+# excluded until they have tests. internal/cli used to be excluded too; it was
+# brought in on 2026-09-28 once its coverage went from 0% to 94% and its surviving
+# mutants were either killed or documented in .mutation-allowlist.
+MUTATE_EXCLUDE ?= internal/tui/|cmd/
 
 .PHONY: all test lint check build install uninstall clean overdue mutate mutate-diff
 
@@ -49,13 +57,13 @@ uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BINARY)
 
 mutate:
-	go tool gremlins unleash --workers 4 --timeout-coefficient 3 --exclude-files $(MUTATE_EXCLUDE) --output report.json
+	go tool gremlins unleash --workers 4 --timeout-coefficient $(MUTATE_TIMEOUT) --exclude-files $(MUTATE_EXCLUDE) --output report.json
 
 # gremlins silently falls back to the whole module when the diff is empty (base == HEAD),
 # so fail fast instead of running a full-module run that looks diff-scoped.
 mutate-diff:
 	@if git diff --name-only $(MUTATE_BASE)...HEAD | grep -q '\.go$$'; then \
-		go tool gremlins unleash --diff $(MUTATE_BASE) --workers 4 --timeout-coefficient 3 --exclude-files $(MUTATE_EXCLUDE) --output report.json; \
+		go tool gremlins unleash --diff $(MUTATE_BASE) --workers 4 --timeout-coefficient $(MUTATE_TIMEOUT) --exclude-files $(MUTATE_EXCLUDE) --output report.json; \
 	else \
 		echo "no .go changes vs $(MUTATE_BASE) - nothing to mutate"; \
 	fi
