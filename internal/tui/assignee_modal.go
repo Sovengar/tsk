@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"sort"
 
 	tea "charm.land/bubbletea/v2"
 	"tsk/internal/model"
@@ -27,73 +26,25 @@ type assigneeSummary struct {
 // assigneeRoster arma la lista de personas del modal: la unión de assignees de
 // tareas, assignees con off-days y "Me" (siempre presente). Excluye el
 // placeholder de "sin responsable". Orden alfabético estable.
+// assigneeRoster delega en la función pura: la regla no depende del modelo.
 func (m Model) assigneeRoster() []assigneeSummary {
-	byName := map[string]*assigneeSummary{}
-	ensure := func(name string) *assigneeSummary {
-		if s, ok := byName[name]; ok {
-			return s
-		}
-		s := &assigneeSummary{Name: name}
-		byName[name] = s
-		return s
-	}
-
-	ensure("Me")
-	for _, t := range m.tasks {
-		if model.IsUnassigned(t.Assignee) {
-			continue
-		}
-		s := ensure(t.Assignee)
-		s.Total++
-		if t.IsActive() {
-			s.Active++
-		}
-	}
-	for _, o := range m.offdays {
-		if model.IsUnassigned(o.Assignee) {
-			continue
-		}
-		ensure(o.Assignee).OffDayCount++
-	}
-
-	result := make([]assigneeSummary, 0, len(byName))
-	for _, s := range byName {
-		result = append(result, *s)
-	}
-	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
-	return result
+	return buildAssigneeRoster(m.tasks, m.offdays)
 }
 
 // currentAssignee devuelve la persona seleccionada en el modal, o "".
 func (m *Model) currentAssignee() string {
-	roster := m.assigneeRoster()
-	if m.assigneeIdx >= 0 && m.assigneeIdx < len(roster) {
-		return roster[m.assigneeIdx].Name
-	}
-	return ""
+	return nameAt(m.assigneeRoster(), m.assigneeIdx)
 }
 
 // assigneeActiveTasks son las tareas no cerradas de una persona.
 func (m Model) assigneeActiveTasks(name string) []model.Task {
-	var result []model.Task
-	for _, t := range m.tasks {
-		if t.Assignee == name && t.IsActive() {
-			result = append(result, t)
-		}
-	}
-	return result
+	return tasksForAssignee(m.tasks, name)
 }
 
 // assigneeOffDays son los off-days de una persona, en el orden de carga (fecha
 // de inicio ascendente, que es como los devuelve la DB).
 func (m Model) assigneeOffDays(name string) []model.OffDay {
-	var result []model.OffDay
-	for _, o := range m.offdays {
-		if o.Assignee == name {
-			result = append(result, o)
-		}
-	}
-	return result
+	return offDaysForAssignee(m.offdays, name)
 }
 
 // openAssigneeModal abre el modal en el nivel de lista.

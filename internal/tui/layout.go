@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"tsk/internal/model"
@@ -161,6 +162,90 @@ func kanbanHeader(status string, shown, total int) string {
 		return fmt.Sprintf("─ %s (%d/%d) ", status, shown, total)
 	}
 	return fmt.Sprintf("─ %s (%d) ", status, total)
+}
+
+// ---- Reglas del modal de personas ---------------------------------------
+
+// buildAssigneeRoster construye el listado de personas del modal: cada una con
+// su total de tareas, cuántas siguen activas y cuántos off-days tiene.
+//
+// "Me" está siempre, aunque no tenga nada asignado: es el valor por defecto al
+// que se atribuyen las tareas nuevas, así que si no apareciera, highlighted en
+// el modal valdría por defecto.
+//
+// Se salta a quien no tenga responsable (vacío o "unassigned"): sin nombre no
+// hay a quién atribuirle un off-day. Devuelve la lista ordenada por nombre, que
+// es lo que hace estable el índice al reordenar el mapa.
+func buildAssigneeRoster(tasks []model.Task, offdays []model.OffDay) []assigneeSummary {
+	byName := map[string]*assigneeSummary{}
+
+	ensure := func(name string) *assigneeSummary {
+		if s, ok := byName[name]; ok {
+			return s
+		}
+		s := &assigneeSummary{Name: name}
+		byName[name] = s
+		return s
+	}
+
+	ensure("Me")
+	for _, t := range tasks {
+		if model.IsUnassigned(t.Assignee) {
+			continue
+		}
+		s := ensure(t.Assignee)
+		s.Total++
+		if t.IsActive() {
+			s.Active++
+		}
+	}
+	for _, o := range offdays {
+		if model.IsUnassigned(o.Assignee) {
+			continue
+		}
+		ensure(o.Assignee).OffDayCount++
+	}
+
+	result := make([]assigneeSummary, 0, len(byName))
+	for _, s := range byName {
+		result = append(result, *s)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	return result
+}
+
+// tasksForAssignee son las tareas no cerradas de una persona, en el orden de
+// entrada.
+func tasksForAssignee(tasks []model.Task, name string) []model.Task {
+	var result []model.Task
+	for _, t := range tasks {
+		if t.Assignee == name && t.IsActive() {
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
+// offDaysForAssignee son los off-days de una persona, en el orden de carga
+// (fecha de inicio ascendente, que es como los devuelve la DB).
+func offDaysForAssignee(offdays []model.OffDay, name string) []model.OffDay {
+	var result []model.OffDay
+	for _, o := range offdays {
+		if o.Assignee == name {
+			result = append(result, o)
+		}
+	}
+	return result
+}
+
+// nameAt es el nombre de la persona en la posición idx del roster, o "" si el
+// índice no es válido. La guarda va dentro para que el llamante no tenga que
+// repetirla antes de cada roster[idx].
+func nameAt(roster []assigneeSummary, idx int) string {
+	if !inRange(idx, len(roster)) {
+		return ""
+	}
+	return roster[idx].Name
 }
 
 // ---- Reglas del Dashboard ------------------------------------------------
