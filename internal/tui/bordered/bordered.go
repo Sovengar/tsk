@@ -165,27 +165,43 @@ type ansiSegment struct {
 	text  string
 }
 
+// startsCSI dice si en la posición i empieza una secuencia ANSI CSI. Vive aparte
+// para que el escaneo de texto y el de escapes usen EXACTAMENTE la misma
+// definición.
+//
+// Antes cada bucle repetía la condición con sus tres términos, y esa
+// duplicación era un lazo: si las dos copias discrepan, el escaneo de texto
+// descarta la posición i y i no avanza nunca. Con un "[" al final de una
+// línea eso es un bucle infinito en el render, no un mutante exótico: lo
+// dispara cualquier cambio que toque una de las dos condiciones.
+func startsCSI(runes []rune, i int) bool {
+	return runes[i] == '\033' && i+1 < len(runes) && runes[i+1] == '['
+}
+
 func parseAnsiSegments(s string) []ansiSegment {
 	var segments []ansiSegment
 	runes := []rune(s)
 	i := 0
 	for i < len(runes) {
-		if runes[i] == '\033' && i+1 < len(runes) && runes[i+1] == '[' {
+		if startsCSI(runes, i) {
 			j := i + 2
 			for j < len(runes) {
 				b := runes[j]
+				j++
+				// El byte final de una CSI es un byte en 0x40..0x7E.
 				if b >= 0x40 && b <= 0x7E {
-					j++
 					break
 				}
-				j++
 			}
 			segments = append(segments, ansiSegment{style: string(runes[i:j]), text: ""})
 			i = j
 			continue
 		}
-		j := i
-		for j < len(runes) && (runes[j] != '\033' || j+1 >= len(runes) || runes[j+1] != '[') {
+		// j arranca en i+1 a propósito: garantiza que el segmento de texto
+		// siempre consume al menos un carácter, aunque startsCSI y la rama de
+		// arriba no coincidan. El avance no puede depender de una condición.
+		j := i + 1
+		for j < len(runes) && !startsCSI(runes, j) {
 			j++
 		}
 		segments = append(segments, ansiSegment{style: "", text: string(runes[i:j])})
