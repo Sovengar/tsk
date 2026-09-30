@@ -235,3 +235,193 @@ func TestNextPriorityCycles(t *testing.T) {
 		}
 	})
 }
+
+// taskAt es la guarda que estaba escrita delante de cada tasks[m.cursor].
+// Recibir el índice como parámetro es lo que permite matar su mutante de
+// BOUNDARY: idx == len(tasks) no ocurre nunca desde el teclado porque el cursor
+// llega acotado, pero aquí se puede pedir exactamente ese caso.
+func TestTaskAt(t *testing.T) {
+	tasks := []model.Task{
+		{ID: 1, Title: "primera"},
+		{ID: 2, Title: "segunda"},
+		{ID: 3, Title: "tercera"},
+	}
+	tests := []struct {
+		name   string
+		tasks  []model.Task
+		idx    int
+		wantID int64
+		wantOK bool
+	}{
+		{"primera", tasks, 0, 1, true},
+		{"del medio", tasks, 1, 2, true},
+		{"última", tasks, 2, 3, true},
+		{"uno más allá", tasks, 3, 0, false},
+		{"muy más allá", tasks, 99, 0, false},
+		{"negativo", tasks, -1, 0, false},
+		{"lista vacía", nil, 0, 0, false},
+		{"lista vacía con índice negativo", nil, -5, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := taskAt(tt.tasks, tt.idx)
+			if !tt.wantOK {
+				if got != nil {
+					t.Fatalf("taskAt(%d) = %+v, want nil", tt.idx, got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("taskAt(%d) = nil, want la tarea %d", tt.idx, tt.wantID)
+			}
+			if got.ID != tt.wantID {
+				t.Errorf("taskAt(%d).ID = %d, want %d", tt.idx, got.ID, tt.wantID)
+			}
+		})
+	}
+}
+
+// Con cualquier lista y cualquier índice, taskAt devuelve algo o nil, nunca
+// entra en pánico: es lo que hace seguro usarlo delante de cada tasks[idx].
+func TestTaskAtNeverPanics(t *testing.T) {
+	sizes := []int{0, 1, 2, 5}
+	for _, n := range sizes {
+		tasks := make([]model.Task, n)
+		for i := range tasks {
+			tasks[i] = model.Task{ID: int64(i + 1)}
+		}
+		for idx := -3; idx <= n+3; idx++ {
+			got := taskAt(tasks, idx)
+			if inRange(idx, n) {
+				if got == nil || got.ID != int64(idx+1) {
+					t.Fatalf("taskAt(n=%d, %d) = %+v, want la tarea %d", n, idx, got, idx+1)
+				}
+			} else if got != nil {
+				t.Fatalf("taskAt(n=%d, %d) = %+v, want nil", n, idx, got)
+			}
+		}
+	}
+}
+
+// previewBudgetFor: lo que cabe entre el mínimo de 1 línea y el tope, sin dejar
+// que el preview empuje el contenido fuera de la pantalla.
+func TestPreviewBudgetFor(t *testing.T) {
+	const keybinds = 2
+	tests := []struct {
+		name   string
+		height int
+		want   int
+	}{
+		{"terminal normal da el tope", 60, previewMaxLines},
+		{"justo en el tope", previewMaxLines + keybinds + minContentHeight + 2, previewMaxLines},
+		{"un poco menos del tope", previewMaxLines + keybinds + minContentHeight + 1, previewMaxLines - 1},
+		{"terminal pequeño da menos", 20, 20 - keybinds - minContentHeight - 2},
+		{"terminal mínimo da 1", 10, 1},
+		{"altura cero da 1", 0, 1},
+		{"altura negativa da 1", -10, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := previewBudgetFor(tt.height, keybinds)
+			if got != tt.want {
+				t.Errorf("previewBudgetFor(%d, %d) = %d, want %d", tt.height, keybinds, got, tt.want)
+			}
+			if got < 1 || got > previewMaxLines {
+				t.Errorf("previewBudgetFor(%d, %d) = %d, fuera de [1,%d]", tt.height, keybinds, got, previewMaxLines)
+			}
+		})
+	}
+}
+
+// Más keybinds dejan menos presupuesto, nunca más.
+func TestPreviewBudgetShrinksWithKeybinds(t *testing.T) {
+	for height := 12; height <= 60; height++ {
+		prev := previewBudgetFor(height, 0)
+		for k := 1; k <= 8; k++ {
+			got := previewBudgetFor(height, k)
+			if got > prev {
+				t.Errorf("height=%d: más keybinds (%d)dio más presupuesto: %d > %d", height, k, got, prev)
+			}
+			prev = got
+		}
+	}
+}
+
+// El presupuesto nunca sale del rango acotado, para cualquier entrada.
+func TestPreviewBudgetAlwaysBounded(t *testing.T) {
+	for height := -5; height <= 80; height++ {
+		for keybinds := -2; keybinds <= 20; keybinds++ {
+			got := previewBudgetFor(height, keybinds)
+			if got < 1 || got > previewMaxLines {
+				t.Fatalf("previewBudgetFor(%d, %d) = %d, fuera de [1,%d]", height, keybinds, got, previewMaxLines)
+			}
+		}
+	}
+}
+
+// matchesStatus tiene tres modos: activas, todas, o un estado exacto.
+func TestMatchesStatus(t *testing.T) {
+	tests := []struct {
+		name   string
+		filter string
+		status string
+		active bool
+		want   bool
+	}{
+		{"todas las activas acepta una activa", statusFilterAllActive, "doing", true, true},
+		{"todas las activas rechaza una inactiva", statusFilterAllActive, "done", false, false},
+		{"todas no restringe", "", "done", false, true},
+		{"todas no restringe con activa", "", "todo", true, true},
+		{"estado exacto coincide", "doing", "doing", false, true},
+		{"estado exacto no coincide", "doing", "todo", false, false},
+		{"estado exacto con activa tampoco filtra", "todo", "todo", true, true},
+		{"un estado desconocido sólo coincide consigo mismo", "nuevo", "nuevo", false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchesStatus(tt.filter, tt.status, tt.active); got != tt.want {
+				t.Errorf("matchesStatus(%q, %q, %v) = %v, want %v", tt.filter, tt.status, tt.active, got, tt.want)
+			}
+		})
+	}
+}
+
+// El filtro de estado "todas las activas" NO mira el campo status, sólo el
+// flag active: es lo que distingue ese modo del de coincidencia exacta.
+func TestMatchesStatusAllActiveIgnoresStatusName(t *testing.T) {
+	for _, status := range []string{"todo", "doing", "done", "cancelled", "cualquiera"} {
+		if !matchesStatus(statusFilterAllActive, status, true) {
+			t.Errorf("con active=true el estado %q debería pasar", status)
+		}
+		if matchesStatus(statusFilterAllActive, status, false) {
+			t.Errorf("con active=false el estado %q no debería pasar", status)
+		}
+	}
+}
+
+// matchesPriority: -1 es "cualquiera", cualquier otro valor exige coincidencia.
+func TestMatchesPriority(t *testing.T) {
+	tests := []struct {
+		name           string
+		filter, actual int
+		want           bool
+	}{
+		{"sin filtro acepta cualquiera", -1, 0, true},
+		{"sin filtro acepta la máxima", -1, 3, true},
+		{"filtro none coincide con none", 0, 0, true},
+		{"filtro none no coincide con high", 0, 3, false},
+		{"filtro high coincide con high", 3, 3, true},
+		{"filtro high no coincide con none", 3, 0, false},
+		// Cualquier negativo desactiva el filtro, no sólo -1: es lo que hacía
+		// el `if m.filterPriority >= 0 && ...` original y se conserva.
+		{"otro negativo también desactiva el filtro", -2, 1, true},
+		{"otro negativo con la misma prioridad", -2, -2, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := matchesPriority(tt.filter, tt.actual); got != tt.want {
+				t.Errorf("matchesPriority(%d, %d) = %v, want %v", tt.filter, tt.actual, got, tt.want)
+			}
+		})
+	}
+}

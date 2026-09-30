@@ -326,17 +326,8 @@ func (m *Model) commonWorkflow() []string {
 // exacta. Lo comparten List, Kanban y Gantt para que la cabecera de filtros sea
 // consistente en todas las vistas.
 func (m *Model) taskMatchesFilter(t model.Task) bool {
-	switch m.filterStatus {
-	case statusFilterAllActive:
-		if !t.IsActive() {
-			return false
-		}
-	case "":
-		// "all": sin restricción de estado
-	default:
-		if t.Status != m.filterStatus {
-			return false
-		}
+	if !matchesStatus(m.filterStatus, t.Status, t.IsActive()) {
+		return false
 	}
 	if m.filterProject != "" && t.ProjectName != m.filterProject {
 		return false
@@ -347,10 +338,7 @@ func (m *Model) taskMatchesFilter(t model.Task) bool {
 	if m.filterTag != "" && !model.HasTag(t.Tags, m.filterTag) {
 		return false
 	}
-	if m.filterPriority >= 0 && t.Priority != m.filterPriority {
-		return false
-	}
-	return true
+	return matchesPriority(m.filterPriority, t.Priority)
 }
 
 // filteredTasks devuelve las tareas filtradas.
@@ -748,7 +736,7 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		// New task
 		return m, m.newTask()
 	case "enter":
-		if len(tasks) > 0 && m.cursor < len(tasks) {
+		if inRange(m.cursor, len(tasks)) {
 			t := tasks[m.cursor]
 			m.detailOpen = true
 			m.detailTask = &t
@@ -1064,10 +1052,7 @@ func (m *Model) selectedTask() *model.Task {
 // previewBudget calcula cuántas líneas de descripción puede mostrar el preview
 // sin empujar el contenido ni los keybinds fuera de la pantalla.
 func (m Model) previewBudget(keybindsHeight int) int {
-	budget := m.height - keybindsHeight - minContentHeight - 2 // 2 = bordes de la caja
-	budget = max(budget, 1)
-	budget = min(budget, previewMaxLines)
-	return budget
+	return previewBudgetFor(m.height, keybindsHeight)
 }
 
 // overlayKind devuelve el modal activo, en el mismo orden de prioridad que

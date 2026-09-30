@@ -94,6 +94,52 @@ func inRange(idx, n int) bool {
 	return idx >= 0 && idx < n
 }
 
+// taskAt devuelve la tarea en la posición idx, o nil si el índice no es válido.
+//
+// Se extrajo porque la guarda "cursor < len(tasks)" estaba escrita delante de
+// cada tasks[m.cursor] con su propia forma. Su mutante de BOUNDARY (que pasa `<`
+// a `<=`) sólo se puede matar si la función recibe el índice: desde el teclado el
+// cursor siempre llega acotado, así que la diferencia es inalcanzable. Con el
+// índice como parámetro se puede probar directamente el caso idx == len(tasks).
+func taskAt(tasks []model.Task, idx int) *model.Task {
+	if !inRange(idx, len(tasks)) {
+		return nil
+	}
+	return &tasks[idx]
+}
+
+// previewBudgetFor son las líneas de descripción que caben sin empujar el
+// contenido ni los keybinds fuera de la pantalla.
+//
+// height - keybinds - minContentHeight, menos los dos bordes de la caja del
+// preview, y acotado entre 1 y previewMaxLines. El mínimo de 1 garantiza que la
+// descripción siempre tiene al menos una línea, aunque el terminal sea minúsculo.
+func previewBudgetFor(height, keybindsHeight int) int {
+	budget := height - keybindsHeight - minContentHeight - 2 // 2 = bordes de la caja
+	return min(max(budget, 1), previewMaxLines)
+}
+
+// matchesStatus dice si el estado de una tarea pasa el filtro de estado.
+//
+// Hay tres modos: el de "todas las activas" (todo menos done y cancelled), el
+// de "todas" (sin restricción) y el de un estado concreto (coincidencia
+// exacta).
+func matchesStatus(statusFilter, taskStatus string, active bool) bool {
+	switch statusFilter {
+	case statusFilterAllActive:
+		return active
+	case "":
+		return true
+	default:
+		return taskStatus == statusFilter
+	}
+}
+
+// matchesPriority aplica el filtro de prioridad. -1 significa "cualquiera".
+func matchesPriority(filterPriority, taskPriority int) bool {
+	return filterPriority < 0 || filterPriority == taskPriority
+}
+
 // nextPriority es el ciclo de la tecla de prioridad (ctrl+p).
 //
 // El ciclo depende del estado: en backlog incluye "none" (none→low→med→high→none,
