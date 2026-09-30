@@ -25,9 +25,7 @@ func (m *Model) renderDashboard(maxHeight int) string {
 
 	// Filas disponibles para las dos columnas.
 	colLines := maxHeight - dashboardChrome
-	if colLines < 3 {
-		colLines = 3
-	}
+	colLines = max(colLines, 3)
 
 	// Projects line with selection indicator
 	list := m.dashProjectList()
@@ -136,9 +134,7 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	teamLines = append(teamLines, "")
 
 	teamBudget := colLines - len(overviewLines) - dashboardTeamHeader
-	if teamBudget < 0 {
-		teamBudget = 0
-	}
+	teamBudget = max(teamBudget, 0)
 	for _, assignee := range assignees {
 		if len(teamLines)-dashboardTeamHeader >= teamBudget {
 			break
@@ -154,9 +150,7 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	activeLines = append(activeLines, "")
 
 	activeBudget := colLines - dashboardActiveHeader
-	if activeBudget < 0 {
-		activeBudget = 0
-	}
+	activeBudget = max(activeBudget, 0)
 	for _, t := range m.tasks {
 		if len(activeLines)-dashboardActiveHeader >= activeBudget {
 			break

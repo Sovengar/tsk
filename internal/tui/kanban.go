@@ -72,9 +72,7 @@ func (m *Model) clampKanbanCursor() {
 		m.kanbanCol, m.kanbanRow = 0, 0
 		return
 	}
-	if m.kanbanCol < 0 {
-		m.kanbanCol = 0
-	}
+	m.kanbanCol = max(m.kanbanCol, 0)
 	if m.kanbanCol >= len(cols) {
 		m.kanbanCol = len(cols) - 1
 	}
@@ -97,13 +95,9 @@ func (m *Model) renderKanban(maxHeight int) string {
 	// Solo se muestran las tarjetas que entran en el alto disponible, con la
 	// ventana desplazada en la columna activa para que el cursor sea visible.
 	colContentHeight := maxHeight - kanbanBoardChrome - filterHeaderRows
-	if colContentHeight < 2 {
-		colContentHeight = 2
-	}
+	colContentHeight = max(colContentHeight, 2)
 	maxCards := (colContentHeight + 1) / kanbanCardRows
-	if maxCards < 1 {
-		maxCards = 1
-	}
+	maxCards = max(maxCards, 1)
 
 	windows := make([]columnWindow, len(cols))
 	for i, col := range cols {
@@ -113,9 +107,7 @@ func (m *Model) renderKanban(maxHeight int) string {
 			continue
 		}
 		end := len(col.tasks)
-		if end > maxCards {
-			end = maxCards
-		}
+		end = min(end, maxCards)
 		windows[i] = columnWindow{end: end}
 	}
 
@@ -133,9 +125,7 @@ func (m *Model) renderKanban(maxHeight int) string {
 			headers[i] = fmt.Sprintf("─ %s (%d) ", col.status, total)
 		}
 		minWidths[i] = lipgloss.Width(headers[i]) + 2 // + bordes
-		if minWidths[i] < kanbanMinColWidth {
-			minWidths[i] = kanbanMinColWidth
-		}
+		minWidths[i] = max(minWidths[i], kanbanMinColWidth)
 	}
 	widths := kanbanColumnWidths(minWidths, w-2)
 

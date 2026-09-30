@@ -54,9 +54,7 @@ func visibleListColumns(avail int) int {
 		used += need
 		count++
 	}
-	if count < 1 {
-		count = 1
-	}
+	count = max(count, 1)
 	return count
 }
 

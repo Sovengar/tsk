@@ -271,9 +271,7 @@ func (m *Model) clampFilterOption() {
 	if m.filterOptionIdx >= len(opts) {
 		m.filterOptionIdx = len(opts) - 1
 	}
-	if m.filterOptionIdx < 0 {
-		m.filterOptionIdx = 0
-	}
+	m.filterOptionIdx = max(m.filterOptionIdx, 0)
 }
 
 // filterMoveField mueve el foco entre campos y resincroniza el cursor.

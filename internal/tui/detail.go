@@ -20,9 +20,7 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 	w := m.width
 	h := maxHeight
 	inner := w - 2 // ancho interior de las cajas (descuenta los bordes)
-	if inner < 1 {
-		inner = 1
-	}
+	inner = max(inner, 1)
 
 	// Priority with colored character
 	prio := priorityChar(t.Priority) + " " + model.PriorityLabel(t.Priority)
@@ -68,26 +66,16 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 	//   caja comentarios: 2 bordes = 2
 	const fixed = 12
 	avail := h - fixed
-	if avail < 3 {
-		avail = 3
-	}
+	avail = max(avail, 3)
 
 	// Al menos una línea de comentarios (o "(no comments)").
 	maxCommentLines := avail - 2
-	if maxCommentLines < 1 {
-		maxCommentLines = 1
-	}
+	maxCommentLines = max(maxCommentLines, 1)
 	commentBudget := len(m.detailComments)
-	if commentBudget < 1 {
-		commentBudget = 1
-	}
-	if commentBudget > maxCommentLines {
-		commentBudget = maxCommentLines
-	}
+	commentBudget = max(commentBudget, 1)
+	commentBudget = min(commentBudget, maxCommentLines)
 	descBudget := avail - commentBudget
-	if descBudget < 1 {
-		descBudget = 1
-	}
+	descBudget = max(descBudget, 1)
 
 	if len(descLines) > descBudget {
 		descLines = descLines[:descBudget]
@@ -96,10 +84,7 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 	// Ventana de comentarios que sigue a la selección.
 	visibleComments := commentLines
 	if len(commentLines) > commentBudget {
-		cursor := m.detailCommentSel
-		if cursor < 0 {
-			cursor = 0
-		}
+		cursor := max(m.detailCommentSel, 0)
 		start, end := visibleRange(cursor, len(commentLines), commentBudget)
 		visibleComments = commentLines[start:end]
 	}

@@ -53,9 +53,7 @@ func cellWidth(s string, width int) string {
 // descontando el preview y la barra de keybinds.
 func contentBudget(total, previewH, keybindsH int) int {
 	budget := total - previewH - keybindsH
-	if budget < minContentHeight {
-		budget = minContentHeight
-	}
+	budget = max(budget, minContentHeight)
 	return budget
 }
 
@@ -81,9 +79,7 @@ func visibleRange(cursor, total, size int) (int, int) {
 	}
 
 	start := cursor - size/2
-	if start < 0 {
-		start = 0
-	}
+	start = max(start, 0)
 	if start > total-size {
 		start = total - size
 	}

@@ -44,9 +44,7 @@ func (m *Model) clampDashProjectIdx() {
 	if m.dashProjectIdx >= n {
 		m.dashProjectIdx = n - 1
 	}
-	if m.dashProjectIdx < 0 {
-		m.dashProjectIdx = 0
-	}
+	m.dashProjectIdx = max(m.dashProjectIdx, 0)
 }
 
 // selectProjectByName selecciona un proyecto y ajusta la vista (activos o

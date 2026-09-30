@@ -1084,12 +1084,8 @@ func (m *Model) selectedTask() *model.Task {
 // sin empujar el contenido ni los keybinds fuera de la pantalla.
 func (m Model) previewBudget(keybindsHeight int) int {
 	budget := m.height - keybindsHeight - minContentHeight - 2 // 2 = bordes de la caja
-	if budget < 1 {
-		budget = 1
-	}
-	if budget > previewMaxLines {
-		budget = previewMaxLines
-	}
+	budget = max(budget, 1)
+	budget = min(budget, previewMaxLines)
 	return budget
 }
 

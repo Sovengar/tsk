@@ -106,9 +106,7 @@ func (m *Model) newTaskCommitTag() {
 // modal menos los bordes y la indentación de 4 columnas de las filas.
 func (m Model) newTaskTextareaWidth() int {
 	w := modalWidthFor(newTaskModalWidth, m.width) - 6
-	if w < 10 {
-		w = 10
-	}
+	w = max(w, 10)
 	return w
 }
 

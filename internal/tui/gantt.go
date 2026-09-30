@@ -78,9 +78,7 @@ func (m *Model) snapGanttCursor() {
 		m.ganttCursor = 0
 		return
 	}
-	if m.ganttCursor < 0 {
-		m.ganttCursor = 0
-	}
+	m.ganttCursor = max(m.ganttCursor, 0)
 	if m.ganttCursor >= len(rows) {
 		m.ganttCursor = len(rows) - 1
 	}
@@ -194,25 +192,17 @@ func (m *Model) renderGantt(maxHeight int) string {
 	if innerW < 70 {
 		labelW = innerW / 3
 	}
-	if labelW < 14 {
-		labelW = 14
-	}
+	labelW = max(labelW, 14)
 	dayCols := innerW - labelW - 1
-	if dayCols < 7 {
-		dayCols = 7
-	}
+	dayCols = max(dayCols, 7)
 
 	start, _ := model.ParseDate(s.Start)
 	offset := m.ganttOffsetDays
-	if offset < 0 {
-		offset = 0
-	}
+	offset = max(offset, 0)
 
 	// Ventana vertical que sigue al cursor.
 	visible := maxHeight - listFixedRows - ganttRulerRows
-	if visible < 1 {
-		visible = 1
-	}
+	visible = max(visible, 1)
 	vStart, vEnd := 0, len(rows)
 	if len(rows) > visible {
 		vStart, vEnd = visibleRange(m.ganttCursor, len(rows), visible)

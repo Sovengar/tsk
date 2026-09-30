@@ -124,9 +124,7 @@ func (m *Model) clampAssigneeIdx() {
 	if m.assigneeIdx >= n {
 		m.assigneeIdx = n - 1
 	}
-	if m.assigneeIdx < 0 {
-		m.assigneeIdx = 0
-	}
+	m.assigneeIdx = max(m.assigneeIdx, 0)
 }
 
 // clampOffdayIdx mantiene el índice de off-days dentro de rango.
@@ -139,9 +137,7 @@ func (m *Model) clampOffdayIdx() {
 	if m.assigneeOffdayIdx >= n {
 		m.assigneeOffdayIdx = n - 1
 	}
-	if m.assigneeOffdayIdx < 0 {
-		m.assigneeOffdayIdx = 0
-	}
+	m.assigneeOffdayIdx = max(m.assigneeOffdayIdx, 0)
 }
 
 // selectionPrefix devuelve el indicador de fila seleccionada.
