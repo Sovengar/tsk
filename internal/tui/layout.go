@@ -163,6 +163,88 @@ func kanbanHeader(status string, shown, total int) string {
 	return fmt.Sprintf("─ %s (%d) ", status, total)
 }
 
+// ---- Reglas del Dashboard ------------------------------------------------
+//
+// El Dashboard cuenta sobre m.tasks cinco veces distintas (por proyecto, por
+// estado, por persona) y cada cuenta iba con su propio bucle y su propio filtro
+// de proyecto dentro de la función de render. Aquí están como funciones puras:
+// reciben las tareas y el proyecto seleccionado, y no saben nada del modelo.
+
+// dashProjectTasks cuenta las tareas activas de un proyecto.
+//
+// project == "" cuenta el proyecto entero, que es lo que quiere el panel cuando
+// no hay ninguno seleccionado en el board.
+func dashProjectTasks(tasks []model.Task, project string) int {
+	n := 0
+	for _, t := range tasks {
+		if project != "" && t.ProjectName != project {
+			continue
+		}
+		if t.IsActive() {
+			n++
+		}
+	}
+	return n
+}
+
+// dashStatusCounts reparte las tareas por estado y devuelve los tres totales que
+// muestra el Overview.
+//
+// done y cancelled se cuentan aparte; todo lo demás es "activa", incluidos los
+// estados propios del workflow de cada proyecto (backlog, reviewing…). El mapa
+// porStatus lleva la misma distribución y alimenta las barras.
+func dashStatusCounts(tasks []model.Task, project string) (active, done, cancelled int, byStatus map[string]int) {
+	byStatus = map[string]int{}
+	for _, t := range tasks {
+		if project != "" && t.ProjectName != project {
+			continue
+		}
+		switch t.Status {
+		case model.CancelledStatus:
+			cancelled++
+		case model.DoneStatus:
+			done++
+		default:
+			active++
+		}
+		byStatus[t.Status]++
+	}
+	return active, done, cancelled, byStatus
+}
+
+// dashAssigneeCounts cuenta tareas por persona, con su subcuenta de activas.
+func dashAssigneeCounts(tasks []model.Task, project string) (total, active map[string]int) {
+	total = map[string]int{}
+	active = map[string]int{}
+	for _, t := range tasks {
+		if project != "" && t.ProjectName != project {
+			continue
+		}
+		total[t.Assignee]++
+		if t.IsActive() {
+			active[t.Assignee]++
+		}
+	}
+	return total, active
+}
+
+// dashRowsAvailable son las filas que quedan para contenido en una columna del
+// Dashboard: el alto de la columna menos lo ya usado y menos la cabecera fija.
+//
+// El suelo es 0, no 1: un presupuesto de 0 filas significa "no cabe nada más",
+// que es distinto de "cabe al menos una línea" y es lo que evita que el bloque
+// crezca sobre el alto calculado.
+func dashRowsAvailable(colLines, used, headerRows int) int {
+	return max(colLines-used-headerRows, 0)
+}
+
+// dashColumnWidths reparte el ancho interior en dos columnas iguales con un
+// hueco de 1 columna entre medias.
+func dashColumnWidths(innerW int) (left, right int) {
+	half := innerW/2 - 1
+	return half, half
+}
+
 // previewBudgetFor son las líneas de descripción que caben sin empujar el
 // contenido ni los keybinds fuera de la pantalla.
 //
