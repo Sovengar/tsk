@@ -165,48 +165,57 @@ type ansiSegment struct {
 	text  string
 }
 
-// startsCSI dice si en la posición i empieza una secuencia ANSI CSI. Vive aparte
-// para que el escaneo de texto y el de escapes usen EXACTAMENTE la misma
-// definición.
+// isCSIFinalizer dice si r es el byte final de una secuencia CSI.
 //
-// Antes cada bucle repetía la condición con sus tres términos, y esa
-// duplicación era un lazo: si las dos copias discrepan, el escaneo de texto
-// descarta la posición i y i no avanza nunca. Con un "[" al final de una
-// línea eso es un bucle infinito en el render, no un mutante exótico: lo
-// dispara cualquier cambio que toque una de las dos condiciones.
-func startsCSI(runes []rune, i int) bool {
-	return runes[i] == '\033' && i+1 < len(runes) && runes[i+1] == '['
+// El rango 0x40..0x7E es el de los "final bytes" de ECMA-48: cualquier otro
+// byte de la secuencia es un parámetro.
+func isCSIFinalizer(r rune) bool {
+	return r >= 0x40 && r <= 0x7E
 }
 
+const csiPrefix = "\x1b["
+
+// parseAnsiSegments parte una línea en segmentos de estilo y de texto.
+//
+// Se resuelve con strings.Index e IndexFunc en vez de con bucles que avanzan un
+// índice a mano. No es un detalle estilístico: un bucle con `i++` garantiza el
+// progreso sólo porque nadie invierte el `++`, y esa es exactamente la clase de
+// mutante que sale aquí. Con un índice que avanza dentro de una librería, o con
+// un recorte de slice que siempre acorta, el progreso no depende de que una
+// expresión siga diciendo lo que dice hoy.
+//
+// Las dos búsquedas son por BYTES, y aquí da igual: una CSI es ASCII y el byte
+// final también, así que cortar justo después de él nunca parte un glifo.
 func parseAnsiSegments(s string) []ansiSegment {
 	var segments []ansiSegment
-	runes := []rune(s)
-	i := 0
-	for i < len(runes) {
-		if startsCSI(runes, i) {
-			j := i + 2
-			for j < len(runes) {
-				b := runes[j]
-				j++
-				// El byte final de una CSI es un byte en 0x40..0x7E.
-				if b >= 0x40 && b <= 0x7E {
-					break
-				}
+
+	for len(s) > 0 {
+		if strings.HasPrefix(s, csiPrefix) {
+			// Primer final byte después del prefijo; si la secuencia está
+			// truncada, se consume entera.
+			end := len(s)
+			if k := strings.IndexFunc(s[len(csiPrefix):], isCSIFinalizer); k >= 0 {
+				end = len(csiPrefix) + k + 1
 			}
-			segments = append(segments, ansiSegment{style: string(runes[i:j]), text: ""})
-			i = j
+			segments = append(segments, ansiSegment{style: s[:end], text: ""})
+			s = s[end:]
 			continue
 		}
-		// j arranca en i+1 a propósito: garantiza que el segmento de texto
-		// siempre consume al menos un carácter, aunque startsCSI y la rama de
-		// arriba no coincidan. El avance no puede depender de una condición.
-		j := i + 1
-		for j < len(runes) && !startsCSI(runes, j) {
-			j++
+
+		// Texto: hasta la siguiente CSI o hasta el final.
+		end := len(s)
+		if k := strings.Index(s, csiPrefix); k >= 0 {
+			end = k
 		}
-		segments = append(segments, ansiSegment{style: "", text: string(runes[i:j])})
-		i = j
+		if end == 0 {
+			// Un ESC suelto que no abre CSI: es texto, y tiene que avanzar
+			// uno o el bucle no saldría.
+			end = 1
+		}
+		segments = append(segments, ansiSegment{style: "", text: s[:end]})
+		s = s[end:]
 	}
+
 	return segments
 }
 
