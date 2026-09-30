@@ -614,6 +614,81 @@ func TestParseAnsiSegments(t *testing.T) {
 	}
 }
 
+// TestParseAnsiSegmentsTermina es la garantía que los casos de arriba NO
+// cubren: que el parser avanza siempre, sea cual sea la entrada.
+//
+// La suite anterior no tenía ninguna entrada truncada, así que la forma exacta
+// del bucle —`j := i` o `j := i+1`— era indistinguible de cualquier otra. Eso
+// es justo la condición bajo la que la versión previa podía no avanzar: si el
+// escaneo de texto y el de escapes discrepaban, el segmento de texto descartaba
+// i sin consumirlo y el bucle exterior no progresaba. Con un "\033[" al final
+// de una línea eso es un cuelgue del render, no un mutante exótico.
+//
+// Estos casos lo fijan sin depender del alfabeto: se ejecutan tal cual, y un
+// no-avance se manifiesta como timeout en vez de como un valor incorrecto.
+func TestParseAnsiSegmentsTermina(t *testing.T) {
+	for _, in := range []string{
+		"\033",                 // ESC solo: no alcanza a ser CSI
+		"\033[",                // CSI sin byte final
+		"a\033",                // texto + ESC truncado
+		"a\033[",               // texto + CSI incompleto
+		"\033[1",               // CSI con parámetro sin byte final
+		"a\033[1m",             // CSI completa tras texto
+		"\033[0m\033[",         // CSI completa y luego truncada
+		"[\033[",               // corchete suelto + CSI truncada
+		"\033[[",               // corchete doble tras ESC
+		"\033[\033[",           // ESC dentro de una CSI
+		"\033[\033",            // ESC truncado dentro de una CSI
+		"\033[;;;;;;",          // CSI larga sin byte final
+		"\033[1;2;3;4;5",       // CSI parametrizada sin byte final
+		strings.Repeat("\033[", 200), // muchas CSI truncadas seguidas
+		strings.Repeat("a", 5000),     // texto largo sin CSI
+		strings.Repeat("a\033[1m", 500),
+	} {
+		// Que la llamada termine es la aserción. El contenido se comprueba sólo
+		// para que el caso sea un test y no un smoke de compilación: un
+		// segmento de texto vacío sería tan malo como un cuelgue.
+		got := parseAnsiSegments(in)
+		if len(got) == 0 && in != "" {
+			t.Errorf("%q: se perdieron todos los segmentos", in)
+			continue
+		}
+		// Reconstruir: todo carácter de la entrada debe aparecer una vez, en un
+		// segmento, y el texto reconstruido debe igualar la entrada sin estilos.
+		var text strings.Builder
+		for _, seg := range got {
+			text.WriteString(seg.text)
+		}
+		if want := stripCSI(in); text.String() != want {
+			t.Errorf("%q: texto reconstruido %q, want %q", in, text.String(), want)
+		}
+	}
+}
+
+// stripCSI quita las secuencias CSI completas, que es el texto que el parser
+// debe devolver como segmentos con estilo.
+func stripCSI(s string) string {
+	var out strings.Builder
+	runes := []rune(s)
+	for i := 0; i < len(runes); {
+		if startsCSI(runes, i) {
+			j := i + 2
+			for j < len(runes) {
+				b := runes[j]
+				j++
+				if b >= 0x40 && b <= 0x7E {
+					break
+				}
+			}
+			i = j
+			continue
+		}
+		out.WriteRune(runes[i])
+		i++
+	}
+	return out.String()
+}
+
 // --- Helpers internos ----------------------------------------------------
 
 func TestRepeatStyled(t *testing.T) {
