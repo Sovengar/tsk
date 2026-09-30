@@ -304,8 +304,8 @@ func (m *Model) commonWorkflow() []string {
 	var result []string
 	for _, s := range m.projects[0].Workflow {
 		common := true
-		for i := 1; i < len(m.projects); i++ {
-			if !model.HasStatus(m.projects[i].Workflow, s) {
+		for _, p := range m.projects[1:] {
+			if !model.HasStatus(p.Workflow, s) {
 				common = false
 				break
 			}
@@ -383,62 +383,96 @@ func (m *Model) listPageSize() int {
 	return m.pageSize
 }
 
-// totalPages devuelve el número de páginas (mínimo 1, aunque no haya tareas).
-func (m *Model) totalPages() int {
+// listWindow es la paginación de la vista List resuelta en un único sitio.
+//
+// Existía porque el cálculo estaba repartido: la página se derivaba del cursor
+// multiplicando por el tamaño, y cinco llamantes repetían esa aritmética, cada
+// uno con su propio borde. Repartido, cada copia es un sitio donde un mutante puede
+// colgar el bucle (un `cursor++` dentro de un `if` invertido no termina nunca)
+// o morir sin que ningún test lo note. Aquí no hay ningún avance manual: todo
+// sale de min/max sobre enteros, y cada consumidor lee la misma ventana.
+type listWindow struct {
+	total int // tareas tras filtrar
+	size  int // filas por página
+	page  int // página actual, base 0
+	pages int // páginas totales, siempre >= 1
+	start int // primer índice visible
+	end   int // índice justo tras el último visible
+}
+
+func (m *Model) listWindow() listWindow {
 	size := m.listPageSize()
 	total := len(m.filteredTasks())
-	pages := (total + size - 1) / size
-	if pages < 1 {
-		pages = 1
+	pages := max(1, (total+size-1)/size)
+	// La página se acota a [0, pages-1]. Antes no se acotaba y un cursor fuera
+	// de rango daba una ventana vacía con una leyenda del tipo "Page 20/2";
+	// es inalcanzable desde la UI porque clampListCursor corre antes, pero una
+	// vista que se auto-conserva no debería depender de ese orden.
+	page := min(max(m.cursor/size, 0), pages-1)
+	start := page * size
+	return listWindow{
+		total: total,
+		size:  size,
+		page:  page,
+		pages: pages,
+		start: start,
+		end:   min(start+size, total),
 	}
-	return pages
 }
 
-// currentPage devuelve el índice de página (0-based) que contiene al cursor.
-func (m *Model) currentPage() int {
-	return m.cursor / m.listPageSize()
+// clampCursor mete un cursor dentro de la ventana visible. Con lista vacía el
+// cursor es 0; si no, se acota al rango mostrado. Se expresa con min/max en vez
+// de con una cadena de if: la cadena tiene ramas que sólo se distinguen si el
+// test llega a cada una, y su versión negada deja un cursor en -1 del que el
+// resto de la vista no se recupera.
+func (w listWindow) clampCursor(cursor int) int {
+	if w.total == 0 {
+		return 0
+	}
+	return min(max(cursor, w.start), w.end-1)
 }
 
-// pageBounds devuelve el rango [start, end) de tareas que forman la página actual.
+// nextPageStart devuelve el cursor al primer elemento de la página siguiente, y
+// false si la actual es la última.
+func (w listWindow) nextPageStart() (int, bool) {
+	if w.page >= w.pages-1 {
+		return 0, false
+	}
+	return w.start + w.size, true
+}
+
+// prevPageStart devuelve el cursor al primer elemento de la página anterior, y
+// false si ya está en la primera.
+func (w listWindow) prevPageStart() (int, bool) {
+	if w.page == 0 {
+		return 0, false
+	}
+	return w.start - w.size, true
+}
+
+// pageBounds devuelve el rango [start, end) de tareas que forman la página
+// actual. Es el único acceso que queda a la ventana: totalPages y currentPage
+// desapareceron porque cada llamante repetía su propia aritmética y las dos
+// cosas ya salen de listWindow.
 func (m *Model) pageBounds() (int, int) {
-	size := m.listPageSize()
-	total := len(m.filteredTasks())
-	start := m.currentPage() * size
-	if start > total {
-		start = total
-	}
-	end := start + size
-	if end > total {
-		end = total
-	}
-	return start, end
+	w := m.listWindow()
+	return w.start, w.end
 }
 
 // pageLegend describe el rango de la página: "1-10 of 306 · Page 1/31".
 func (m *Model) pageLegend() string {
-	total := len(m.filteredTasks())
-	start, end := m.pageBounds()
+	w := m.listWindow()
 	first := 0
-	if total > 0 {
-		first = start + 1
+	if w.total > 0 {
+		first = w.start + 1
 	}
 	return fmt.Sprintf("%d-%d of %d · Page %d/%d",
-		first, end, total, m.currentPage()+1, m.totalPages())
+		first, w.end, w.total, w.page+1, w.pages)
 }
 
 // clampListCursor mantiene el cursor dentro de las tareas filtradas.
 func (m *Model) clampListCursor() {
-	total := len(m.filteredTasks())
-	if total == 0 {
-		m.cursor = 0
-		return
-	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.cursor >= total {
-		m.cursor = total - 1
-	}
+	m.cursor = m.listWindow().clampCursor(m.cursor)
 }
 
 // ---- Init / Update / View ----
@@ -683,28 +717,27 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		m.cursor = 0
 		return m, nil
 	case "j", "down":
-		if _, end := m.pageBounds(); m.cursor < end-1 {
-			m.cursor++
-		}
+		// Bajar hasta el final de la página; acota en vez de incrementar dentro
+		// de un if, que es la forma que cuelga cuando el incremento se invierte.
+		w := m.listWindow()
+		m.cursor = w.clampCursor(m.cursor + 1)
 	case "k", "up":
-		if start, _ := m.pageBounds(); m.cursor > start {
-			m.cursor--
-		}
+		w := m.listWindow()
+		m.cursor = w.clampCursor(m.cursor - 1)
 	case "n":
 		// Página siguiente: saltar al primer elemento de la próxima página.
-		start := m.currentPage() * m.listPageSize()
-		if next := start + m.listPageSize(); next < len(tasks) {
+		if next, ok := m.listWindow().nextPageStart(); ok {
 			m.cursor = next
 		}
 	case "p":
 		// Página anterior: saltar al primer elemento de la página previa.
-		if start := m.currentPage() * m.listPageSize(); start > 0 {
-			m.cursor = start - m.listPageSize()
+		if prev, ok := m.listWindow().prevPageStart(); ok {
+			m.cursor = prev
 		}
 	case "N":
 		// Ir a la última página: cursor al último elemento.
-		if len(tasks) > 0 {
-			m.cursor = len(tasks) - 1
+		if w := m.listWindow(); w.total > 0 {
+			m.cursor = w.total - 1
 		}
 	case "P":
 		// Ir a la primera página: cursor al primer elemento.
