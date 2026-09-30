@@ -186,8 +186,14 @@ func trimSpace(s string) string {
 	return s[start:end]
 }
 
+// contains indica si substr aparece dentro de s. substr vacío nunca hace
+// match: sin el filtro, containsAt compararía contra la cadena vacía y
+// encontraría coincidencia en el índice 0.
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && len(substr) > 0 && containsAt(s, substr))
+	if substr == "" || len(substr) > len(s) {
+		return false
+	}
+	return s == substr || containsAt(s, substr)
 }
 
 func containsAt(s, substr string) bool {

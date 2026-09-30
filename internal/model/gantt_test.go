@@ -134,6 +134,55 @@ func TestBuildScheduleDefaultEstimate(t *testing.T) {
 	}
 }
 
+// Un defaultEstimate no positivo se normaliza a 1 día. Los tests previos sólo
+// pasaban 1 y 2, así que el borde exacto (0 y negativo) quedaba sin cubrir.
+func TestBuildScheduleDefaultEstimateNoPositivo(t *testing.T) {
+	tests := []struct {
+		name       string
+		defaultEst float64
+	}{
+		{"cero", 0},
+		{"negativo", -2.5},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := BuildSchedule([]Task{task("@a", "todo", 0)}, nil, mustDate(t, monday), tt.defaultEst)
+			e := s.Assignees[0].Entries[0]
+			if e.Estimate != 1 {
+				t.Errorf("estimate = %v, want 1 (normalizado)", e.Estimate)
+			}
+			if !e.EstimateDefaulted {
+				t.Error("EstimateDefaulted should be true")
+			}
+			if e.Start != monday || e.End != monday {
+				t.Errorf("range = %s→%s, want %s→%s (1 día = el lunes entero)", e.Start, e.End, monday, monday)
+			}
+		})
+	}
+}
+
+// Un estimate que no llega a superar epsilon no consume NINGÚN día: el bucle
+// de fracciones ni se entra, así que la entrada se queda sin día de inicio
+// (FormatDate del zero value) y el calendario no avanza. Fija ese suelo, que
+// es lo que separa `remaining > epsilon` de `remaining >= epsilon`.
+func TestBuildScheduleEstimateEnElSuelo(t *testing.T) {
+	s := BuildSchedule([]Task{task("@a", "todo", epsilon)}, nil, mustDate(t, monday), 1)
+	e := s.Assignees[0].Entries[0]
+
+	if e.Estimate != epsilon {
+		t.Errorf("estimate = %v, want %v (no se sanea un estimate explícito)", e.Estimate, epsilon)
+	}
+	if e.EstimateDefaulted {
+		t.Error("epsilon no es 0: no debería marcarse EstimateDefaulted")
+	}
+	if e.End != monday {
+		t.Errorf("end = %s, want %s (no consume día)", e.End, monday)
+	}
+	if e.Start == monday {
+		t.Error("start = lunes: un estimate de epsilon no debería asignar día de inicio")
+	}
+}
+
 func TestBuildScheduleExplicitEstimateNotDefaulted(t *testing.T) {
 	s := BuildSchedule([]Task{task("@a", "todo", 0.25)}, nil, mustDate(t, monday), 1)
 	e := s.Assignees[0].Entries[0]
