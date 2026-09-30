@@ -166,6 +166,55 @@ func kanbanHeader(status string, shown, total int) string {
 
 // ---- Reglas del modal de personas ---------------------------------------
 
+// firstValidIndex devuelve idx si vale para una lista de n, y 0 si no. Es el
+// "si el índice no vale, el primero" sin mirar los elementos: lo que necesitan
+// los ciclos que después eligen por índice.
+func firstValidIndex(idx, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	return min(max(idx, 0), n-1)
+}
+
+// clampTo acota un índice a [0, n). Con n <= 0 devuelve 0: sin lista no hay
+// posición, y 0 es lo que todos los llamantes muestran como "nada".
+//
+// Es la forma que repetían clampFilterOption, clampAssigneeIdx, clampOffdayIdx y
+// el clamp del cursor de Kanban, cada uno con su propio borde y su propia
+// especialización del caso "no hay lista".
+func clampTo(idx, n int) int {
+	if n <= 0 {
+		return 0
+	}
+	return min(max(idx, 0), n-1)
+}
+
+// taskAt2 es taskAt para listas de texto: el elemento en la posición idx, o ""
+// si el índice no es válido.
+//
+// El valor vacío es el que los callers ya trataban como "nada seleccionado", y
+// centralizarlo evita el `if idx >= 0 && idx < len(s)` repetido delante de cada
+// suggestions[idx] del programa.
+func taskAt2(items []string, idx int) string {
+	if !inRange(idx, len(items)) {
+		return ""
+	}
+	return items[idx]
+}
+
+// firstOrAt devuelve items[idx], o el primer elemento si el índice no vale para
+// esa lista.
+//
+// Es la regla de los desplegables al tabular: si no hay nada seleccionado, se
+// completa con lo primero que hay. Distinto de taskAt2, que devuelve "" en ese
+// caso; por eso son dos funciones y no una con un flag.
+func firstOrAt(items []string, idx int) string {
+	if len(items) == 0 {
+		return ""
+	}
+	return items[min(max(idx, 0), len(items)-1)]
+}
+
 // currentProjectName es el proyecto sobre el que se opera: el del filtro si
 // lo hay, y si no el primero de la lista.
 //

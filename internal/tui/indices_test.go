@@ -425,3 +425,120 @@ func TestMatchesPriority(t *testing.T) {
 		})
 	}
 }
+
+// clampTo es el borde que repetían cuatro clamps distintos del programa. Con
+// lista vacía devuelve 0, que es lo que todos ellos mostraban.
+func TestClampTo(t *testing.T) {
+	tests := []struct {
+		name   string
+		idx, n int
+		want   int
+	}{
+		{"dentro", 2, 5, 2},
+		{"último válido", 4, 5, 4},
+		{"uno más allá", 5, 5, 4},
+		{"muy más allá", 99, 5, 4},
+		{"negativo", -3, 5, 0},
+		{"lista de uno", 7, 1, 0},
+		{"lista vacía", 4, 0, 0},
+		{"lista vacía con negativo", -4, 0, 0},
+		{"n negativo", 4, -2, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := clampTo(tt.idx, tt.n); got != tt.want {
+				t.Errorf("clampTo(%d, %d) = %d, want %d", tt.idx, tt.n, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestClampToAlwaysInRange(t *testing.T) {
+	for n := 0; n <= 8; n++ {
+		for idx := -5; idx <= 13; idx++ {
+			got := clampTo(idx, n)
+			if n <= 0 {
+				if got != 0 {
+					t.Fatalf("clampTo(%d, %d) = %d, want 0 sin lista", idx, n, got)
+				}
+				continue
+			}
+			if got < 0 || got >= n {
+				t.Fatalf("clampTo(%d, %d) = %d, fuera de [0,%d)", idx, n, got, n)
+			}
+		}
+	}
+}
+
+// firstValidIndex es el "si el índice no vale, el primero" sin mirar elementos.
+func TestFirstValidIndex(t *testing.T) {
+	tests := []struct {
+		name   string
+		idx, n int
+		want   int
+	}{
+		{"dentro", 2, 5, 2},
+		{"negativo", -1, 5, 0},
+		{"fuera por arriba", 9, 5, 4},
+		{"lista de uno", 3, 1, 0},
+		{"lista vacía", 3, 0, 0},
+		{"lista negativa", 3, -1, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := firstValidIndex(tt.idx, tt.n); got != tt.want {
+				t.Errorf("firstValidIndex(%d, %d) = %d, want %d", tt.idx, tt.n, got, tt.want)
+			}
+		})
+	}
+}
+
+// firstOrAt devuelve el primer elemento cuando el índice no vale. Es lo que
+// distingue esta función de taskAt2, que devuelve "".
+func TestFirstOrAt(t *testing.T) {
+	items := []string{"a", "b", "c"}
+	tests := []struct {
+		name string
+		idx  int
+		want string
+	}{
+		{"primera", 0, "a"},
+		{"del medio", 1, "b"},
+		{"última", 2, "c"},
+		{"negativo cae en la primera", -1, "a"},
+		{"fuera por arriba cae en la última", 9, "c"},
+		{"uno más allá cae en la última", 3, "c"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := firstOrAt(items, tt.idx); got != tt.want {
+				t.Errorf("firstOrAt(%d) = %q, want %q", tt.idx, got, tt.want)
+			}
+		})
+	}
+}
+
+// Y sobre lista vacía devuelve "", como taskAt2: no hay primer elemento.
+func TestFirstOrAtEmpty(t *testing.T) {
+	for _, idx := range []int{-1, 0, 5} {
+		if got := firstOrAt(nil, idx); got != "" {
+			t.Errorf("firstOrAt(nil, %d) = %q, want vacío", idx, got)
+		}
+	}
+}
+
+// taskAt2 devuelve "" fuera de rango, a diferencia de firstOrAt.
+func TestTaskAt2OutOfRange(t *testing.T) {
+	items := []string{"a", "b", "c"}
+	for _, idx := range []int{-1, 3, 99} {
+		if got := taskAt2(items, idx); got != "" {
+			t.Errorf("taskAt2(%d) = %q, want vacío fuera de rango", idx, got)
+		}
+	}
+	if got := taskAt2(items, 1); got != "b" {
+		t.Errorf("taskAt2(1) = %q, want b", got)
+	}
+	if got := taskAt2(nil, 0); got != "" {
+		t.Errorf("taskAt2(nil, 0) = %q, want vacío", got)
+	}
+}

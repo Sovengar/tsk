@@ -263,15 +263,7 @@ func (m *Model) filterSyncOption() {
 
 // clampFilterOption mantiene el cursor de opciones dentro de la lista visible.
 func (m *Model) clampFilterOption() {
-	opts := m.filterVisibleOptions()
-	if len(opts) == 0 {
-		m.filterOptionIdx = 0
-		return
-	}
-	if m.filterOptionIdx >= len(opts) {
-		m.filterOptionIdx = len(opts) - 1
-	}
-	m.filterOptionIdx = max(m.filterOptionIdx, 0)
+	m.filterOptionIdx = clampTo(m.filterOptionIdx, len(m.filterVisibleOptions()))
 }
 
 // filterMoveField mueve el foco entre campos y resincroniza el cursor.
@@ -283,11 +275,7 @@ func (m Model) filterMoveField(delta int) (tea.Model, tea.Cmd) {
 
 // filterMoveOption mueve el cursor dentro de las opciones visibles.
 func (m *Model) filterMoveOption(delta int) {
-	opts := m.filterVisibleOptions()
-	if len(opts) == 0 {
-		return
-	}
-	m.filterOptionIdx = (m.filterOptionIdx + delta + len(opts)) % len(opts)
+	m.filterOptionIdx = cycleIndex(m.filterOptionIdx, len(m.filterVisibleOptions()), delta)
 }
 
 // filterCycle aplica en vivo la opción anterior/siguiente del campo activo.
@@ -296,15 +284,11 @@ func (m *Model) filterCycle(forward bool) {
 	if len(opts) == 0 {
 		return
 	}
-	idx := m.filterOptionIdx
-	if idx < 0 || idx >= len(opts) {
-		idx = 0
+	delta := 1
+	if !forward {
+		delta = -1
 	}
-	if forward {
-		idx = (idx + 1) % len(opts)
-	} else {
-		idx = (idx - 1 + len(opts)) % len(opts)
-	}
+	idx := cycleIndex(firstValidIndex(m.filterOptionIdx, len(opts)), len(opts), delta)
 	m.filterApplySelection(m.filterFieldIdx, opts[idx])
 	m.filterSyncOption()
 }

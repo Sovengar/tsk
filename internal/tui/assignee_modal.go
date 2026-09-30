@@ -67,28 +67,12 @@ func (m *Model) openOffdayForm() tea.Cmd {
 
 // clampAssigneeIdx mantiene el índice del roster dentro de rango.
 func (m *Model) clampAssigneeIdx() {
-	n := len(m.assigneeRoster())
-	if n == 0 {
-		m.assigneeIdx = 0
-		return
-	}
-	if m.assigneeIdx >= n {
-		m.assigneeIdx = n - 1
-	}
-	m.assigneeIdx = max(m.assigneeIdx, 0)
+	m.assigneeIdx = clampTo(m.assigneeIdx, len(m.assigneeRoster()))
 }
 
 // clampOffdayIdx mantiene el índice de off-days dentro de rango.
 func (m *Model) clampOffdayIdx() {
-	n := len(m.assigneeOffDays(m.currentAssignee()))
-	if n == 0 {
-		m.assigneeOffdayIdx = 0
-		return
-	}
-	if m.assigneeOffdayIdx >= n {
-		m.assigneeOffdayIdx = n - 1
-	}
-	m.assigneeOffdayIdx = max(m.assigneeOffdayIdx, 0)
+	m.assigneeOffdayIdx = clampTo(m.assigneeOffdayIdx, len(m.assigneeOffDays(m.currentAssignee())))
 }
 
 // selectionPrefix devuelve el indicador de fila seleccionada.
