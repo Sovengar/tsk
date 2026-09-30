@@ -59,7 +59,7 @@ func TestEditParsesTags(t *testing.T) {
 	if cmd := m.updateTaskFromEdit(task.ID, content); cmd == nil {
 		t.Fatal("updateTaskFromEdit devolvió nil")
 	} else {
-		cmd()
+		mustMsg(t, cmd)
 	}
 
 	got, err := m.database.GetTask(task.ID)

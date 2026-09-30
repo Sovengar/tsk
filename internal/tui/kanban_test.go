@@ -173,7 +173,7 @@ func TestKanbanAdvanceUsesProjectWorkflow(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("s debería emitir un comando")
 	}
-	cmd()
+	mustMsg(t, cmd)
 
 	got, err := m.database.GetTask(id)
 	if err != nil {

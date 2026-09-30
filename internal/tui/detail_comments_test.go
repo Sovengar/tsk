@@ -35,11 +35,11 @@ func openDetail(m *Model, task *model.Task) {
 // applyMsg aplica un mensaje al modelo, ejecuta el comando resultante y
 // aplica también su mensaje (un nivel), de forma que los flujos async se
 // resuelven en tests.
-func applyMsg(m *Model, msg tea.Msg) *Model {
+func applyMsg(t *testing.T, m *Model, msg tea.Msg) *Model {
 	next, cmd := m.Update(msg)
 	m = asModel(next)
 	if cmd != nil {
-		if out := cmd(); out != nil {
+		if out := mustMsg(t, cmd); out != nil {
 			next2, _ := m.Update(out)
 			m = asModel(next2)
 		}
@@ -112,7 +112,7 @@ func TestDetailDeleteComment(t *testing.T) {
 		t.Fatal("d con comentario seleccionado debe producir un comando")
 	}
 
-	m = applyMsg(m, cmd())
+	m = applyMsg(t, m, mustMsg(t, cmd))
 	if len(m.detailComments) != 1 {
 		t.Fatalf("comments = %d, want 1", len(m.detailComments))
 	}
@@ -137,7 +137,7 @@ func TestDetailDeleteLastCommentClearsSelection(t *testing.T) {
 
 	m, _ = press(m, "j")
 	m, cmd := press(m, "d")
-	m = applyMsg(m, cmd())
+	m = applyMsg(t, m, mustMsg(t, cmd))
 
 	if len(m.detailComments) != 0 {
 		t.Fatalf("comments = %d, want 0", len(m.detailComments))
@@ -161,7 +161,7 @@ func TestDetailDoneWithoutCommentSelection(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("d sin selección debe producir el comando Done")
 	}
-	applyMsg(m, cmd())
+	applyMsg(t, m, mustMsg(t, cmd))
 
 	stored, _ := m.database.GetTask(task.ID)
 	if stored.Status != "done" {
@@ -321,7 +321,7 @@ func TestCommentCmdEmptyBodyAddsNothing(t *testing.T) {
 	openDetail(m, task)
 
 	// Un comentario vacío no debe crear nada.
-	m = applyMsg(m, commentFinishedMsg{taskID: task.ID, body: ""})
+	m = applyMsg(t, m, commentFinishedMsg{taskID: task.ID, body: ""})
 	comments, _ := m.database.ListComments(task.ID)
 	if len(comments) != 0 {
 		t.Errorf("comentarios = %d, want 0", len(comments))
@@ -334,7 +334,7 @@ func TestCommentAddedSelectsNewest(t *testing.T) {
 	mustAddComment(t, m.database, task.ID, "viejo")
 	openDetail(m, task)
 
-	m = applyMsg(m, commentFinishedMsg{taskID: task.ID, body: "nuevo"})
+	m = applyMsg(t, m, commentFinishedMsg{taskID: task.ID, body: "nuevo"})
 	if len(m.detailComments) != 2 {
 		t.Fatalf("comments = %d, want 2", len(m.detailComments))
 	}
