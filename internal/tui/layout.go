@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	"tsk/internal/model"
@@ -106,6 +107,60 @@ func taskAt(tasks []model.Task, idx int) *model.Task {
 		return nil
 	}
 	return &tasks[idx]
+}
+
+// clampKanban mantiene el cursor del board dentro de lo que hay.
+//
+// colLens es el número de tarjetas de cada columna, en orden. Se pasa como
+// parámetro en vez de leerlo del modelo para que el contrato sea comprobable sin
+// construir un board: la regla (columna dentro, fila dentro de esa columna) es
+// lo que se quiere fijar, no el render.
+//
+// El motivo de que haga falta: filtrar por estado cambia el número de columnas
+// y con él el número de tarjetas de cada una, así que un índice que era válido
+// hace un momento puede quedarse fuera sin que nada lo haya tocado.
+func clampKanban(col, row int, colLens []int) (int, int) {
+	if len(colLens) == 0 {
+		return 0, 0
+	}
+	col = min(max(col, 0), len(colLens)-1)
+	n := colLens[col]
+	if n == 0 {
+		return col, 0
+	}
+	// La fila se acota por los dos lados. El inferior no lo acotaba el código
+	// anterior, pero un kanbanRow negativo indexaría por detrás: el clamp que
+	// promete "el cursor está dentro del board" tiene que cumplirlo también
+	// abajo, aunque hoy ningún camino del teclado produzca un negativo.
+	return col, min(max(row, 0), n-1)
+}
+
+// kanbanMaxCards es cuántas tarjetas se dibujan en una columna con el alto dado.
+//
+// Cada tarjeta ocupa kanbanCardRows filas, y el +1 del cociente hace que la
+// última se cuente aunque sólo entre su parte superior: mejor una tarjeta
+// recortada abajo que un hueco vacío en el fondo de la columna.
+//
+// El mínimo de una tarjeta garantiza que un terminal diminuto siga mostrando
+// algo en vez de degenerar en un tablero vacío.
+//
+// No hay un mínimo de filas de contenido porque no haría nada: con 0, 1 o 2
+// filas el cociente da 0 o 1 y el mínimo de una tarjeta lo resuelve igual. Ese
+// suelo era una rama que ningún test podía distinguir, igual que el
+// `if x < N { x = N }` de otras partes del código.
+func kanbanMaxCards(maxHeight int) int {
+	content := maxHeight - kanbanBoardChrome - filterHeaderRows
+	return max((content+1)/kanbanCardRows, 1)
+}
+
+// kanbanHeader rotula una columna. Cuando sólo se ve una parte de las tarjetas
+// dice cuántas de cuántas; si caben todas, sólo el total. El ancho del rótulo
+// es el mínimo de la columna, así que la diferencia de texto se nota.
+func kanbanHeader(status string, shown, total int) string {
+	if shown < total {
+		return fmt.Sprintf("─ %s (%d/%d) ", status, shown, total)
+	}
+	return fmt.Sprintf("─ %s (%d) ", status, total)
 }
 
 // previewBudgetFor son las líneas de descripción que caben sin empujar el
