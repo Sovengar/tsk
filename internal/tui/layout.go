@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 
+	"tsk/internal/model"
+
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -55,6 +57,58 @@ func contentBudget(total, previewH, keybindsH int) int {
 	budget := total - previewH - keybindsH
 	budget = max(budget, minContentHeight)
 	return budget
+}
+
+// ---- Aritmética de índices -------------------------------------------------
+//
+// Estas tres funciones existen porque la misma cuenta aparecía escrita en varios
+// sitios (navegación de List, de Kanban y del filtro de proyectos) con su
+// propio borde. Repetida, cada copia es un sitio donde un mutante puede colgar
+// el bucle y donde ningún test alcanza. Al sacarlas a funciones puras el
+// contrato queda en un sitio y se puede comprobar exhaustivamente, sin montar
+// una vista entera ni una base de datos.
+
+// cycleIndex mueve idx dentro de [0, n) dando la vuelta por el final.
+//
+// n <= 0 devuelve idx sin tocar: no hay lista a la que moverse y es mejor dejar
+// el índice como estaba que inventar un 0. delta puede ser negativo.
+func cycleIndex(idx, n, delta int) int {
+	if n <= 0 {
+		return idx
+	}
+	return ((idx+delta)%n + n) % n
+}
+
+// shiftIndex mueve idx dentro de [0, n) SIN dar la vuelta: se queda en el
+// extremo en lugar de saltar al otro lado.
+func shiftIndex(idx, n, delta int) int {
+	if n <= 0 {
+		return 0
+	}
+	return min(max(idx+delta, 0), n-1)
+}
+
+// inRange dice si idx es un índice válido dentro de una lista de n elementos.
+// Es la guarda que aparece antes de cada tasks[idx] del repo.
+func inRange(idx, n int) bool {
+	return idx >= 0 && idx < n
+}
+
+// nextPriority es el ciclo de la tecla de prioridad (ctrl+p).
+//
+// El ciclo depende del estado: en backlog incluye "none" (none→low→med→high→none,
+// cuatro peldaños) y fuera de backlog no (low→med→high→low, tres). Por eso no es
+// un `% 4` global.
+//
+// priority se recorta antes de ciclar porque llega de la base y allí no hay
+// garantía de que esté en 0..3: un 7 fuera de rango haría que low→low con el
+// ciclo de tres peldaños. Recortar hace que la función sea total.
+func nextPriority(status string, priority int) int {
+	p := min(max(priority, model.PriorityNone), model.PriorityHigh)
+	if status == "backlog" {
+		return (p + 1) % 4
+	}
+	return (p % 3) + 1
 }
 
 // joinSections une bloques verticalmente sin dejar filas vacías entre ellos.
