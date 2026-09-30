@@ -202,7 +202,7 @@ func kanbanColumnWidths(minWidths []int, avail int) []int {
 	for i := range widths {
 		widths[i] += each
 	}
-	for i := 0; i < free%n; i++ {
+	for i := range free % n {
 		widths[i]++
 	}
 	return widths
