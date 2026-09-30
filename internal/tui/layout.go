@@ -166,6 +166,28 @@ func kanbanHeader(status string, shown, total int) string {
 
 // ---- Reglas del modal de personas ---------------------------------------
 
+// currentProjectName es el proyecto sobre el que se opera: el del filtro si
+// lo hay, y si no el primero de la lista.
+//
+// El filtro sólo cuenta en List y Kanban: en Dashboard la selección va aparte y
+// el alta de tarea se hace sobre el primer proyecto, que es lo que se ve.
+//
+// Se extrajo como función pura porque la regla del "primer proyecto" estaba
+// escrita dentro de un switch sobre la vista, y sus bordes (sin proyectos,
+// filtro puesto en una vista que no lo usa) sólo se alcanzaban desde el teclado.
+func currentProjectName(view viewKind, filterProject string, projects []model.Project) string {
+	switch view {
+	case viewList, viewKanban:
+		if filterProject != "" {
+			return filterProject
+		}
+	}
+	if len(projects) > 0 {
+		return projects[0].Name
+	}
+	return ""
+}
+
 // buildAssigneeRoster construye el listado de personas del modal: cada una con
 // su total de tareas, cuántas siguen activas y cuántos off-days tiene.
 //
