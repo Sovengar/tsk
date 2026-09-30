@@ -72,14 +72,10 @@ func (p PreviewBar) descriptionLines(desc string) []string {
 	}
 
 	limit := p.width - previewIndent - 2 // bordes izquierdo y derecho
-	if limit < 1 {
-		limit = 1
-	}
+	limit = max(limit, 1)
 
 	maxLines := p.maxLines
-	if maxLines < 1 {
-		maxLines = 1
-	}
+	maxLines = max(maxLines, 1)
 
 	wrapped := strings.Split(ansi.Wrap(desc, limit, " "), "\n")
 	if len(wrapped) > maxLines {

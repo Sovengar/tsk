@@ -73,9 +73,9 @@ func TestAddOffdayFromModal(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("enter debe emitir el comando de alta")
 	}
-	saved, ok := cmd().(offdaySavedMsg)
+	saved, ok := mustMsg(t, cmd).(offdaySavedMsg)
 	if !ok || saved.err != nil {
-		t.Fatalf("alta msg = %#v", cmd())
+		t.Fatalf("alta msg = %#v", mustMsg(t, cmd))
 	}
 
 	next, _ := m.Update(saved)
@@ -87,7 +87,7 @@ func TestAddOffdayFromModal(t *testing.T) {
 		t.Error("tras el alta se debe entrar al detalle de la persona")
 	}
 
-	m = applyMsg(m, m.loadOffDays()())
+	m = applyMsg(t, m, m.loadOffDays()())
 
 	offs := m.assigneeOffDays(name)
 	if len(offs) != 1 {
@@ -108,9 +108,9 @@ func TestAddOffdayInvalidDateKeepsFormOpen(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("enter debe emitir el comando de alta")
 	}
-	saved, ok := cmd().(offdaySavedMsg)
+	saved, ok := mustMsg(t, cmd).(offdaySavedMsg)
 	if !ok || saved.err == nil {
-		t.Fatalf("se esperaba error de validación, msg = %#v", cmd())
+		t.Fatalf("se esperaba error de validación, msg = %#v", mustMsg(t, cmd))
 	}
 
 	next, _ := m.Update(saved)
@@ -156,14 +156,14 @@ func TestDeleteOffdayFromModal(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("y debe emitir el comando de borrado")
 	}
-	saved, ok := cmd().(offdaySavedMsg)
+	saved, ok := mustMsg(t, cmd).(offdaySavedMsg)
 	if !ok || saved.err != nil {
-		t.Fatalf("baja msg = %#v", cmd())
+		t.Fatalf("baja msg = %#v", mustMsg(t, cmd))
 	}
 
 	next, _ := m.Update(saved)
 	m = asModel(next)
-	m = applyMsg(m, m.loadOffDays()())
+	m = applyMsg(t, m, m.loadOffDays()())
 
 	if len(m.assigneeOffDays("@juan")) != 0 {
 		t.Error("el off-day debía borrarse")

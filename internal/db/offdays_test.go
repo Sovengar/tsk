@@ -106,8 +106,22 @@ func TestAddOffDayValidations(t *testing.T) {
 	if _, err := db.AddOffDay("@a", "not-a-date", "", ""); err == nil {
 		t.Error("invalid date should error")
 	}
-	if _, err := db.AddOffDay("@a", "2026-07-28", "2026-07-01", ""); err != nil {
-		t.Errorf("reversed range should be normalized, got %v", err)
+	o, err := db.AddOffDay("@a", "2026-07-28", "2026-07-01", "")
+	if err != nil {
+		t.Fatalf("reversed range should be normalized, got %v", err)
+	}
+	// Normalizar NO es "no fallar": el rango tiene que quedar ordenado. Antes
+	// este caso sólo comprobaba que no hubiera error, así que el swap en sí
+	// podía desaparecer sin que nada se enterase.
+	if o.StartDate != "2026-07-01" || o.EndDate != "2026-07-28" {
+		t.Errorf("rango invertido = %s→%s, want 2026-07-01→2026-07-28", o.StartDate, o.EndDate)
+	}
+	got, err := db.ListOffDays("@a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].StartDate != "2026-07-01" || got[0].EndDate != "2026-07-28" {
+		t.Errorf("rango invertido persistido = %+v, want 2026-07-01→2026-07-28", got)
 	}
 }
 

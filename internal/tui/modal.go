@@ -38,17 +38,13 @@ func overlayModal(content, modal string, totalWidth, w int) string {
 	modalH := len(modalLines)
 
 	startY := (len(lines) - modalH) / 2
-	if startY < 0 {
-		startY = 0
-	}
+	startY = max(startY, 0)
 	for len(lines) < startY+modalH {
 		lines = append(lines, strings.Repeat(" ", w))
 	}
 
 	startX := (w - totalWidth) / 2
-	if startX < 0 {
-		startX = 0
-	}
+	startX = max(startX, 0)
 
 	for i, ml := range modalLines {
 		lines[startY+i] = OverlayLine(lines[startY+i], ml, startX)

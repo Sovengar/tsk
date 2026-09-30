@@ -197,9 +197,12 @@ func TestListNavigation(t *testing.T) {
 		t.Errorf("k at top: cursor = %d, want 0", m.cursor)
 	}
 
-	// Llevar el cursor al final de la página
+	// Llevar el cursor al final de la página. El bucle va ACOTADO a propósito:
+	// "while cursor < final" se cuelga si un mutante deja de avanzar el cursor,
+	// y un test colgado se reporta como TIMED OUT en vez de como fallo, que es
+	// la peor señal posible en un gate.
 	tasks := m.filteredTasks()
-	for m.cursor < len(tasks)-1 {
+	for range len(tasks) + 2 {
 		m, _ = press(m, "j")
 	}
 	if m.cursor != len(tasks)-1 {

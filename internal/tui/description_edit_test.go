@@ -110,7 +110,7 @@ func TestDescEditorCtrlSSaves(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("Ctrl+S debe devolver cmd de guardado")
 	}
-	if msg := cmd(); msg == nil {
+	if msg := mustMsg(t, cmd); msg == nil {
 		t.Fatal("el cmd de guardado devolvió nil")
 	}
 

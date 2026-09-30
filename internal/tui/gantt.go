@@ -37,11 +37,10 @@ type ganttRow struct {
 func (m *Model) ganttSchedule() *model.Schedule {
 	now := time.Now()
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	estimate := m.config.DefaultEstimateDays
-	if estimate <= 0 {
-		estimate = 1
-	}
-	return model.BuildSchedule(m.tasks, m.offdays, start, estimate)
+	// El saneo del estimate (0 o negativo -> 1 día) lo hace BuildSchedule. Aquí
+	// había un guard idéntico que sólo podía producir el mismo valor: su mutant
+	// era equivalente por construcción, no una laguna de cobertura.
+	return model.BuildSchedule(m.tasks, m.offdays, start, m.config.DefaultEstimateDays)
 }
 
 // ganttDisplay aplica los filtros activos como filtro de VISTA sobre la
@@ -78,9 +77,7 @@ func (m *Model) snapGanttCursor() {
 		m.ganttCursor = 0
 		return
 	}
-	if m.ganttCursor < 0 {
-		m.ganttCursor = 0
-	}
+	m.ganttCursor = max(m.ganttCursor, 0)
 	if m.ganttCursor >= len(rows) {
 		m.ganttCursor = len(rows) - 1
 	}
@@ -88,25 +85,33 @@ func (m *Model) snapGanttCursor() {
 		return
 	}
 	// Cabecera: saltar a la primera tarea posterior; si no hay, a la anterior.
-	for i := m.ganttCursor + 1; i < len(rows); i++ {
-		if rows[i].kind == ganttTaskRow {
-			m.ganttCursor = i
+	// Se recorre con range sobre sub-rebanadas en vez de con un for de índice
+	// manual: un `i++` invertido deja el bucle colgado y el mutant se reporta
+	// como TIMED OUT, no como muerto.
+	for i, r := range rows[m.ganttCursor+1:] {
+		if r.kind == ganttTaskRow {
+			m.ganttCursor += 1 + i
 			return
 		}
 	}
-	for i := m.ganttCursor - 1; i >= 0; i-- {
-		if rows[i].kind == ganttTaskRow {
-			m.ganttCursor = i
+	for i := range m.ganttCursor {
+		if rows[m.ganttCursor-1-i].kind == ganttTaskRow {
+			m.ganttCursor -= 1 + i
 			return
 		}
 	}
 	m.ganttCursor = 0
 }
 
+// ganttNoTasks es el centinela que devuelve ganttTaskRange cuando la vista no
+// tiene ninguna fila de tarea. Es -1 y no 0 porque la fila 0 siempre es una
+// cabecera de persona cuando hay tareas.
+const ganttNoTasks = -1
+
 // ganttTaskRange devuelve el índice de la primera y última fila de tarea del
-// Gantt, o -1/-1 si no hay ninguna.
+// Gantt, o ganttNoTasks si no hay ninguna.
 func ganttTaskRange(rows []ganttRow) (first, last int) {
-	first, last = -1, -1
+	first, last = ganttNoTasks, ganttNoTasks
 	for i, r := range rows {
 		if r.kind == ganttTaskRow {
 			if first < 0 {
@@ -154,11 +159,14 @@ func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 	case "l", "right":
 		m.ganttOffsetDays++
 	case "g":
-		if first, _ := ganttTaskRange(rows); first >= 0 {
+		// -1 es el centinela de "no hay tareas". Comparar contra él en vez de
+		// contra 0 deja el `>=` como lo que es: el BOUNDARY de `>= 0` es
+		// equivalente porque toda cabecera ocupa la fila 0.
+		if first, _ := ganttTaskRange(rows); first != ganttNoTasks {
 			m.ganttCursor = first
 		}
 	case "G":
-		if _, last := ganttTaskRange(rows); last >= 0 {
+		if _, last := ganttTaskRange(rows); last != ganttNoTasks {
 			m.ganttCursor = last
 		}
 	case "enter":
@@ -191,29 +199,21 @@ func (m *Model) renderGantt(maxHeight int) string {
 	if innerW < 70 {
 		labelW = innerW / 3
 	}
-	if labelW < 14 {
-		labelW = 14
-	}
+	labelW = max(labelW, 14)
 	dayCols := innerW - labelW - 1
-	if dayCols < 7 {
-		dayCols = 7
-	}
+	dayCols = max(dayCols, 7)
 
 	start, _ := model.ParseDate(s.Start)
 	offset := m.ganttOffsetDays
-	if offset < 0 {
-		offset = 0
-	}
+	offset = max(offset, 0)
 
 	// Ventana vertical que sigue al cursor.
 	visible := maxHeight - listFixedRows - ganttRulerRows
-	if visible < 1 {
-		visible = 1
-	}
-	vStart, vEnd := 0, len(rows)
-	if len(rows) > visible {
-		vStart, vEnd = visibleRange(m.ganttCursor, len(rows), visible)
-	}
+	visible = max(visible, 1)
+	// visibleRange ya devuelve la ventana completa cuando todo cabe, así que el
+	// `if len(rows) > visible` de antes sólo tenía dos ramas con el mismo
+	// resultado: su BOUNDARY era un mutant equivalente.
+	vStart, vEnd := visibleRange(m.ganttCursor, len(rows), visible)
 
 	lines := []string{
 		m.renderFilterHeader(innerW),
@@ -225,9 +225,8 @@ func (m *Model) renderGantt(maxHeight int) string {
 		lines = append(lines, styleDim.Render("  No active tasks."))
 	}
 
-	for i := vStart; i < vEnd; i++ {
-		row := rows[i]
-		selected := i == m.ganttCursor
+	for i, row := range rows[vStart:vEnd] {
+		selected := i+vStart == m.ganttCursor
 		lines = append(lines, m.renderGanttRow(row, start, offset, dayCols, labelW, selected))
 	}
 
@@ -254,7 +253,7 @@ func (m *Model) renderGanttRuler(start time.Time, offset, labelW, dayCols int) s
 	for i := range ruler {
 		ruler[i] = ' '
 	}
-	for col := 0; col < dayCols; col++ {
+	for col := range dayCols {
 		day := start.AddDate(0, 0, offset+col)
 		if day.Weekday() != time.Monday {
 			continue
@@ -274,7 +273,7 @@ func (m *Model) renderGanttRuler(start time.Time, offset, labelW, dayCols int) s
 func (m *Model) renderGanttAxis(labelW, dayCols int, start time.Time, offset int) string {
 	var b strings.Builder
 	b.WriteString(strings.Repeat(" ", labelW+1))
-	for col := 0; col < dayCols; col++ {
+	for col := range dayCols {
 		if start.AddDate(0, 0, offset+col).Weekday() == time.Monday {
 			b.WriteString("|")
 		} else {
@@ -295,7 +294,7 @@ func (m *Model) renderGanttRow(row ganttRow, start time.Time, offset, dayCols, l
 	d1 := daysBetween(start, e.End)
 
 	cells := make([]rune, dayCols)
-	for col := 0; col < dayCols; col++ {
+	for col := range dayCols {
 		d := offset + col
 		day := start.AddDate(0, 0, d)
 		switch {

@@ -26,6 +26,16 @@ func TestParseWorkflowWithSpaces(t *testing.T) {
 	}
 }
 
+func TestParseWorkflowSoloEspacios(t *testing.T) {
+	// Separadores y blanks: no queda ningún estado, así que es un workflow
+	// inválido. Los blanks descartados aquí son los que se quedaban por
+	// completo compuestos de espacios, así que este caso también cubre el
+	// trim en sus dos extremos.
+	if _, err := ParseWorkflow("  ,  ,"); err == nil {
+		t.Error("workflow sólo con espacios debería fallar")
+	}
+}
+
 func TestValidateListOrder(t *testing.T) {
 	wf := []string{"todo", "doing", "review", "done"}
 
@@ -75,6 +85,33 @@ func TestFindStatusContaining(t *testing.T) {
 	}
 }
 
+// TestFindStatusContainingBordes cubre los bordes de la búsqueda parcial: el
+// sufijo, la cadena vacía y la coincidencia de la misma longitud que el
+// status. Ninguno debe depender de un recorrido con off-by-one.
+func TestFindStatusContainingBordes(t *testing.T) {
+	tests := []struct {
+		name   string
+		wf     []string
+		substr string
+		want   string
+		wantOK bool
+	}{
+		{"sufijo", []string{"in_review"}, "review", "in_review", true},
+		{"estado completo", []string{"todo", "done"}, "todo", "todo", true},
+		{"substr más largo que el status", []string{"todo"}, "todo_y_mas", "", false},
+		{"substr vacío no matchea", []string{"todo", "done"}, "", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, ok := FindStatusContaining(tt.wf, tt.substr)
+			if ok != tt.wantOK || (tt.wantOK && s != tt.want) {
+				t.Errorf("FindStatusContaining(%v, %q) = %q, %v; want %q, %v",
+					tt.wf, tt.substr, s, ok, tt.want, tt.wantOK)
+			}
+		})
+	}
+}
+
 func TestTerminalStatus(t *testing.T) {
 	wf := []string{"backlog", "todo", "done"}
 	if got := TerminalStatus(wf); got != "done" {
@@ -104,6 +141,31 @@ func TestStartStatus(t *testing.T) {
 	wf3 := []string{"done"}
 	if got := StartStatus(wf3); got != "done" {
 		t.Errorf("StartStatus (single) = %q, want done", got)
+	}
+}
+
+// TestStartStatusWorkflowsCortosFixed el arranque con un workflow degenerado:
+// vacío, de un solo estado o de exactamente [backlog, X]. El contrato es que
+// nunca se devuelve un estado que no exista en el workflow, salvo el terminal.
+func TestStartStatusWorkflowsCortos(t *testing.T) {
+	tests := []struct {
+		name string
+		wf   []string
+		want string
+	}{
+		{"vacío", nil, "done"},
+		{"un solo estado no terminal", []string{"todo"}, "done"},
+		{"backlog + exactamente uno", []string{"backlog", "todo"}, "todo"},
+		// El arranque es el segundo elemento tal cual: no se salta al terminal.
+		{"backlog + done", []string{"backlog", "done"}, "done"},
+		{"sin backlog, un estado más", []string{"todo", "done"}, "todo"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StartStatus(tt.wf); got != tt.want {
+				t.Errorf("StartStatus(%v) = %q, want %q", tt.wf, got, tt.want)
+			}
+		})
 	}
 }
 

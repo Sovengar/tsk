@@ -1,9 +1,11 @@
 # .mutation-allowlist - surviving (LIVED) mutants accepted as already known.
 #
 # SCOPE: this allowlist covers ONLY the packages inside the mutation gate scope
-# (see MUTATE_EXCLUDE in the Makefile): internal/db, internal/model and
-# internal/config. Mutations outside that scope are not run at all, so they can
-# never appear here.
+# (see MUTATE_EXCLUDE in the Makefile): internal/cli, internal/db, internal/model
+# and internal/config. Mutations outside that scope are not run at all, so they
+# can never appear here. internal/tui and cmd/ are still excluded because they
+# have no tests (uncovered code produces no mutants, so gating them would be a
+# green check that cannot fail).
 #
 # Format:  <MUTATOR> <file>:<line>
 #
@@ -12,23 +14,55 @@
 # conscious, accepted risk. Adding a real test gap here hides a real risk, and
 # mutation testing exists precisely to surface those.
 #
-# Seeded from a full-module `go tool gremlins unleash` run. Entries are keyed by
-# LINE NUMBER, so inserting code above an entry shifts it and will surface a new
-# red on purpose: re-verify the gap and update this file, do not regenerate it
-# wholesale (that would silently re-hide real gaps).
-CONDITIONALS_BOUNDARY internal/config/config.go:89
-CONDITIONALS_BOUNDARY internal/config/config.go:92
-CONDITIONALS_BOUNDARY internal/model/gantt.go:112
-CONDITIONALS_BOUNDARY internal/model/gantt.go:152
+# Entries are keyed by LINE NUMBER, so inserting code above an entry shifts it
+# and will surface a new red on purpose: re-verify the gap and update this file,
+# do not regenerate it wholesale (that would silently re-hide real gaps).
+#
+# ---------------------------------------------------------------------------
+# Both remaining entries are the SAME expression, `x > epsilon` / `x <= epsilon`
+# where epsilon is 1e-9, and both need a float to land EXACTLY on epsilon. That
+# is unreachable, and the proof is arithmetic, not a guess:
+#
+#   capacity is only ever 1.0 or `1.0 - consume`, and remaining is only ever an
+#   input estimate minus such a value. Every subtraction there is exact
+#   (Sterbenz: the operands are within a factor of 2), so the result is always a
+#   multiple of 2^-53. The float64 nearest 1e-9 is 332103651088021 * 2^-82 with
+#   an ODD mantissa, so it is not a multiple of 2^-53 and can never be produced.
+#   Verified at runtime, with variables so the compiler cannot fold the
+#   arithmetic at compile time: 1.0-(1.0-1e-9) = 9.999999717180685e-10 != 1e-9.
+#
+# The equivalent way to remove them is to stop doing day arithmetic in floats
+# (integer minutes), which is a behaviour-visible refactor of the scheduler, not
+# a test change. Until that happens these two are documented, not hidden.
+# ---------------------------------------------------------------------------
+
+# `if capacity <= epsilon` -> `capacity < epsilon`. Differs only at capacity ==
+# epsilon, which the arithmetic above rules out.
 CONDITIONALS_BOUNDARY internal/model/gantt.go:153
-CONDITIONALS_BOUNDARY internal/model/gantt.go:162
+
+# `if remaining > epsilon` -> `remaining >= epsilon`. Same threshold, same
+# unreachability. Note the loop guard on the line above uses the same
+# comparison and IS killable, because `remaining` there is the raw input
+# estimate: TestBuildScheduleEstimateEnElSuelo passes epsilon exactly.
 CONDITIONALS_BOUNDARY internal/model/gantt.go:167
-CONDITIONALS_BOUNDARY internal/model/gantt.go:181
-CONDITIONALS_BOUNDARY internal/model/project.go:180
-CONDITIONALS_BOUNDARY internal/model/project.go:183
-CONDITIONALS_BOUNDARY internal/model/project.go:190
-CONDITIONALS_BOUNDARY internal/model/project.go:194
-CONDITIONALS_BOUNDARY internal/model/project.go:79
-CONDITIONALS_BOUNDARY internal/model/project.go:82
-CONDITIONALS_NEGATION internal/config/config.go:89
-CONDITIONALS_NEGATION internal/config/config.go:92
+
+# ---------------------------------------------------------------------------
+# internal/cli
+# ---------------------------------------------------------------------------
+
+# `if n, err := strconv.Atoi(v); err == nil && n > 0` -> `n >= 0`. The only
+# differing input is `--weeks 0`, and both forms end up with weeks == 0, which
+# the caller immediately replaces with the config value (`if weeks <= 0`).
+# There is no input for which the two branches lead anywhere different.
+CONDITIONALS_BOUNDARY internal/cli/cli.go:828
+
+# `if len(updates) > 0` / `len(tagsAdd) > 0` / `len(tagsRemove) > 0` -> `>= 0`.
+# All three guard an empty collection. Calling them with an empty one is a
+# no-op: AddTaskTags/RemoveTaskTags with no tags change nothing, and
+# UpdateTask with no fields builds "SET updated_at = ?" -- the only difference
+# is that a timestamp moves, which is what the guard exists to prevent and what
+# no behaviour test pins. TestUpdateWithoutFlagsIsAnExactNoop covers the
+# fields and the tags surviving; it cannot catch a sub-second timestamp bump.
+CONDITIONALS_BOUNDARY internal/cli/cli.go:1056
+CONDITIONALS_BOUNDARY internal/cli/cli.go:1066
+CONDITIONALS_BOUNDARY internal/cli/cli.go:1071

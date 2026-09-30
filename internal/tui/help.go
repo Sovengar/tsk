@@ -88,9 +88,7 @@ func (m *Model) renderHelpModal(content string) string {
 
 	// Center vertically
 	startY := (totalLines - modalH) / 2
-	if startY < 0 {
-		startY = 0
-	}
+	startY = max(startY, 0)
 
 	// Pad background if modal is taller (like dbx does)
 	for len(lines) < startY+modalH {
@@ -100,9 +98,7 @@ func (m *Model) renderHelpModal(content string) string {
 	// Center horizontally — account for border (2 chars total)
 	totalModalW := modalWidth + 2
 	startX := (w - totalModalW) / 2
-	if startX < 0 {
-		startX = 0
-	}
+	startX = max(startX, 0)
 
 	for i, ml := range modalLines {
 		y := startY + i

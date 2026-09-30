@@ -1,12 +1,190 @@
 package db
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"tsk/internal/model"
 )
 
 // --- Projects ---
+
+// TestOpenFilePersistsAndSkipsMigrations cubre el camino de fichero, que los
+// tests en :memory: no tocaban nunca: Open() debe escribir en disco (y no caer
+// al atajo de memoria) y, al reabrir, NO debe volver a ejecutar migraciones
+// (si se ejecutaran, los ALTER TABLE revientarían con "duplicate column").
+func TestOpenFilePersistsAndSkipsMigrations(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tsk.db")
+
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustCreateProject(t, db, "api", nil)
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// El fichero existe de verdad: si Open("<path>") se colara por el atajo de
+	// :memory:, aquí no habría nada en disco.
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("Open(%q) no creó el fichero: %v", path, err)
+	}
+
+	// Reabrir sobre el mismo fichero: las migraciones pendientes son ninguna.
+	db2, err := Open(path)
+	if err != nil {
+		t.Fatalf("reabrir no debe re-ejecutar migraciones: %v", err)
+	}
+	t.Cleanup(func() { _ = db2.Close() })
+
+	p, err := db2.GetProject("api")
+	if err != nil {
+		t.Fatalf("el proyecto no sobrevivió al cierre: %v", err)
+	}
+	if p.Name != "api" {
+		t.Errorf("name = %q, want api", p.Name)
+	}
+	// El schema está completo tras reabrir (offdays = migración 007, tags = 008).
+	tasks, err := db2.ListTasks("api", "", "")
+	if err != nil {
+		t.Fatalf("schema incompleto tras reabrir: %v", err)
+	}
+	if len(tasks) != 0 {
+		t.Errorf("tasks = %d, want 0", len(tasks))
+	}
+}
+
+// TestSchemaVersionIsRecordedAndStable verifica que la versión aplicada queda
+// persistida y que un segundo Open no la altera: es el estado del que depende
+// el salto de migraciones (v <= currentVersion).
+func TestSchemaVersionIsRecordedAndStable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tsk.db")
+
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var first string
+	if err := db.conn.QueryRow(`SELECT value FROM _meta WHERE key = 'schema_version'`).Scan(&first); err != nil {
+		t.Fatal(err)
+	}
+	if first == "" {
+		t.Fatal("schema_version no se guardó tras las migraciones")
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db2, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db2.Close() })
+
+	var second string
+	if err := db2.conn.QueryRow(`SELECT value FROM _meta WHERE key = 'schema_version'`).Scan(&second); err != nil {
+		t.Fatal(err)
+	}
+	if second != first {
+		t.Errorf("schema_version = %q tras reabrir, want %q", second, first)
+	}
+}
+
+// TestMigrationsRunExactlyOnce verifica que reabrir NO re-ejecute la última
+// migración. Es el único sitio donde se puede distinguir `v <= currentVersion`
+// de `v < currentVersion`: el mutant re-ejecutaría la última migración en cada
+// Open. Para que la re-ejecución sea observable, se añade una migración
+// contador; el resto son CREATE TABLE IF NOT EXISTS, que re-ejecutar no cambia
+// nada visible.
+func TestMigrationsRunExactlyOnce(t *testing.T) {
+	orig := migrations
+	t.Cleanup(func() { migrations = orig })
+
+	type migration = struct {
+		version string
+		query   string
+		run     func(*DB) error
+	}
+
+	applied := 0
+	migrations = append(append([]migration{}, orig...),
+		migration{"900", "", func(*DB) error {
+			applied++
+			return nil
+		}},
+	)
+
+	const opens = 3
+	dir := t.TempDir()
+	for i := range opens {
+		database, err := Open(filepath.Join(dir, "tsk.db"))
+		if err != nil {
+			t.Fatalf("Open %d: %v", i, err)
+		}
+		if err := database.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if applied != 1 {
+		t.Errorf("migración ejecutada %d veces en %d Open, want 1", applied, opens)
+	}
+}
+
+// TestUpdateProjectForcePropagatesTaskUpdateError comprueba que el --force no
+// se traga un fallo al reasignar las tareas: con `err == nil` en vez de
+// `err != nil` el UPDATE fallaría en silencio, las tareas conservarían el
+// estado eliminado y el caller recibiría nil.
+//
+// El fallo se inyecta con un trigger que aborta SOLO ese UPDATE: es la única
+// forma de que una sentencia bien formada falle a través de la API pública
+// (cerrar la conexión no sirve, porque UpdateProject ya falla antes en su
+// primer SELECT). El trigger modela además la invariante real: una tarea no
+// puede quedar en un estado que el nuevo workflow ya no tiene.
+func TestUpdateProjectForcePropagatesTaskUpdateError(t *testing.T) {
+	database := newTestDB(t)
+	mustCreateProject(t, database, "api", []string{"backlog", "todo", "reviewing", "done"})
+	mustCreateTask(t, database, "api", "tarea", "", "@a", 0, "todo")
+
+	if _, err := database.conn.Exec(`
+		CREATE TRIGGER reject_move BEFORE UPDATE OF status ON tasks
+		WHEN NEW.status = 'backlog'
+		BEGIN SELECT RAISE(ABORT, 'move rejected'); END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	err := database.UpdateProject("api", map[string]any{
+		"workflow": []string{"backlog", "done"},
+		"force":    true,
+	})
+	if err == nil {
+		t.Fatal("UpdateProject(--force) debería propagar el fallo del UPDATE de tareas")
+	}
+	if !strings.Contains(err.Error(), "move rejected") {
+		t.Errorf("error = %q, want it to carry the UPDATE failure", err)
+	}
+}
+
+// TestUpdateProjectDuplicateNameAfterForce comprueba que el mensaje de
+// duplicado en un UPDATE (no en un INSERT) también sale de isUniqueViolation y
+// no de un error genérico: es el otro consumidor de esa función.
+func TestUpdateProjectDuplicateNameAfterForce(t *testing.T) {
+	database := newTestDB(t)
+	mustCreateProject(t, database, "api", nil)
+	mustCreateProject(t, database, "web", nil)
+
+	err := database.UpdateProject("api", map[string]any{"name": "web"})
+	if err == nil {
+		t.Fatal("expected duplicate name error")
+	}
+	if !strings.Contains(err.Error(), "project already exists") {
+		t.Errorf("duplicate rename error = %q, want it to mention %q", err, "project already exists")
+	}
+}
 
 func TestCreateAndGetProject(t *testing.T) {
 	db := newTestDB(t)
@@ -35,8 +213,17 @@ func TestCreateProjectDuplicate(t *testing.T) {
 	if _, err := db.CreateProject("api", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CreateProject("api", nil); err == nil {
-		t.Error("expected duplicate error")
+	// El mensaje importa: el índice UNIQUE de `name` es lo que detecta el
+	// duplicado y isUniqueViolation lo traduce a "project already exists". Un
+	// "create project: UNIQUE constraint failed" significa que la traducción
+	// dejó de funcionar, que es justo lo queMutation no ve si sólo se comprueba
+	// que err != nil.
+	_, err := db.CreateProject("api", nil)
+	if err == nil {
+		t.Fatal("expected duplicate error")
+	}
+	if !strings.Contains(err.Error(), "project already exists") {
+		t.Errorf("duplicate error = %q, want it to mention %q", err, "project already exists")
 	}
 }
 

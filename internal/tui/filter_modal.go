@@ -271,9 +271,7 @@ func (m *Model) clampFilterOption() {
 	if m.filterOptionIdx >= len(opts) {
 		m.filterOptionIdx = len(opts) - 1
 	}
-	if m.filterOptionIdx < 0 {
-		m.filterOptionIdx = 0
-	}
+	m.filterOptionIdx = max(m.filterOptionIdx, 0)
 }
 
 // filterMoveField mueve el foco entre campos y resincroniza el cursor.
@@ -421,8 +419,9 @@ func (m *Model) renderFilterModal(content string) string {
 			continue
 		}
 		start, end := visibleRange(m.filterOptionIdx, len(opts), filterMaxVisibleOptions)
-		for i := start; i < end; i++ {
-			applied := opts[i] == current
+		for i, opt := range opts[start:end] {
+			i += start
+			applied := opt == current
 			mark := "  "
 			if applied {
 				mark = "● "

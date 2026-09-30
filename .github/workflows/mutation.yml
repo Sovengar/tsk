@@ -71,8 +71,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-          # Makefile is part of the cache key: MUTATE_BASE and the tool wiring live
-          # there, so changing them busts stale module caches.
+          # Makefile is part of the cache key: MUTATE_BASE, MUTATE_TIMEOUT and the
+          # tool wiring live there, so changing them busts stale module caches.
           cache-dependency-path: |
             go.sum
             Makefile
@@ -101,7 +101,13 @@ jobs:
         # A gremlins crash must not be read as a mutation failure: the Gate step
         # below decides, and it treats a missing report.json as "no result".
         continue-on-error: true
-        run: make mutate-diff MUTATE_BASE=origin/${{ github.base_ref || github.event.repository.default_branch }}
+        # `tee` keeps the full gremlins output in mutate.log. It matters because
+        # report.json does NOT contain TIMED OUT mutants, so a mutant that timed
+        # out is indistinguishable from one that never ran. The Gate step reads
+        # that log to turn timeouts into a failure instead of a silent pass.
+        run: |
+          set -o pipefail
+          make mutate-diff MUTATE_BASE=origin/${{ github.base_ref || github.event.repository.default_branch }} 2>&1 | tee mutate.log
 
       # Blocking gate: fail on any surviving mutant in the diff that is not already
       # listed in .mutation-allowlist.
@@ -115,8 +121,30 @@ jobs:
           : > "$S"
           echo "### Mutation testing" >> "$S"
 
+          # A timed-out mutant is NOT a surviving one: it is a mutant whose
+          # result nobody knows, and gremlins keeps it out of report.json
+          # entirely. Treating that as a pass is how 21 real survivors in
+          # internal/db stayed hidden behind a green gate: the calibration run
+          # that produced the allowlist timed out 201 mutants, and a timeout
+          # reads exactly like "nothing to report here". So timeouts are a hard
+          # failure, checked BEFORE the report: the run is incomplete, and an
+          # incomplete measurement must never be reported as a clean one.
+          if [ -f mutate.log ] && grep -qE '^[[:space:]]*TIMED OUT ' mutate.log; then
+            n=$(grep -cE '^[[:space:]]*TIMED OUT ' mutate.log)
+            echo "- TIMED OUT: $n" >> "$S"
+            echo "" >> "$S"
+            echo "::error::$n mutant(s) timed out: the measurement is incomplete, so the gate cannot pass." >> "$S"
+            echo "Raise MUTATE_TIMEOUT (Makefile) or make the slow package faster, then re-run." >> "$S"
+            {
+              echo ""
+              echo "First timed-out mutants:"
+              grep -E '^[[:space:]]*TIMED OUT ' mutate.log | sort -u | head -20 | sed 's/^/  /'
+            } >> "$S"
+            exit 1
+          fi
+
           if [ ! -f report.json ]; then
-            echo "- no report.json (timed out, or gremlins crashed) -> no result, gate passes" >> "$S"
+            echo "- no report.json (gremlins crashed) -> no result, gate passes" >> "$S"
             exit 0
           fi
 
@@ -126,7 +154,7 @@ jobs:
           echo "- not covered: $(jq -r '.mutants_not_covered' report.json)" >> "$S"
           echo "- test efficacy: $(jq -r '.test_efficacy' report.json)%" >> "$S"
           echo "- mutator coverage: $(jq -r '.mutations_coverage' report.json)%" >> "$S"
-          echo "- note: gremlins does not report TIMED OUT mutants in report.json, and efficacy excludes them" >> "$S"
+          echo "- note: gremlins omits TIMED OUT mutants from report.json; this gate fails on them explicitly (see mutate.log)" >> "$S"
 
           jq -r '.files[] | .file_name as $f | .mutations[] | select(.status=="LIVED") | "\(.type) \($f):\(.line)"' report.json | sort -u > /tmp/lived.txt
           total=$(wc -l < /tmp/lived.txt)

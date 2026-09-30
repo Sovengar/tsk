@@ -124,9 +124,7 @@ func (m *Model) clampAssigneeIdx() {
 	if m.assigneeIdx >= n {
 		m.assigneeIdx = n - 1
 	}
-	if m.assigneeIdx < 0 {
-		m.assigneeIdx = 0
-	}
+	m.assigneeIdx = max(m.assigneeIdx, 0)
 }
 
 // clampOffdayIdx mantiene el índice de off-days dentro de rango.
@@ -139,9 +137,7 @@ func (m *Model) clampOffdayIdx() {
 	if m.assigneeOffdayIdx >= n {
 		m.assigneeOffdayIdx = n - 1
 	}
-	if m.assigneeOffdayIdx < 0 {
-		m.assigneeOffdayIdx = 0
-	}
+	m.assigneeOffdayIdx = max(m.assigneeOffdayIdx, 0)
 }
 
 // selectionPrefix devuelve el indicador de fila seleccionada.
@@ -308,8 +304,8 @@ func (m *Model) renderAssigneeModal(content string) string {
 		lines = append(lines, styleDim.Render("  (no assignees)"))
 	}
 	start, end := visibleRange(m.assigneeIdx, len(roster), assigneeModalMaxRows)
-	for i := start; i < end; i++ {
-		s := roster[i]
+	for i, s := range roster[start:end] {
+		i += start
 		line := fmt.Sprintf("%s%s %2d tasks (%d active)  %d off-days",
 			selectionPrefix(i == m.assigneeIdx), cellWidth(s.Name, 16), s.Total, s.Active, s.OffDayCount)
 		if i == m.assigneeIdx {
@@ -361,8 +357,8 @@ func (m *Model) renderAssigneeDetail(content string) string {
 		lines = append(lines, styleDim.Render("  (none)"))
 	}
 	start, end := visibleRange(m.assigneeOffdayIdx, len(offs), assigneeModalOffRows)
-	for i := start; i < end; i++ {
-		o := offs[i]
+	for i, o := range offs[start:end] {
+		i += start
 		note := ""
 		if o.Note != "" {
 			note = "  " + o.Note

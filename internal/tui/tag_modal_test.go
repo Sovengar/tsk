@@ -50,7 +50,7 @@ func TestTagModalTogglesTag(t *testing.T) {
 	if m2.tagInput != "" {
 		t.Errorf("el input debería limpiarse tras el toggle: %q", m2.tagInput)
 	}
-	next, _ = m2.Update(cmd())
+	next, _ = m2.Update(mustMsg(t, cmd))
 	m2 = next.(Model)
 
 	got, err := m2.database.GetTask(taskID)
@@ -68,7 +68,7 @@ func TestTagModalTogglesTag(t *testing.T) {
 	m2 = typeTag(m2, "blocked")
 	next, cmd = m2.handleTagModalKey("enter")
 	m2 = next.(Model)
-	next, _ = m2.Update(cmd())
+	next, _ = m2.Update(mustMsg(t, cmd))
 	m2 = next.(Model)
 
 	got, _ = m2.database.GetTask(taskID)

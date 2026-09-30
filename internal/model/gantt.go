@@ -158,10 +158,10 @@ func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstim
 					entryStart = cursor
 					started = true
 				}
-				consume := remaining
-				if consume > capacity {
-					consume = capacity
-				}
+				// min() en vez de `if consume > capacity`: cuando ambos valen
+				// lo mismo el if sólo reasignaba el mismo valor, así que la
+				// rama era un mutant equivalente sin cobertura posible.
+				consume := min(remaining, capacity)
 				remaining -= consume
 				capacity -= consume
 				if remaining > epsilon {
@@ -177,9 +177,11 @@ func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstim
 				Estimate:          est,
 				EstimateDefaulted: def,
 			})
-		}
-		if n := len(s.Entries); n > 0 {
-			s.End = s.Entries[n-1].End
+			// End del assignee = fin de su última entrada. Se asigna dentro
+			// del bucle en vez de con `if n := len(s.Entries); n > 0`: la
+			// cola nunca está vacía (todo assignee viene de >= 1 tarea), así
+			// que ese `> 0` era siempre cierto y su mutant no se distinguía.
+			s.End = s.Entries[len(s.Entries)-1].End
 		}
 		sched.Assignees = append(sched.Assignees, s)
 	}

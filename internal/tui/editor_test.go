@@ -20,7 +20,7 @@ func TestUpdateTaskFromEditApplied(t *testing.T) {
 		t.Fatal("updateTaskFromEdit devolvió nil")
 	}
 
-	msg := cmd()
+	msg := mustMsg(t, cmd)
 	if _, ok := msg.(tasksLoadedMsg); !ok {
 		t.Fatalf("se esperaba tasksLoadedMsg, se obtuvo %T", msg)
 	}
@@ -53,7 +53,7 @@ func TestCreateTaskCmdApplied(t *testing.T) {
 		t.Fatal("createTaskCmd devolvió nil")
 	}
 
-	msg := cmd()
+	msg := mustMsg(t, cmd)
 	loaded, ok := msg.(tasksLoadedMsg)
 	if !ok {
 		t.Fatalf("se esperaba tasksLoadedMsg, se obtuvo %T", msg)
@@ -84,7 +84,7 @@ func TestEditorFinishedFlow(t *testing.T) {
 		t.Fatal("Update(editorFinishedMsg) no devolvió cmd")
 	}
 
-	msg := cmd()
+	msg := mustMsg(t, cmd)
 	loaded, ok := msg.(tasksLoadedMsg)
 	if !ok {
 		t.Fatalf("se esperaba tasksLoadedMsg, se obtuvo %T", msg)

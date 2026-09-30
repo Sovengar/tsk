@@ -28,9 +28,12 @@ func (db *DB) AddOffDay(assignee, startDate, endDate, note string) (*model.OffDa
 	if _, err := model.ParseDate(endDate); err != nil {
 		return nil, fmt.Errorf("invalid end date %q (want YYYY-MM-DD)", endDate)
 	}
-	if endDate < startDate {
-		startDate, endDate = endDate, startDate
-	}
+	// Normaliza el rango con min/max en vez de con un
+	// `if endDate < startDate` + swap: cuando start == end el swap reasignaba
+	// el mismo valor a las dos variables, así que la rama era un mutant
+	// equivalente que ningún test podía matar. El RHS se evalúa entero antes
+	// de asignar, así que min y max leen los valores originales.
+	startDate, endDate = min(startDate, endDate), max(startDate, endDate)
 
 	result, err := db.conn.Exec(
 		`INSERT INTO offdays (assignee, start_date, end_date, note) VALUES (?, ?, ?, ?)`,
