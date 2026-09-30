@@ -37,11 +37,10 @@ type ganttRow struct {
 func (m *Model) ganttSchedule() *model.Schedule {
 	now := time.Now()
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	estimate := m.config.DefaultEstimateDays
-	if estimate <= 0 {
-		estimate = 1
-	}
-	return model.BuildSchedule(m.tasks, m.offdays, start, estimate)
+	// El saneo del estimate (0 o negativo -> 1 día) lo hace BuildSchedule. Aquí
+	// había un guard idéntico que sólo podía producir el mismo valor: su mutant
+	// era equivalente por construcción, no una laguna de cobertura.
+	return model.BuildSchedule(m.tasks, m.offdays, start, m.config.DefaultEstimateDays)
 }
 
 // ganttDisplay aplica los filtros activos como filtro de VISTA sobre la
@@ -104,10 +103,15 @@ func (m *Model) snapGanttCursor() {
 	m.ganttCursor = 0
 }
 
+// ganttNoTasks es el centinela que devuelve ganttTaskRange cuando la vista no
+// tiene ninguna fila de tarea. Es -1 y no 0 porque la fila 0 siempre es una
+// cabecera de persona cuando hay tareas.
+const ganttNoTasks = -1
+
 // ganttTaskRange devuelve el índice de la primera y última fila de tarea del
-// Gantt, o -1/-1 si no hay ninguna.
+// Gantt, o ganttNoTasks si no hay ninguna.
 func ganttTaskRange(rows []ganttRow) (first, last int) {
-	first, last = -1, -1
+	first, last = ganttNoTasks, ganttNoTasks
 	for i, r := range rows {
 		if r.kind == ganttTaskRow {
 			if first < 0 {
@@ -155,11 +159,14 @@ func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 	case "l", "right":
 		m.ganttOffsetDays++
 	case "g":
-		if first, _ := ganttTaskRange(rows); first >= 0 {
+		// -1 es el centinela de "no hay tareas". Comparar contra él en vez de
+		// contra 0 deja el `>=` como lo que es: el BOUNDARY de `>= 0` es
+		// equivalente porque toda cabecera ocupa la fila 0.
+		if first, _ := ganttTaskRange(rows); first != ganttNoTasks {
 			m.ganttCursor = first
 		}
 	case "G":
-		if _, last := ganttTaskRange(rows); last >= 0 {
+		if _, last := ganttTaskRange(rows); last != ganttNoTasks {
 			m.ganttCursor = last
 		}
 	case "enter":
@@ -203,10 +210,10 @@ func (m *Model) renderGantt(maxHeight int) string {
 	// Ventana vertical que sigue al cursor.
 	visible := maxHeight - listFixedRows - ganttRulerRows
 	visible = max(visible, 1)
-	vStart, vEnd := 0, len(rows)
-	if len(rows) > visible {
-		vStart, vEnd = visibleRange(m.ganttCursor, len(rows), visible)
-	}
+	// visibleRange ya devuelve la ventana completa cuando todo cabe, así que el
+	// `if len(rows) > visible` de antes sólo tenía dos ramas con el mismo
+	// resultado: su BOUNDARY era un mutant equivalente.
+	vStart, vEnd := visibleRange(m.ganttCursor, len(rows), visible)
 
 	lines := []string{
 		m.renderFilterHeader(innerW),
