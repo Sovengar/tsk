@@ -18,7 +18,10 @@ func fuzzyScore(query, target string) (int, bool) {
 		return 1000 - idx*10 - (len(t) - len(q)), true
 	}
 	qi := 0
-	for ti := 0; ti < len(t) && qi < len(q); ti++ {
+	for ti := range len(t) {
+		if qi >= len(q) {
+			break
+		}
 		if q[qi] == t[ti] {
 			qi++
 		}

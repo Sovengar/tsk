@@ -63,7 +63,7 @@ func visibleListColumns(avail int) int {
 // formatListRow alinea las celdas de una fila a los anchos de cada columna.
 func formatListRow(cells []string, count int) string {
 	parts := make([]string, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		parts[i] = cellWidth(cells[i], listColumns[i].width)
 	}
 	return strings.Join(parts, " ")
@@ -100,8 +100,8 @@ func (m *Model) renderList(maxHeight int) string {
 
 	// Tasks
 	taskLines := []string{}
-	for i := start; i < end; i++ {
-		t := tasks[i]
+	for i, t := range tasks[start:end] {
+		i += start
 		prio := priorityChar(t.Priority) + " " + model.PriorityShortLabel(t.Priority)
 		cells := []string{
 			prio,

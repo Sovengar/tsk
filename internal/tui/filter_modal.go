@@ -421,8 +421,9 @@ func (m *Model) renderFilterModal(content string) string {
 			continue
 		}
 		start, end := visibleRange(m.filterOptionIdx, len(opts), filterMaxVisibleOptions)
-		for i := start; i < end; i++ {
-			applied := opts[i] == current
+		for i, opt := range opts[start:end] {
+			i += start
+			applied := opt == current
 			mark := "  "
 			if applied {
 				mark = "● "

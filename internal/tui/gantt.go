@@ -88,15 +88,18 @@ func (m *Model) snapGanttCursor() {
 		return
 	}
 	// Cabecera: saltar a la primera tarea posterior; si no hay, a la anterior.
-	for i := m.ganttCursor + 1; i < len(rows); i++ {
-		if rows[i].kind == ganttTaskRow {
-			m.ganttCursor = i
+	// Se recorre con range sobre sub-rebanadas en vez de con un for de índice
+	// manual: un `i++` invertido deja el bucle colgado y el mutant se reporta
+	// como TIMED OUT, no como muerto.
+	for i, r := range rows[m.ganttCursor+1:] {
+		if r.kind == ganttTaskRow {
+			m.ganttCursor += 1 + i
 			return
 		}
 	}
-	for i := m.ganttCursor - 1; i >= 0; i-- {
-		if rows[i].kind == ganttTaskRow {
-			m.ganttCursor = i
+	for i := range m.ganttCursor {
+		if rows[m.ganttCursor-1-i].kind == ganttTaskRow {
+			m.ganttCursor -= 1 + i
 			return
 		}
 	}
@@ -225,9 +228,8 @@ func (m *Model) renderGantt(maxHeight int) string {
 		lines = append(lines, styleDim.Render("  No active tasks."))
 	}
 
-	for i := vStart; i < vEnd; i++ {
-		row := rows[i]
-		selected := i == m.ganttCursor
+	for i, row := range rows[vStart:vEnd] {
+		selected := i+vStart == m.ganttCursor
 		lines = append(lines, m.renderGanttRow(row, start, offset, dayCols, labelW, selected))
 	}
 
@@ -254,7 +256,7 @@ func (m *Model) renderGanttRuler(start time.Time, offset, labelW, dayCols int) s
 	for i := range ruler {
 		ruler[i] = ' '
 	}
-	for col := 0; col < dayCols; col++ {
+	for col := range dayCols {
 		day := start.AddDate(0, 0, offset+col)
 		if day.Weekday() != time.Monday {
 			continue
@@ -274,7 +276,7 @@ func (m *Model) renderGanttRuler(start time.Time, offset, labelW, dayCols int) s
 func (m *Model) renderGanttAxis(labelW, dayCols int, start time.Time, offset int) string {
 	var b strings.Builder
 	b.WriteString(strings.Repeat(" ", labelW+1))
-	for col := 0; col < dayCols; col++ {
+	for col := range dayCols {
 		if start.AddDate(0, 0, offset+col).Weekday() == time.Monday {
 			b.WriteString("|")
 		} else {
@@ -295,7 +297,7 @@ func (m *Model) renderGanttRow(row ganttRow, start time.Time, offset, dayCols, l
 	d1 := daysBetween(start, e.End)
 
 	cells := make([]rune, dayCols)
-	for col := 0; col < dayCols; col++ {
+	for col := range dayCols {
 		d := offset + col
 		day := start.AddDate(0, 0, d)
 		switch {

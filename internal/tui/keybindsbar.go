@@ -119,7 +119,9 @@ const keybindsPerRow = 7
 func (s KeybindsBar) renderRows(kbs []keybind) []string {
 	sep := styleStatusSep.Render(" · ")
 	var out []string
-	for i := 0; i < len(kbs); i += keybindsPerRow {
+	nrows := (len(kbs) + keybindsPerRow - 1) / keybindsPerRow
+	for r := range nrows {
+		i := r * keybindsPerRow
 		end := min(i+keybindsPerRow, len(kbs))
 		parts := make([]string, 0, end-i)
 		for _, kb := range kbs[i:end] {
