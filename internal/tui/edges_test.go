@@ -232,3 +232,185 @@ func TestNewTaskTagsBackspace(t *testing.T) {
 		})
 	}
 }
+
+// "k" en Kanban envuelve: desde la primera tarjeta salta a la última de la
+// columna, y en la última se queda. Es un ciclo, no un desplazamiento, y la
+// diferencia se ve en la primera pulsación.
+func TestKanbanUpWrapsWithinColumn(t *testing.T) {
+	m := newKanbanModel(t, 3) // tres tarjetas en "todo", una columna con tareas
+	m.kanbanCol = 0
+	m.kanbanRow = 0
+
+	arriba, _ := press(m, "k")
+	if arriba.kanbanRow == arriba.kanbanCol {
+		t.Fatalf("la fila no cambió")
+	}
+	if arriba.kanbanRow != 2 {
+		t.Errorf("desde la primera, \"k\" deja la fila en %d, want 2 (la última)", arriba.kanbanRow)
+	}
+
+	// Y desde la última retrocede a la anterior: envuelve por arriba, no se queda.
+	arriba2, _ := press(arriba, "k")
+	if arriba2.kanbanRow != 1 {
+		t.Errorf("desde la última, \"k\" deja la fila en %d, want 1", arriba2.kanbanRow)
+	}
+}
+
+// Los paneles del Dashboard están topados por el alto, y el tope es exacto: con
+// una línea más de alto sale una fila más de equipo, y una menos, una menos.
+func TestDashboardTeamPanelRespectsBudget(t *testing.T) {
+	m := newDashModel(t, "")
+	for i := range 8 {
+		mustCreateTask(t, m.database, "api", "tarea de p"+string(rune('a'+i)), "", "@p"+string(rune('a'+i)), 1, "todo")
+	}
+	reloadTasks(t, m)
+	m.filteredT = nil
+
+	m.currentView = viewDashboard
+	m.width = 140
+
+	cuenta := func(alto int) int {
+		out := ansi.Strip(m.renderDashboard(alto))
+		n := 0
+		for _, linea := range strings.Split(out, "\n") {
+			if strings.Contains(linea, " tasks (") {
+				n++
+			}
+		}
+		return n
+	}
+
+	// El presupuesto sale del alto menos el cromo, menos lo que ocupa el Overview
+	// y menos la cabecera del panel, así que hace falta un alto pequeño de verdad.
+	// Con diez personas en el equipo el presupuesto se nota: 60 de alto las
+	// enseña todas, 20 enseña seis, 16 enseña dos y 14 ya no cabe ninguna --
+	// el Overview se lleva la columna entera.
+	casos := []struct{ alto, want int }{{60, 10}, {30, 10}, {20, 6}, {16, 2}, {14, 0}}
+	for _, c := range casos {
+		if got := cuenta(c.alto); got != c.want {
+			t.Errorf("con %d de alto salen %d filas de equipo, want %d", c.alto, got, c.want)
+		}
+	}
+}
+
+// El panel Active también, y con una tarea más de alto sale una más.
+func TestDashboardActivePanelRespectsBudget(t *testing.T) {
+	m := newDashModel(t, "")
+	m.currentView = viewDashboard
+	m.width = 140
+
+	cuenta := func(alto int) int {
+		out := ansi.Strip(m.renderDashboard(alto))
+		n := 0
+		for _, linea := range strings.Split(out, "\n") {
+			if strings.Contains(linea, "  ● ") || strings.Contains(linea, "  ○ ") {
+				n++
+			}
+		}
+		return n
+	}
+
+	holgado := cuenta(60)
+	corto := cuenta(8)
+	if corto >= holgado {
+		t.Errorf("con 8 de alto salen %d filas activas y con 60 salen %d", corto, holgado)
+	}
+	if corto == 0 {
+		t.Error("con 8 de alto no sale ninguna fila activa")
+	}
+}
+
+// Cerrar el editor de descripción sin detalle detrás deja el detalle cerrado y
+// limpio, incluida la selección de comentarios: si no, el detalle reabierto
+// apuntaría a un comentario que ya no se está mostrando.
+func TestClosingDescEditorClearsDetailState(t *testing.T) {
+	m := newDetailWithTags(t, "bug")
+	m.descEditOpen = true
+	m.descEditTaskID = m.detailTask.ID
+	m.descEditHadDetail = false // el detalle no estaba antes de editar
+	m.detailCommentSel = 2
+	m.detailComments = []model.Comment{{ID: 1, Body: "uno"}}
+
+	m.closeDescEditor()
+
+	if m.descEditOpen {
+		t.Error("el editor sigue abierto")
+	}
+	if m.detailOpen {
+		t.Error("el detalle sigue abierto, y no estaba antes de editar")
+	}
+	if m.detailTask != nil {
+		t.Errorf("la tarea del detalle quedó en %v, want nil", m.detailTask)
+	}
+	if m.detailComments != nil {
+		t.Errorf("los comentarios quedaron en %v, want nil", m.detailComments)
+	}
+	if m.detailCommentSel != -1 {
+		t.Errorf("la selección quedó en %d, want -1", m.detailCommentSel)
+	}
+}
+
+// Y con detalle detrás, cerrarlo lo deja abierto: se vuelve al detalle, no a la
+// lista.
+func TestClosingDescEditorKeepsExistingDetail(t *testing.T) {
+	m := newDetailWithTags(t, "bug")
+	m.descEditOpen = true
+	m.descEditHadDetail = true
+	m.detailCommentSel = 1
+
+	m.closeDescEditor()
+
+	if m.descEditOpen {
+		t.Error("el editor sigue abierto")
+	}
+	if !m.detailOpen {
+		t.Error("el detalle se cerró, y estaba abierto antes de editar")
+	}
+	if m.detailTask == nil {
+		t.Error("la tarea del detalle se perdió")
+	}
+	// La selección de comentarios se queda: el usuario va a seguir viéndolos.
+	if m.detailCommentSel != 1 {
+		t.Errorf("la selección pasó a %d, want 1 (intacta)", m.detailCommentSel)
+	}
+}
+
+// Al salir del campo de assignee con una sugerencia seleccionada, el input
+// completa con esa sugerencia. Es lo que distingue "elegí una" de "escribí una":
+// sin sugerencia seleccionada el input se queda como estaba.
+func TestNewTaskLeavingAssigneeCompletesSelection(t *testing.T) {
+	t.Run("con sugerencia", func(t *testing.T) {
+		m := newTestModel(t)
+		next, _ := press(m, "i")
+		m2 := next
+		m2.newTaskFieldIdx = newTaskFieldAssignee
+		m2.newTaskAssignee = "@j"
+		m2.newTaskAssigneeSuggIdx = 0 // "@juan", la primera sugerencia
+
+		got, _ := m2.newTaskMoveField(1)
+		gotM := got.(Model)
+
+		if gotM.newTaskAssignee != "@juan" {
+			t.Errorf("el responsable queda en %q, want @juan (la sugerencia elegida)", gotM.newTaskAssignee)
+		}
+		if gotM.newTaskAssigneeSuggIdx != -1 {
+			t.Errorf("suggIdx = %d, want -1 tras completar", gotM.newTaskAssigneeSuggIdx)
+		}
+	})
+
+	t.Run("sin sugerencia", func(t *testing.T) {
+		m := newTestModel(t)
+		next, _ := press(m, "i")
+		m2 := next
+		m2.newTaskFieldIdx = newTaskFieldAssignee
+		m2.newTaskAssignee = "@libre"
+		m2.newTaskAssigneeSuggIdx = -1
+
+		got, _ := m2.newTaskMoveField(1)
+		gotM := got.(Model)
+
+		if gotM.newTaskAssignee != "@libre" {
+			t.Errorf("el responsable cambió a %q sin sugerencia seleccionada", gotM.newTaskAssignee)
+		}
+	})
+}
