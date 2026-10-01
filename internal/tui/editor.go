@@ -131,6 +131,11 @@ func parseEditFile(content string) (title, description, assignee string, priorit
 					priority = p
 				}
 			} else if strings.HasPrefix(line, "estimate:") {
+				// `e >= 0` contra `e > 0` es equivalente: lo único que separa a
+				// las dos comparaciones es e == 0, y la línea asigna
+				// `estimate = e`, con lo que poner un cero sobre el cero que ya
+				// tenía el valor de retorno no cambia nada. Un negativo tampoco
+				// las separa: ambas lo rechazan.
 				if e, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(line, "estimate:")), 64); err == nil && e >= 0 {
 					estimate = e
 				}

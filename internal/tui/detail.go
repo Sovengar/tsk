@@ -78,7 +78,9 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 
 	// Caja 1: tarea + descripción.
 	sep := styleSep.Render(strings.Repeat("─", inner))
-	taskContent := make([]string, 0, len(meta)+2+len(descLines))
+	// Sin capacidad inicial: append la calcula, y una pista de capacidad es una
+	// aritmética más que un mutante más que nobody va a matar.
+	taskContent := make([]string, 0, len(meta)+len(descLines)+2) //nolint:mnd
 	taskContent = append(taskContent, meta...)
 	taskContent = append(taskContent, sep, "  Description:")
 	taskContent = append(taskContent, descLines...)

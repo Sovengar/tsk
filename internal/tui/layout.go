@@ -358,14 +358,10 @@ func detailHeightBudget(maxHeight, commentCount int) (commentBudget, descBudget 
 // pasan constantes positivas, así que hoy es inalcanzable, pero una función que
 // admite un int y peta con un negativo es una trampa esperando a un llamante
 // nuevo.
+// El suelo en 0 es un max y no un if: a n == 0 el slice ya devuelve "", así que
+// la rama era indistinguible de no tenerla.
 func truncateAt(s string, n int) string {
-	if n <= 0 {
-		return ""
-	}
-	// min en vez de `if len(s) <= n { return s }`: cuando la longitud coincide con
-	// el límite las dos ramas dan el mismo string, así que ese borde era otro
-	// mutante equivalente.
-	return s[:min(len(s), n)]
+	return s[:min(len(s), max(n, 0))]
 }
 
 // clampTo acota un índice a [0, n). Con n <= 0 devuelve 0: sin lista no hay

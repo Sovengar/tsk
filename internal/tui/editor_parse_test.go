@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -407,5 +408,90 @@ func TestDescEditorWidth(t *testing.T) {
 				t.Errorf("descEditorWidth con %d = %d, want %d", tt.width, got, tt.want)
 			}
 		})
+	}
+}
+
+// Un título que empieza por un salto de línea se recorta igual que cualquier
+// otro: el resultado no puede llevar el salto dentro, porque el título acaba en
+// una fila de la lista. Es el caso donde el índice del salto es exactamente
+// cero, que es lo que distingue `>= 0` de `> 0`.
+func TestParseEditFileTitleStartingWithNewline(t *testing.T) {
+	got := parse(t, "# \ncontenido en la segunda línea")
+
+	if got.title != "" {
+		t.Errorf("el título es %q, want vacío: la línea del título sólo tenía el prefijo", got.title)
+	}
+	if !strings.Contains(got.description, "contenido en la segunda línea") {
+		t.Errorf("el contenido no se recuperó:\\n%s", got.description)
+	}
+}
+
+// Un estimate negativo en el fichero no se aplica. Es lo que hace que el `e >= 0`
+// de la línea no tenga un segundo lado por el que morir: la base de datos
+// rechaza el negativo, así que la rama de dentro no se puede llegar a usar.
+func TestParseEditFileIgnoresNegativeEstimate(t *testing.T) {
+	got := parse(t, "# t\n\ndesc\n\n---\nassignee: @juan\npriority: 2\nestimate: -3\n")
+
+	if got.estimate < 0 {
+		t.Errorf("estimate = %v, want no negativo", got.estimate)
+	}
+	if got.estimate != 0 {
+		t.Errorf("estimate = %v, want 0: un negativo no es un estimate válido", got.estimate)
+	}
+}
+
+// Y uno válido, con decimales, sí pasa tal cual.
+func TestParseEditFileKeepsValidEstimate(t *testing.T) {
+	got := parse(t, "# t\n\ndesc\n\n---\nassignee: @juan\npriority: 2\nestimate: 2.5\n")
+	if got.estimate != 2.5 {
+		t.Errorf("estimate = %v, want 2.5", got.estimate)
+	}
+}
+
+// Un estimate de cero en el fichero SÍ se aplica, y es el caso que distingue
+// `e >= 0` de `e > 0`: los dos aceptan un positivo, los dos rechazan un
+// negativo, y sólo el cero los separa.
+//
+// La tarea de partida tiene 2 días y el fichero dice cero, así que el resultado
+// observable es 0 y no el 0 por defecto de una tarea sin estimate.
+func TestParseEditFileAppliesZeroEstimate(t *testing.T) {
+	conCero := parse(t, "# t\n\ndesc\n\n---\nassignee: @juan\npriority: 2\nestimate: 0\n")
+	if conCero.estimate != 0 {
+		t.Fatalf("estimate del parseo = %v, want 0", conCero.estimate)
+	}
+
+	// Y el viaje completo: editar una tarea con estimate y dejarlo en cero la
+	// guarda con cero, no con el valor anterior.
+	m := newTestModel(t)
+	task := m.tasks[0]
+	if _, err := m.database.UpdateTask(task.ID, map[string]any{"estimate": 2}); err != nil {
+		t.Fatalf("UpdateTask: %v", err)
+	}
+	conDos, err := m.database.GetTask(task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if conDos.Estimate != 2 {
+		t.Fatalf("el estimate de partida es %v, want 2: el test necesita una tarea con estimate", conDos.Estimate)
+	}
+
+	contenido := fmt.Sprintf("# %s\n\n%s\n\n---\nassignee: %s\npriority: %d\nestimate: 0\ntags: \n",
+		task.Title, task.Description, task.Assignee, task.Priority)
+	title, desc, assignee, priority, estimate, _ := parseEditFile(contenido)
+	// El camino de aplicación real de una edición vive en la DB, así que se usa el
+	// mismo mapa que ella construye por debajo.
+	if _, err := m.database.UpdateTask(task.ID, map[string]any{
+		"title": title, "description": desc, "assignee": assignee,
+		"priority": priority, "estimate": estimate,
+	}); err != nil {
+		t.Fatalf("UpdateTask: %v", err)
+	}
+
+	guardada, err2 := m.database.GetTask(task.ID)
+	if err2 != nil {
+		t.Fatalf("GetTask: %v", err2)
+	}
+	if guardada.Estimate != 0 {
+		t.Errorf("el estimate guardado es %v, want 0: un cero explícito se aplica", guardada.Estimate)
 	}
 }

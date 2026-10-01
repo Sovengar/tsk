@@ -23,14 +23,10 @@ func renderModalBox(title string, lines []string, width int) string {
 
 // modalWidthFor ajusta el ancho preferido del modal al ancho disponible.
 //
-// El umbral es "cabe entero": a preferred == w-2 el modal entra justo y las dos
-// ramas devuelven el mismo número, así que el borde del ">=" es un mutante
-// equivalente.
+// Un min en vez de un if: el umbral es "cabe entero", así que a preferred == w-2
+// las dos formas devuelven lo mismo y la comparación era un mutante equivalente.
 func modalWidthFor(preferred, w int) int {
-	if preferred > w-2 {
-		return w - 2
-	}
-	return preferred
+	return min(preferred, w-2)
 }
 
 // overlayModal centra un modal ya renderizado sobre content, preservando el
