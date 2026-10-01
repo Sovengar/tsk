@@ -16,6 +16,11 @@ const dashboardChrome = 4
 // dashboardTeamHeader son las líneas que ocupa la cabecera de Team Workload.
 const dashboardTeamHeader = 3
 
+// dashStatusLabelWidth es lo que cabe de un estado en la columna del Overview.
+// El "%-14s" del formato reserva el hueco; recortar aquí evita que un nombre
+// largo desborde la barra que va detrás.
+const dashStatusLabelWidth = 14
+
 // dashboardActiveHeader son las líneas que ocupa la cabecera de Active.
 const dashboardActiveHeader = 2
 
@@ -70,15 +75,16 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	// Build status bars from project workflows
 	statusOrder := m.mergedWorkflow()
 	for _, status := range statusOrder {
+		// El recuento sale de un mapa de contadores, así que no puede ser
+		// negativo: la comparación con cero no tiene otro lado posible.
 		count := byStatus[status]
 		if count == 0 {
 			continue
 		}
 		bar := strings.Repeat("░", count)
-		label := status
-		if len(label) > 14 {
-			label = label[:14]
-		}
+		// min en vez de comparar longitudes: a exactamente 14 el recorte no hace
+		// nada, así que la comparación era otro mutante equivalente.
+		label := status[:min(len(status), dashStatusLabelWidth)]
 		overviewLines = append(overviewLines, fmt.Sprintf("  %-14s %d  %s", label, count, bar))
 	}
 
