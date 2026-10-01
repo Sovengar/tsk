@@ -58,12 +58,16 @@ func newDashModel(t *testing.T, project string) *Model {
 // activas y hechas una tarea cancelada se contaría por su ausencia.
 func TestDashTotalCountsEveryTask(t *testing.T) {
 	m := newDashModel(t, "")
+	// Los tres sumandos tienen que estar a la vez: con uno a cero, cambiar un signo
+	// o un operador en la suma deja el mismo número y el test no lo ve.
 	mustCreateTask(t, m.database, "api", "cancelada", "", "@juan", 3, model.CancelledStatus)
+	mustCreateTask(t, m.database, "api", "terminada", "", "@juan", 2, model.DoneStatus)
 	reloadTasks(t, m)
 	activas, hechas, canceladas, _ := dashStatusCounts(m.tasks, "")
 	todas := activas + hechas + canceladas
-	if todas == 0 {
-		t.Fatal("el fixture no dejó tareas")
+	if activas == 0 || hechas == 0 || canceladas == 0 {
+		t.Fatalf("el fixture necesita los tres sumandos a la vez, tiene %d/%d/%d",
+			activas, hechas, canceladas)
 	}
 
 	out := dashRender(t, m)

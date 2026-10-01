@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -427,4 +428,55 @@ func TestNewTaskLeavingAssigneeCompletesSelection(t *testing.T) {
 			t.Errorf("el responsable cambió a %q sin sugerencia seleccionada", gotM.newTaskAssignee)
 		}
 	})
+}
+
+// La fila resaltada es la del cursor, y no "la primera de la ventana": con la
+// ventana desplazada, el índice de la fila dibujada y el del cursor dejan de
+// coincidir, y es la suma de los dos -- no la resta, ni el primero -- lo que
+// señala la correcta.
+func TestGanttSelectedRowFollowsScrolledWindow(t *testing.T) {
+	m := ganttModelWithPeople(t, []string{"@juan", "@maria"}, 6)
+	m.currentView = viewGantt
+	m.width = 120
+
+	rows := m.ganttRows()
+	primera, ultima := -1, -1
+	for i, r := range rows {
+		if r.kind == ganttTaskRow {
+			if primera < 0 {
+				primera = i
+			}
+			ultima = i
+		}
+	}
+	if ultima <= primera {
+		t.Fatalf("el fixture necesita varias filas de tarea, hay %d..%d", primera, ultima)
+	}
+
+	// Un alto que no deja ver todas las filas, con el cursor al final: la ventana
+	// se desplaza y el índice dibujado deja de ser cero.
+	m.ganttCursor = ultima
+	out := ansi.Strip(m.renderGantt(listFixedRows + ganttRulerRows + 3))
+	if !strings.Contains(out, "> #") {
+		t.Fatalf("no hay ninguna fila resaltada:\n%s", out)
+	}
+	if want := fmt.Sprintf("> #%d", rows[ultima].entry.Task.ID); !strings.Contains(out, want) {
+		t.Errorf("la fila resaltada no es la del cursor (%s):\n%s", want, out)
+	}
+	// La ventana no deja ver más de las tres filas que caben. Se cuenta por el
+	// prefijo de tarea y no por el número de tarea: los ids del fixture van del 1
+	// al 12, así que "#1" también aparece dentro de "#11".
+	dibujadas := 0
+	for _, linea := range strings.Split(out, "\n") {
+		if strings.Contains(linea, "#") && strings.Contains(linea, "tarea") {
+			dibujadas++
+		}
+	}
+	if dibujadas != 3 {
+		t.Errorf("se dibujan %d filas de tarea, want 3 (las que caben)", dibujadas)
+	}
+	// Y hay exactamente una fila resaltada: la del cursor.
+	if n := strings.Count(out, "> #"); n != 1 {
+		t.Errorf("hay %d filas resaltadas, want 1:\n%s", n, out)
+	}
 }

@@ -129,6 +129,20 @@ func TestFilterOptionsFooter(t *testing.T) {
 				t.Errorf("con %d opciones (%d etiquetas) el pie %v, want %v\n%s",
 					total, tt.tags, got, want, out)
 			}
+
+			// El número es la posición del cursor más uno, y con dos tags el
+			// cursor puede moverse. Es lo que distingue un "+1" de un "+0": sólo
+			// buscando el prefijo completo, porque "4/12" también está dentro de
+			// "14/12".
+			if total > filterMaxVisibleOptions {
+				for idx := range min(3, total) {
+					m.filterOptionIdx = idx
+					pie := fmt.Sprintf("%d/%d", idx+1, total)
+					if out := filterRender(t, m); !strings.Contains(out, pie) {
+						t.Errorf("con el cursor en %d el pie no dice %q:\n%s", idx, pie, out)
+					}
+				}
+			}
 		})
 	}
 }
