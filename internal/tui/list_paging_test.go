@@ -2,7 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"tsk/internal/config"
 	"tsk/internal/model"
@@ -287,5 +290,60 @@ func TestListPageSizeFallsBackToDefault(t *testing.T) {
 	m.pageSize = 7
 	if got := m.listPageSize(); got != 7 {
 		t.Errorf("listPageSize() = %d, want 7", got)
+	}
+}
+
+// El separador de la barra de filtros deja dos columnas para el recuadro, y el
+// suelo en cero evita que strings.Revpeat reviente con un negativo.
+func TestSeparatorWidth(t *testing.T) {
+	tests := []struct {
+		name   string
+		innerW int
+		want   int
+	}{
+		{"holgado", 118, 116},
+		{"normal", 78, 76},
+		{"justo", 2, 0},
+		{"una de menos", 1, 0},
+		{"cero", 0, 0},
+		{"negativo", -10, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := separatorWidth(tt.innerW); got != tt.want {
+				t.Errorf("separatorWidth(%d) = %d, want %d", tt.innerW, got, tt.want)
+			}
+		})
+	}
+}
+
+// Nunca negativo: es lo que evita el panic de strings.Repeat.
+func TestSeparatorWidthNeverNegative(t *testing.T) {
+	for innerW := -100; innerW <= 300; innerW++ {
+		if got := separatorWidth(innerW); got < 0 {
+			t.Fatalf("separatorWidth(%d) = %d, want >= 0", innerW, got)
+		}
+	}
+}
+
+// El separador renderizado mide el ancho interior menos dos, y eso se comprueba
+// sobre el texto plano, que es donde un "- 2" movido se nota.
+func TestRenderFilterHeaderSeparatorWidth(t *testing.T) {
+	for _, width := range []int{120, 80, 40} {
+		m := newTestModel(t)
+		m.width = width
+
+		header := ansi.Strip(m.renderFilterHeader(width - 2))
+		lines := strings.Split(header, "\n")
+		if len(lines) < 2 {
+			t.Fatalf("la cabecera no tiene separador:\n%s", header)
+		}
+		// Se cuentan los guiones, no el ancho de la línea: la barra de filtros
+		// tiene un ancho natural y JoinVertical rellena todas las líneas hasta
+		// la más ancha, así que la última mide siempre lo mismo.
+		got := strings.Count(lines[len(lines)-1], "─")
+		if want := width - 4; got != want {
+			t.Errorf("con %d de ventana el separador tiene %d guiones, want %d", width, got, want)
+		}
 	}
 }

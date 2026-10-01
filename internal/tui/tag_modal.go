@@ -80,6 +80,12 @@ func (m Model) handleTagModalKey(key string) (tea.Model, tea.Cmd) {
 	}
 
 	// Texto imprimible: alimenta el input y reinicia la selección.
+	//
+	// El suelo es 32 (el espacio) porque Bubbletea nunca entrega una tecla de un
+	// solo carácter por debajo de ahí -- las de control llegan con nombre ("esc",
+	// "tab"), no como un byte suelto -- pero dejarlo escrito.documenta la
+	// intención en vez de dejar un 33 que parece arbitrario. El precio es que el
+	// espacio no se puede escribir: llega como "space" y lo descarta el == 1.
 	if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 		m.tagInput += key
 		m.tagSuggestIdx = -1
@@ -114,6 +120,8 @@ func (m *Model) renderTagModal(content string) string {
 	lines = append(lines, "")
 	lines = append(lines, "  > "+m.tagInput+styleTitle.Render("▏"))
 
+	// A exactamente el tope el recorte es una identidad, así que `>` y `>=` dan
+	// lo mismo aquí.
 	suggs := m.tagSuggestions()
 	if len(suggs) > tagMaxSuggestions {
 		suggs = suggs[:tagMaxSuggestions]

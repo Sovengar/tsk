@@ -246,6 +246,24 @@ func firstValidIndex(idx, n int) int {
 	return min(max(idx, 0), n-1)
 }
 
+// separatorWidth es lo que mide el separador horizontal de la barra de filtros:
+// el ancho interior menos las dos columnas del recuadro.
+//
+// El suelo en 0 no es decorativo. strings.Repeat con un número negativo revienta,
+// y w-2 es negativo en cuanto la ventana baja de dos columnas. Hoy m.width nunca
+// baja de eso, pero una función que admite un int y peta con el negativo es una
+// trampa para el siguiente llamante.
+func separatorWidth(innerW int) int {
+	return max(innerW-2, 0)
+}
+
+// listContentWidth es el ancho que queda para las columnas de la lista una vez
+// descontado el prefijo de selección ("> " o "  "). Es el mismo "- 2" que el
+// separador y por el mismo motivo: los dos reserving el recuadro.
+func listContentWidth(innerW int) int {
+	return separatorWidth(innerW)
+}
+
 // ganttLabelAndDays reparte el ancho interior del Gantt entre la etiqueta de la
 // izquierda y las columnas de día de la derecha.
 //
