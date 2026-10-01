@@ -191,7 +191,20 @@ func TestDescEditTargetPrefersOpenDetail(t *testing.T) {
 		t.Errorf("sin detalle el objetivo es %v, want la tarea seleccionada", got)
 	}
 
+	// Con el detalle "abierto" pero sin tarea -- un estado que el interfaz no
+	// produce y que sí puede dejar un test -- el objetivo cae a la lista, no a
+	// nil: hay una tarea seleccionada y es tan editable como la otra.
+	m.detailOpen = true
+	m.detailTask = nil
+	m.cursor = 1
+	if got := m.descEditTarget(); got == nil {
+		t.Error("con el detalle abierto y sin tarea, el objetivo es nil; want la seleccionada de la vista")
+	} else if got.ID != m.filteredTasks()[1].ID {
+		t.Errorf("el objetivo es la tarea %d, want la seleccionada (%d)", got.ID, m.filteredTasks()[1].ID)
+	}
+
 	// Y sin ninguna de las dos, nil.
+	m.detailOpen = false
 	m.filteredT = nil
 	m.cursor = 99
 	if got := m.descEditTarget(); got != nil {

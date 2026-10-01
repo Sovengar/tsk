@@ -78,9 +78,10 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 
 	// Caja 1: tarea + descripción.
 	sep := styleSep.Render(strings.Repeat("─", inner))
-	// Sin capacidad inicial: append la calcula, y una pista de capacidad es una
-	// aritmética más que un mutante más que nobody va a matar.
-	taskContent := make([]string, 0, len(meta)+len(descLines)+2) //nolint:mnd
+	// Sin pista de capacidad: es una aritmética que ningún test puede mirar,
+	// porque una capacidad es un consejo y el resultado es el mismo diga lo que
+	// diga. append calcula el crecimiento por su cuenta.
+	var taskContent []string
 	taskContent = append(taskContent, meta...)
 	taskContent = append(taskContent, sep, "  Description:")
 	taskContent = append(taskContent, descLines...)
