@@ -28,12 +28,18 @@ func TestAssigneeRosterSelectionPrefix(t *testing.T) {
 	reloadOffDays(t, m)
 	m.assigneeIdx = 1
 
-	out := ansi.Strip(m.renderAssigneeModal(""))
+	// El prefijo se busca en el texto limpio; la negrita, en el render con sus
+	// códigos, porque al quitar los códigos las dos marcas se vuelven indistinguibles.
+	crudo := m.renderAssigneeModal("")
+	out := ansi.Strip(crudo)
 	if n := strings.Count(out, selectionPrefix(true)); n != 1 {
 		t.Errorf("hay %d filas con el prefijo de selección, want 1:\n%s", n, out)
 	}
 	if !strings.Contains(out, selectionPrefix(true)+"@user01") {
 		t.Errorf("la marca no está en la segunda persona:\n%s", out)
+	}
+	if n := countBoldLines(crudo); n != 1 {
+		t.Errorf("hay %d filas resaltadas, want 1:\n%s", n, out)
 	}
 }
 
@@ -50,12 +56,20 @@ func TestAssigneeOffdaySelectionPrefix(t *testing.T) {
 	m.assigneeDetail = true
 	m.assigneeOffdayIdx = 2
 
-	out := ansi.Strip(m.renderAssigneeModal(""))
+	// El prefijo se busca en el texto limpio; la negrita, en el render con sus
+	// códigos, porque al quitar los códigos las dos marcas se vuelven indistinguibles.
+	crudo := m.renderAssigneeModal("")
+	out := ansi.Strip(crudo)
 	if n := strings.Count(out, selectionPrefix(true)); n != 1 {
 		t.Errorf("hay %d filas con el prefijo de selección, want 1:\n%s", n, out)
 	}
 	if !strings.Contains(out, selectionPrefix(true)+"2026-03-01") {
 		t.Errorf("la marca no está en el tercer off-day:\n%s", out)
+	}
+	// El detalle también resalta el nombre de la persona en su cabecera, así que
+	// la cuenta se limita a las filas de off-day: son las que llevan flecha.
+	if n := countBoldLinesWith(crudo, "→"); n != 1 {
+		t.Errorf("hay %d off-days resaltados, want 1:\n%s", n, out)
 	}
 }
 

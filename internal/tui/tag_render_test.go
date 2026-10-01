@@ -354,3 +354,17 @@ func TestTagTabAndEnterClearSuggestionIndex(t *testing.T) {
 		})
 	}
 }
+
+// countBoldLinesWith cuenta las líneas del render que llevan la negrita de
+// selección y además contienen marker. Hace falta el segundo filtro cuando el
+// modal resaltará más de una cosa -- el nombre de la persona, por ejemplo -- y lo
+// que importa es cuál de las listas está marcada.
+func countBoldLinesWith(rendered, marker string) int {
+	n := 0
+	for _, linea := range strings.Split(rendered, "\n") {
+		if strings.Contains(linea, "\x1b[1m") && strings.Contains(linea, marker) {
+			n++
+		}
+	}
+	return n
+}
