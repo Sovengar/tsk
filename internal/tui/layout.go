@@ -45,9 +45,10 @@ func truncateLines(s string, width int) string {
 	}
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
-		if ansi.StringWidth(line) > width {
-			lines[i] = ansi.Truncate(line, width, "")
-		}
+		// min en vez de comparar: cuando la línea mide justo lo que el ancho, las
+		// dos ramas dan el mismo texto, así que la comparación era otro mutante
+		// equivalente. Recortar a lo que ya cabe no cambia nada.
+		lines[i] = ansi.Truncate(line, min(ansi.StringWidth(line), width), "")
 	}
 	return strings.Join(lines, "\n")
 }
@@ -61,10 +62,15 @@ func cellWidth(s string, width int) string {
 		return ""
 	}
 	s = ansi.Truncate(s, width, "..")
-	if pad := width - ansi.StringWidth(s); pad > 0 {
-		s += strings.Repeat(" ", pad)
-	}
-	return s
+	// Rellenar con un max en vez de con un if: con pad cero el if no hacía nada y
+	// el max repite "", que es lo mismo sin la rama que mutar.
+	//
+	// El suelo en 0 es por strings.Repeat, que revienta con un número negativo.
+	// ansi.Truncate nunca devuelve una celda más ancha que el límite, así que no
+	// se puede llegar: es la misma clase de suelo defensivo que los otros de este
+	// fichero, y sus dos mutantes -- quitarlo o ponerlo en -1 -- son equivalentes
+	// por el mismo motivo.
+	return s + strings.Repeat(" ", max(width-ansi.StringWidth(s), 0))
 }
 
 // modalInnerWidth es el ancho útil de un modal: el ancho total menos los dos
@@ -630,27 +636,42 @@ func joinSections(sections ...string) string {
 // visibleRange devuelve el rango [start, end) de una ventana de size elementos
 // sobre un total, manteniendo el cursor dentro de la ventana.
 func visibleRange(cursor, total, size int) (int, int) {
+	// Sin lista o sin ventana no hay nada que mostrar.
 	if total <= 0 || size <= 0 {
 		return 0, 0
 	}
-	if size >= total {
-		return 0, total
-	}
+	// Una ventana mayor que el total se recorta al total. El borde -- ventana igual
+	// al total -- daba el mismo resultado por la cuenta de más abajo, así que
+	// dejar el ">=" era otro mutante equivalente.
+	size = min(size, total)
 
-	start := cursor - size/2
-	start = max(start, 0)
-	if start > total-size {
-		start = total - size
-	}
+	// La ventana se centra en el cursor y se acota a los dos lados de golpe. Con
+	// min en vez de dos if, el borde "start == total - size" deja de ser una
+	// decisión: es el mismo número por las dos ramas.
+	start := min(max(cursor-size/2, 0), total-size)
 	return start, start + size
 }
 
-// truncate corta un texto a max caracteres agregando un sufijo "..".
-func truncate(s string, max int) string {
-	if len(s) <= max {
+// truncateSuffix es lo que se pone en lugar de lo que se corta.
+const truncateSuffix = ".."
+
+// truncate corta un texto a limit caracteres agregando un sufijo.
+//
+// Por debajo del tamaño del sufijo no cabe la elipsis, así que se recorta a pelo:
+// un slice con índice negativo revienta. Los llamantes de hoy pasan constantes
+// positivas, así que el suelo es defensivo, pero una función que acepta un int y
+// peta con el negativo es una trampa para el siguiente.
+//
+// El parámetro se llama limit y no max porque max es la función integrada, y aquí
+// hace falta para acotar por abajo.
+func truncate(s string, limit int) string {
+	if limit < len(truncateSuffix) {
+		return s[:min(len(s), max(limit, 0))]
+	}
+	if len(s) <= limit {
 		return s
 	}
-	return s[:max-2] + ".."
+	return s[:limit-len(truncateSuffix)] + truncateSuffix
 }
 
 // singleLine colapsa un texto multilínea a una sola línea para que no rompa
