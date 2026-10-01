@@ -24,10 +24,10 @@ func (m *Model) descEditTarget() *model.Task {
 // descEditorWidth devuelve el ancho del textarea integrado en la caja del
 // detalle: descuenta los 2 bordes y la indentación de 2 columnas.
 func (m Model) descEditorWidth() int {
-	if w := m.width - 4; w > 0 {
-		return w
-	}
-	return 1
+	// El suelo en 1 evita un ancho de 0 o negativo para el textarea, que se
+	// quedaría sin sitio para escribir. Con una terminal de menos de 4 columnas
+	// más da dónde ponerlo, pero no es un crash.
+	return max(m.width-4, 1)
 }
 
 // resizeDescEditor reajusta el textarea tras un cambio de terminal.

@@ -373,3 +373,39 @@ func TestParseEditFileDescriptionWithSeparator(t *testing.T) {
 		t.Errorf("assignee = %q, want vacío: lo de después del separador no es una clave", got.assignee)
 	}
 }
+
+// Un bloque "# " con una sola línea no inventa una segunda: el cuerpo entero se
+// queda vacío en vez de repetir el título.
+func TestParseEditFileSingleLineTitleLeavesNoBody(t *testing.T) {
+	got := parse(t, "# Sólo título")
+	if got.title != "Sólo título" {
+		t.Errorf("title = %q", got.title)
+	}
+	if strings.TrimSpace(got.description) != "" {
+		t.Errorf("description = %q, want vacía", got.description)
+	}
+}
+
+// descEditorWidth descuenta los bordes y la indentación, con un suelo de 1: un
+// ancho de cero dejaría el textarea sin sitio, que es peor que uno estreñísimo.
+func TestDescEditorWidth(t *testing.T) {
+	tests := []struct {
+		name  string
+		width int
+		want  int
+	}{
+		{"holgada", 100, 96},
+		{"justa", 5, 1},
+		{"una menos", 4, 1},
+		{"cero", 0, 1},
+		{"negativa", -20, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := Model{width: tt.width}
+			if got := m.descEditorWidth(); got != tt.want {
+				t.Errorf("descEditorWidth con %d = %d, want %d", tt.width, got, tt.want)
+			}
+		})
+	}
+}

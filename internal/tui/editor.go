@@ -170,7 +170,9 @@ func (m *Model) selectedEditableTask() *model.Task {
 	switch m.currentView {
 	case viewList:
 		tasks := m.filteredTasks()
-		if len(tasks) > 0 && m.cursor < len(tasks) {
+		// inRange cubre las dos mitades: con la lista vacía ningún índice vale,
+		// así que el "len(tasks) > 0" que hacía la primera era redundante.
+		if inRange(m.cursor, len(tasks)) {
 			return &tasks[m.cursor]
 		}
 	case viewKanban:
