@@ -196,10 +196,7 @@ func (m *Model) editSelectedTask() tea.Cmd {
 		return nil
 	}
 
-	editorCmd := m.config.Editor.Command
-	if editorCmd == "" {
-		editorCmd = "nvim"
-	}
+	editorCmd := editorCommand(m.config.Editor.Command)
 
 	return editTaskCmd(*t, editorCmd)
 }

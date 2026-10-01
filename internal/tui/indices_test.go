@@ -3,6 +3,7 @@ package tui
 import (
 	"testing"
 
+	"tsk/internal/config"
 	"tsk/internal/model"
 )
 
@@ -540,5 +541,126 @@ func TestTaskAt2OutOfRange(t *testing.T) {
 	}
 	if got := taskAt2(nil, 0); got != "" {
 		t.Errorf("taskAt2(nil, 0) = %q, want vacío", got)
+	}
+}
+
+// La selección del detalle no envuelve por arriba: -1 significa "nada
+// seleccionado", y desde ahí "j" va al primer comentario, no al segundo.
+func TestNextCommentSel(t *testing.T) {
+	tests := []struct {
+		name   string
+		sel, n int
+		want   int
+	}{
+		{"nada seleccionado va al primero", -1, 3, 0},
+		{"del primero al segundo", 0, 3, 1},
+		{"del segundo al tercero", 1, 3, 2},
+		{"en el último se queda", 2, 3, 2},
+		{"más allá del último se queda", 9, 3, 2},
+		{"un solo comentario", -1, 1, 0},
+		{"un solo comentario ya en el", 0, 1, 0},
+		{"sin comentarios", -1, 0, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := nextCommentSel(tt.sel, tt.n); got != tt.want {
+				t.Errorf("nextCommentSel(%d, %d) = %d, want %d", tt.sel, tt.n, got, tt.want)
+			}
+		})
+	}
+}
+
+// Nunca sale de [0, n-1] para n >= 1, y es monótona hasta saturar en el último.
+func TestNextCommentSelStaysInRange(t *testing.T) {
+	for n := 1; n <= 6; n++ {
+		prev := -1
+		for sel := -1; sel <= 8; sel++ {
+			got := nextCommentSel(sel, n)
+			if got < 0 || got > n-1 {
+				t.Fatalf("nextCommentSel(%d, %d) = %d, fuera de [0,%d]", sel, n, got, n-1)
+			}
+			if got < prev {
+				t.Fatalf("nextCommentSel(%d, %d) = %d retrocede desde %d", sel, n, got, prev)
+			}
+			prev = got
+		}
+	}
+}
+
+// Hacia atrás, el -1 es un tope real: desde el primer comentario se vuelve a
+// "nada seleccionado" y de ahí no se sale hacia -2.
+func TestPrevCommentSel(t *testing.T) {
+	tests := []struct {
+		name string
+		sel  int
+		want int
+	}{
+		{"del último", 3, 2},
+		{"del segundo", 1, 0},
+		{"del primero vuelve a nada", 0, -1},
+		{"desde nada se queda", -1, -1},
+		{"muy negativo", -7, -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := prevCommentSel(tt.sel); got != tt.want {
+				t.Errorf("prevCommentSel(%d) = %d, want %d", tt.sel, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrevCommentSelNeverBelowMinusOne(t *testing.T) {
+	for sel := -20; sel <= 20; sel++ {
+		if got := prevCommentSel(sel); got < -1 {
+			t.Fatalf("prevCommentSel(%d) = %d, want >= -1", sel, got)
+		}
+	}
+}
+
+// Un pageSize de 0 o negativo no es "una página": es configuración ausente, y
+// cae al valor por defecto igual que el resto de la config.
+func TestResolvePageSize(t *testing.T) {
+	tests := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"cero", 0, config.DefaultPageSize},
+		{"negativo", -1, config.DefaultPageSize},
+		{"muy negativo", -100, config.DefaultPageSize},
+		{"uno", 1, 1},
+		{"diez", 10, 10},
+		{"muy grande", 100000, 100000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolvePageSize(tt.in); got != tt.want {
+				t.Errorf("resolvePageSize(%d) = %d, want %d", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// El editor por defecto son las tres rutas de "c" (comentario), "E" (edición
+// completa) y la de descripción. Comparten función para que no diverjan.
+func TestEditorCommand(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"sin configurar", "", "nvim"},
+		{"vim", "vim", "vim"},
+		{"con argumentos", "code --wait", "code --wait"},
+		{"un espacio no es vacío", " ", " "},
+		{"guion", "-", "-"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := editorCommand(tt.in); got != tt.want {
+				t.Errorf("editorCommand(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
 	}
 }

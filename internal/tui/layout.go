@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"tsk/internal/config"
 	"tsk/internal/model"
 
 	"github.com/charmbracelet/x/ansi"
@@ -59,6 +60,48 @@ func contentBudget(total, previewH, keybindsH int) int {
 	budget := total - previewH - keybindsH
 	budget = max(budget, minContentHeight)
 	return budget
+}
+
+// nextCommentSel avanza la selección de comentarios sin dar la vuelta: desde
+// -1 (nada seleccionado) salta al primero, y arriving al último se queda ahí.
+//
+// Es lo que hace la tecla "j" del detalle, escrito como min/max para que la
+// regla sea comprobable: envoltura por arriba, y -1 tratado como "anterior al
+// primero" en vez de como una posición válida.
+func nextCommentSel(sel, n int) int {
+	return min(max(sel+1, 0), max(n-1, 0))
+}
+
+// prevCommentSel retrocede la selección. En el primer comentario vuelve al
+// estado "nada seleccionado" (-1) y ahí se queda: el detalle no envuelve.
+func prevCommentSel(sel int) int {
+	return max(sel-1, -1)
+}
+
+// resolvePageSize devuelve el tamaño de página a usar, o el de por defecto si la
+// configuración no trae uno utilizable.
+//
+// El suelo está en 0 y no en 1 porque un ListPageSize negativo o cero no es un
+// "una sola página" pedido por el usuario, es una configuración ausente: la
+// config nunca falla, avisa y sigue, y aquí se aplica el mismo criterio.
+func resolvePageSize(n int) int {
+	if n > 0 {
+		return n
+	}
+	return config.DefaultPageSize
+}
+
+// editorCommand devuelve el editor externo a lanzar, o nvim si la configuración
+// no trae ninguno.
+//
+// Estaba escrito tres veces, con el mismo literal en las tres. Cada copia era su
+// propio sitio donde un mutante podía cambiar el editor por defecto sin que nada
+// lo notara, porque las tres sólo se ejecutaban cuando el detalle estaba abierto.
+func editorCommand(cmd string) string {
+	if cmd == "" {
+		return "nvim"
+	}
+	return cmd
 }
 
 // ---- Aritmética de índices -------------------------------------------------

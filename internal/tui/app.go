@@ -131,10 +131,7 @@ type Model struct {
 
 // New construye el modelo con la base de datos.
 func New(database *db.DB, cfg config.Config) Model {
-	pageSize := cfg.ListPageSize
-	if pageSize <= 0 {
-		pageSize = config.DefaultPageSize
-	}
+	pageSize := resolvePageSize(cfg.ListPageSize)
 	return Model{
 		database:         database,
 		config:           cfg,
@@ -746,17 +743,17 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		}
 	case "s":
 		// Start: move to next status
-		if m.cursor < len(tasks) {
+		if inRange(m.cursor, len(tasks)) {
 			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.StartTask)
 		}
 	case "d":
 		// Done
-		if m.cursor < len(tasks) {
+		if inRange(m.cursor, len(tasks)) {
 			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.DoneTask)
 		}
 	case "x":
 		// Cancel
-		if m.cursor < len(tasks) {
+		if inRange(m.cursor, len(tasks)) {
 			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.CancelTask)
 		}
 	case "/":
@@ -871,7 +868,7 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 			return m, m.loadCommentsCmd(t.ID)
 		}
 	case "ctrl+p":
-		if m.kanbanRow < len(colTasks) {
+		if inRange(m.kanbanRow, len(colTasks)) {
 			t := colTasks[m.kanbanRow]
 			next := nextPriority(t.Status, t.Priority)
 			return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
@@ -913,26 +910,15 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		if len(m.detailComments) == 0 {
 			return m, nil
 		}
-		if m.detailCommentSel < 0 {
-			m.detailCommentSel = 0
-		} else if m.detailCommentSel < len(m.detailComments)-1 {
-			m.detailCommentSel++
-		}
+		m.detailCommentSel = nextCommentSel(m.detailCommentSel, len(m.detailComments))
 		return m, nil
 	case "k", "up":
-		if m.detailCommentSel > 0 {
-			m.detailCommentSel--
-		} else if m.detailCommentSel == 0 {
-			m.detailCommentSel = -1
-		}
+		m.detailCommentSel = prevCommentSel(m.detailCommentSel)
 		return m, nil
 	case "c":
 		// Nuevo comentario en el editor externo.
 		if m.detailTask != nil {
-			editorCmd := m.config.Editor.Command
-			if editorCmd == "" {
-				editorCmd = "nvim"
-			}
+			editorCmd := editorCommand(m.config.Editor.Command)
 			return m, commentCmd(m.detailTask.ID, editorCmd)
 		}
 	case "t":
@@ -950,10 +936,7 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 	case "E":
 		// Editor externo completo (write in nvim).
 		if m.detailTask != nil {
-			editorCmd := m.config.Editor.Command
-			if editorCmd == "" {
-				editorCmd = "nvim"
-			}
+			editorCmd := editorCommand(m.config.Editor.Command)
 			cmd := editTaskCmd(*m.detailTask, editorCmd)
 			m.detailOpen = false
 			m.detailTask = nil
@@ -971,7 +954,7 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Con un comentario seleccionado, borra el comentario.
-		if m.detailCommentSel >= 0 && m.detailCommentSel < len(m.detailComments) {
+		if inRange(m.detailCommentSel, len(m.detailComments)) {
 			comment := m.detailComments[m.detailCommentSel]
 			return m, m.deleteCommentCmd(m.detailTask.ID, comment.ID, m.detailCommentSel)
 		}
