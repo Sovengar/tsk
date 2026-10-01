@@ -664,3 +664,71 @@ func TestEditorCommand(t *testing.T) {
 		})
 	}
 }
+
+// El reparto del Gantt tiene dos regímenes y dos suelos. Como función pura se
+// comprueba sobre un barrido de anchos, que es lo que la caja rellenada con
+// espacios no dejaba ver.
+func TestGanttLabelAndDays(t *testing.T) {
+	tests := []struct {
+		name        string
+		innerW      int
+		wantLabel   int
+		wantDayCols int
+	}{
+		{"holgado", 118, 30, 87},
+		{"justo en el umbral", 70, 30, 39},
+		{"una menos que el umbral", 69, 23, 45},
+		{"un tercio exacto", 60, 20, 39},
+		{"con suelo de etiqueta", 45, 15, 29},
+		{"etiqueta al mínimo", 43, 14, 28},
+		{"suelo de etiqueta por la regla de un tercio", 30, 14, 15},
+		{"días al mínimo", 20, 14, 7},
+		{"por debajo del suelo de días", 18, 14, 7},
+		{"cero", 0, 14, 7},
+		{"negativo", -50, 14, 7},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			label, days := ganttLabelAndDays(tt.innerW)
+			if label != tt.wantLabel || days != tt.wantDayCols {
+				t.Errorf("ganttLabelAndDays(%d) = (%d, %d), want (%d, %d)",
+					tt.innerW, label, days, tt.wantLabel, tt.wantDayCols)
+			}
+		})
+	}
+}
+
+// Las dos mitades más el separador llenan el ancho interior mientras haya sitio
+// para las columnas de día; cuando no hay, la etiqueta manda y los días se
+// quedan en su mínimo.
+func TestGanttLabelAndDaysProperties(t *testing.T) {
+	for innerW := -20; innerW <= 300; innerW++ {
+		label, days := ganttLabelAndDays(innerW)
+		if label < ganttMinLabelWidth {
+			t.Fatalf("innerW=%d: etiqueta %d, want >= %d", innerW, label, ganttMinLabelWidth)
+		}
+		if days < ganttMinDayCols {
+			t.Fatalf("innerW=%d: días %d, want >= %d", innerW, days, ganttMinDayCols)
+		}
+		if label+1+days > innerW {
+			// Sólo puede pasar cuando los mínimos no caben, que es lo que hace
+			// el suelo: preferimos desbordar a quedarnos sin día visible.
+			if label != ganttMinLabelWidth || days != ganttMinDayCols {
+				t.Fatalf("innerW=%d: (%d + 1 + %d) se sale y no está en los mínimos (%d, %d)",
+					innerW, label, days, label, days)
+			}
+		}
+	}
+}
+
+// El régimen cambia justo en el umbral: 70 columnas interiores mantienen la
+// etiqueta fija, 69 la dividen. Ese par es el que distingue el ">=" del "<".
+func TestGanttLabelAndDaysThresholdIsExact(t *testing.T) {
+	if l, _ := ganttLabelAndDays(ganttLabelThreshold); l != ganttFixedLabelWidth {
+		t.Errorf("en el umbral la etiqueta es %d, want %d", l, ganttFixedLabelWidth)
+	}
+	if l, _ := ganttLabelAndDays(ganttLabelThreshold - 1); l == ganttFixedLabelWidth {
+		t.Errorf("una columna por debajo del umbral la etiqueta sigue siendo %d, want el tercio",
+			ganttFixedLabelWidth)
+	}
+}

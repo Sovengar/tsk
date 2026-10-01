@@ -11,6 +11,19 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// ganttFixedLabelWidth es lo que ocupa la etiqueta del Gantt con sitio de sobra.
+const ganttFixedLabelWidth = 30
+
+// ganttLabelThreshold son las columnas interiores a partir de las cuales la
+// etiqueta se queda con su ancho fijo en vez de con un tercio del total.
+const ganttLabelThreshold = 70
+
+// ganttMinLabelWidth es el mínimo de la etiqueta, para que un nombre quepa.
+const ganttMinLabelWidth = 14
+
+// ganttMinDayCols es el mínimo de columnas de día: una semana entera.
+const ganttMinDayCols = 7
+
 // minContentHeight es el alto mínimo que se reserva para el contenido de la
 // vista, para que la caja no se degrade en terminales chicas.
 const minContentHeight = 8
@@ -231,6 +244,30 @@ func firstValidIndex(idx, n int) int {
 		return 0
 	}
 	return min(max(idx, 0), n-1)
+}
+
+// ganttLabelAndDays reparte el ancho interior del Gantt entre la etiqueta de la
+// izquierda y las columnas de día de la derecha.
+//
+// Dos regímenes: con sitio de sobra la etiqueta se queda con 30 columnas
+// fijas; por debajo de 70 columnas interiores se queda con un tercio, porque 30
+// columns se comerían la mitad del gráfico. Ambos tienen suelo: 14 de etiqueta
+// para que el nombre quepa, 7 de días para que quepa una semana.
+//
+// Estuvo cuatro líneas en el render con sus dos umbrales y sus dos suelos. La
+// caja del Gantt rellena con espacios hasta el ancho interior, así que un "- 1"
+// en los días no se ve en el ancho de la línea: se ve en dónde caen los rótulos
+// de los lunes, y eso es demasiado indirecto para un test. Como función pura el
+// reparto se comprueba entero sobre un barrido de anchos.
+func ganttLabelAndDays(innerW int) (labelW, dayCols int) {
+	labelW = ganttFixedLabelWidth
+	if innerW < ganttLabelThreshold {
+		labelW = innerW / 3
+	}
+	labelW = max(labelW, ganttMinLabelWidth)
+
+	dayCols = max(innerW-labelW-1, ganttMinDayCols)
+	return labelW, dayCols
 }
 
 // detailHeightBudget reparte el alto del detalle entre comentarios y
