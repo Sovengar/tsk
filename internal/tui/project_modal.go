@@ -28,7 +28,7 @@ func (m *Model) dashProjectList() []model.Project {
 // selectedDashProject devuelve el proyecto seleccionado en el Dashboard, o nil.
 func (m *Model) selectedDashProject() *model.Project {
 	list := m.dashProjectList()
-	if m.dashProjectIdx >= 0 && m.dashProjectIdx < len(list) {
+	if inRange(m.dashProjectIdx, len(list)) {
 		return &list[m.dashProjectIdx]
 	}
 	return nil
@@ -36,15 +36,7 @@ func (m *Model) selectedDashProject() *model.Project {
 
 // clampDashProjectIdx mantiene el índice de selección dentro de la lista visible.
 func (m *Model) clampDashProjectIdx() {
-	n := len(m.dashProjectList())
-	if n == 0 {
-		m.dashProjectIdx = 0
-		return
-	}
-	if m.dashProjectIdx >= n {
-		m.dashProjectIdx = n - 1
-	}
-	m.dashProjectIdx = max(m.dashProjectIdx, 0)
+	m.dashProjectIdx = clampTo(m.dashProjectIdx, len(m.dashProjectList()))
 }
 
 // selectProjectByName selecciona un proyecto y ajusta la vista (activos o
@@ -103,6 +95,10 @@ func editTextInput(target *string, key string) {
 		}
 	case key == "space" || key == " ":
 		*target += " "
+	// El 33 deja fuera el espacio a propósito: los campos de este modal son
+	// listas separadas por comas, y un espacio dentro rompería el nombre. La
+	// condición no se nota porque Bubbletea entrega el espacio con nombre
+	// ("space"), no como un carácter suelto.
 	case len(key) == 1 && key[0] >= 33:
 		*target += key
 	}
