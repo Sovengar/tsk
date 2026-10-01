@@ -87,14 +87,9 @@ func (m *Model) renderList(maxHeight int) string {
 	tasks := m.filteredTasks()
 	pageStart, pageEnd := m.pageBounds()
 
-	// Solo se pinta la página actual. Si la página no entra en el alto
-	// disponible, se recorta la ventana manteniendo el cursor visible
-	// (fallback para terminales chicas).
-	start, end := pageStart, pageEnd
-	if visible := maxHeight - listFixedRows; visible > 0 && end-start > visible {
-		relStart, relEnd := visibleRange(m.cursor-pageStart, end-pageStart, visible)
-		start, end = pageStart+relStart, pageStart+relEnd
-	}
+	// Sólo se pinta la página actual, recortada al alto disponible si no cabe
+	// entera. La aritmética vive en listWindowForHeight.
+	start, end := listWindowForHeight(pageStart, pageEnd, m.cursor, maxHeight)
 
 	// Tasks
 	taskLines := []string{}

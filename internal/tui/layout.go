@@ -252,6 +252,32 @@ func firstValidIndex(idx, n int) int {
 	return min(max(idx, 0), n-1)
 }
 
+// listWindowForHeight recorta la página actual al alto disponible, moviendo la
+// ventana para que el cursor quede dentro.
+//
+// Es el tercer uso de visibleRange en el programa (los otros son Kanban, Gantt y
+// el filtro), y el único que además tiene que|traducir el cursor de índice global
+// a relativo dentro de la página antes de usarlo. Con pageStart y pageEnd
+// iguales, la ventana es la página entera.
+//
+// Se extrajo del render por lo mismo que las otras: son cuatro operaciones con
+// dos condiciones, y sin sacarlas no hay forma de comprobar el recorte sin
+// montar la vista entera.
+func listWindowForHeight(pageStart, pageEnd, cursor, maxHeight int) (int, int) {
+	start, end := pageStart, pageEnd
+
+	// visible son las filas que quedan para tareas una vez descontadas las fijas
+	// de la caja. Con zero o menos no cabe ni una, y se pinta la página entera:
+	// es preferible que la caja desborde a que salga vacía.
+	visible := maxHeight - listFixedRows
+	if visible <= 0 || end-start <= visible {
+		return start, end
+	}
+
+	relStart, relEnd := visibleRange(cursor-pageStart, end-pageStart, visible)
+	return pageStart + relStart, pageStart + relEnd
+}
+
 // separatorWidth es lo que mide el separador horizontal de la barra de filtros:
 // el ancho interior menos las dos columnas del recuadro.
 //
