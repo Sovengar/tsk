@@ -29,6 +29,11 @@ func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
 		}
 	}
 
+	// Los dos errores siguientes -- escritura y cierre -- no tienen forma de
+	// provocarse sin un disco lleno o un fichero que se cierra dos veces, y no
+	// hay punto de inyección para hacerlo. Sus dos ramas hacen lo mismo que la de
+	// arriba: devolver el error con el id de la tarea. Sus mutantes están en
+	// .mutation-allowlist como riesgo aceptado, no como equivalencia.
 	if _, err := tmpFile.WriteString(editTemplate(task)); err != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpFile.Name())

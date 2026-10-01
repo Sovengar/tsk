@@ -242,3 +242,67 @@ func TestSelectedDashProjectBounds(t *testing.T) {
 		t.Errorf("devuelve %q, want %q", p.Name, m.projects[0].Name)
 	}
 }
+
+// Archivar y restaurar un proyecto que no existe falla, y el mensaje lleva el
+// error y la acción: el modal se cierra pero el toast avisa, y un "no se pudo"
+// sin decir qué operación falló sería inútil.
+func TestProjectActionOnMissingProject(t *testing.T) {
+	m := newTestModel(t)
+
+	for _, action := range []string{"archive", "unarchive"} {
+		t.Run(action, func(t *testing.T) {
+			msg := m.projectActionCmd(action, "no-existe")()
+			saved, ok := msg.(projectSavedMsg)
+			if !ok {
+				t.Fatalf("mensaje %T, want projectSavedMsg", msg)
+			}
+			if saved.err == nil {
+				t.Errorf("%s de un proyecto inexistente no dio error", action)
+			}
+			if saved.action != action {
+				t.Errorf("action = %q, want %q", saved.action, action)
+			}
+		})
+	}
+}
+
+// Con el proyecto real, archivarlo lo saca de la lista de activos y restaurarlo
+// lo devuelve. El nombre viaja en el mensaje de éxito, que es lo que usa el
+// toast.
+func TestProjectArchiveAndUnarchive(t *testing.T) {
+	m := newTestModel(t)
+
+	ok := m.projectActionCmd("archive", "api")()
+	saved, isSaved := ok.(projectSavedMsg)
+	if !isSaved {
+		t.Fatalf("mensaje %T, want projectSavedMsg", ok)
+	}
+	if saved.err != nil {
+		t.Fatalf("archivar api falló: %v", saved.err)
+	}
+	if saved.name != "api" {
+		t.Errorf("name = %q, want api", saved.name)
+	}
+
+	activos, _ := m.database.ListProjects()
+	for _, p := range activos {
+		if p.Name == "api" {
+			t.Error("api sigue en la lista de activos tras archivarlo")
+		}
+	}
+
+	back := m.projectActionCmd("unarchive", "api")()
+	if savedBack := back.(projectSavedMsg); savedBack.err != nil {
+		t.Fatalf("restaurar api falló: %v", savedBack.err)
+	}
+	activos, _ = m.database.ListProjects()
+	found := false
+	for _, p := range activos {
+		if p.Name == "api" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("api no volvió a la lista de activos tras restaurarlo")
+	}
+}
