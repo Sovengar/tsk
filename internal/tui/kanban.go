@@ -187,8 +187,11 @@ func kanbanColumnWidths(minWidths []int, avail int) []int {
 // mostrando solo las tarjetas del rango [win.start, win.end).
 func (m *Model) renderKanbanColumn(col kanbanColumn, width int, headerText string, selected bool, win columnWindow) string {
 	var cards []string
-	for j := win.start; j < win.end; j++ {
-		t := col.tasks[j]
+	// range sobre la rebanada en vez de un índice que avanza a mano: un `j--`
+	// invertido dejaría el bucle girando para siempre y el mutant se reportaría
+	// como TIMED OUT en vez de como muerto, que es la peor señal para un gate.
+	for j, t := range col.tasks[win.start:win.end] {
+		j += win.start
 		assigneeLine := t.Assignee
 		if len(t.Tags) > 0 {
 			assigneeLine += "  " + styleDim.Render(strings.Join(t.Tags, ","))

@@ -235,3 +235,107 @@ func TestKanbanHeaderBoundary(t *testing.T) {
 		}
 	}
 }
+
+// kanbanColumnWidths reparte el sobrante en partes iguales y da las columnas
+// sobrantes a las primeras. Ya era pura; lo que faltaba eran los bordes.
+func TestKanbanColumnWidthsEdges(t *testing.T) {
+	tests := []struct {
+		name  string
+		mins  []int
+		avail int
+	}{
+		{"una sola columna", []int{12}, 40},
+		{"sobra exacto", []int{10, 10}, 22}, // 20 + gap 2 = 22, free 0
+		{"sobra de 1", []int{10, 10}, 23},   // free 1: una columna +1
+		{"sobra de 2", []int{10, 10}, 24},   // free 2: las dos +1
+		{"sobra de 3", []int{10, 10}, 25},   // free 3: 1 cada una +1 a la primera
+		{"mínimos negativos", []int{-5, -5}, 40},
+		{"sin espacio", []int{30, 30, 30}, 10},
+		{"avail negativo", []int{10, 10}, -50},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			widths := kanbanColumnWidths(tt.mins, tt.avail)
+			if len(widths) != len(tt.mins) {
+				t.Fatalf("got %d columnas, want %d", len(widths), len(tt.mins))
+			}
+			for i, w := range widths {
+				if w < tt.mins[i] {
+					t.Errorf("columna %d: ancho %d menor al mínimo %d", i, w, tt.mins[i])
+				}
+			}
+		})
+	}
+}
+
+// El reparto aprovecha todo el sobrante: el ancho total más los huecos es
+// exactamente el disponible, o los mínimos si no cabe.
+func TestKanbanColumnWidthsUsesAllSpace(t *testing.T) {
+	for _, mins := range [][]int{
+		{16, 12, 20, 15, 13},
+		{10, 10},
+		{12, 12, 12, 12},
+		{40},
+		{5, 5, 5, 5, 5, 5, 5},
+	} {
+		for avail := 20; avail <= 200; avail += 7 {
+			widths := kanbanColumnWidths(mins, avail)
+			total := 0
+			minsTotal := 0
+			for i, w := range widths {
+				total += w
+				minsTotal += mins[i]
+			}
+			total += kanbanGap * (len(widths) - 1)
+
+			if minsTotal+kanbanGap*(len(mins)-1) >= avail {
+				// No cabe: se respetan los mínimos y no se inventa espacio.
+				if total != minsTotal+kanbanGap*(len(mins)-1) {
+					t.Errorf("mins=%v avail=%d: sin espacio, el total debería ser %d y es %d",
+						mins, avail, minsTotal+kanbanGap*(len(mins)-1), total)
+				}
+				continue
+			}
+			if total != avail {
+				t.Errorf("mins=%v avail=%d: el total es %d, want %d (queda o falta espacio)",
+					mins, avail, total, avail)
+			}
+		}
+	}
+}
+
+// Las columnas difieren como mucho en 1: es lo que hace que el reparto sea
+// "repartido en partes iguales" y no arbitrario.
+func TestKanbanColumnWidthsBalanced(t *testing.T) {
+	for _, mins := range [][]int{{16, 12, 20, 15, 13}, {10, 10}, {12, 12, 12}} {
+		for avail := 40; avail <= 200; avail++ {
+			widths := kanbanColumnWidths(mins, avail)
+			// Sin sobrante no hay nada que repartir: cada columna se queda con
+			// su mínimo, que puede ser muy desigual entre sí.
+			total := 0
+			for _, w := range widths {
+				total += w
+			}
+			if total+kanbanGap*(len(mins)-1) >= avail {
+				continue
+			}
+			minW, maxW := widths[0], widths[0]
+			for _, w := range widths {
+				minW = min(minW, w)
+				maxW = max(maxW, w)
+			}
+			if maxW-minW > 1 {
+				t.Fatalf("mins=%v avail=%d: reparto desigual %v", mins, avail, widths)
+			}
+		}
+	}
+}
+
+func TestKanbanColumnWidthsEmpty(t *testing.T) {
+	if got := kanbanColumnWidths(nil, 100); got != nil {
+		t.Errorf("got %v, want nil sin columnas", got)
+	}
+	if got := kanbanColumnWidths([]int{}, 100); len(got) != 0 {
+		t.Errorf("got %v, want vacío", got)
+	}
+}
