@@ -22,6 +22,10 @@ func renderModalBox(title string, lines []string, width int) string {
 }
 
 // modalWidthFor ajusta el ancho preferido del modal al ancho disponible.
+//
+// El umbral es "cabe entero": a preferred == w-2 el modal entra justo y las dos
+// ramas devuelven el mismo número, así que el borde del ">=" es un mutante
+// equivalente.
 func modalWidthFor(preferred, w int) int {
 	if preferred > w-2 {
 		return w - 2
