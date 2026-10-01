@@ -425,7 +425,7 @@ func (m *Model) renderFilterModal(content string) string {
 	}
 
 	totalWidth := modalWidthFor(54, w)
-	innerWidth := totalWidth - 2
+	innerWidth := modalInnerWidth(totalWidth)
 	for i := range lines {
 		lines[i] = truncateLines(lines[i], innerWidth)
 	}

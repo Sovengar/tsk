@@ -95,19 +95,15 @@ func (m Model) handleAssigneeModalKey(key string) (tea.Model, tea.Cmd) {
 			m.assigneeDetail = false
 			return m, nil
 		case "j", "down":
-			if m.assigneeOffdayIdx < len(offs)-1 {
-				m.assigneeOffdayIdx++
-			}
+			m.assigneeOffdayIdx = shiftIndex(m.assigneeOffdayIdx, len(offs), 1)
 		case "k", "up":
-			if m.assigneeOffdayIdx > 0 {
-				m.assigneeOffdayIdx--
-			}
+			m.assigneeOffdayIdx = shiftIndex(m.assigneeOffdayIdx, len(offs), -1)
 		case "a":
 			if m.currentAssignee() != "" {
 				return m, m.openOffdayForm()
 			}
 		case "d", "x":
-			if m.assigneeOffdayIdx < len(offs) {
+			if inRange(m.assigneeOffdayIdx, len(offs)) {
 				m.confirmOpen = true
 				m.confirmAction = "delete-offday"
 				m.confirmOffday = offs[m.assigneeOffdayIdx]
@@ -121,22 +117,15 @@ func (m Model) handleAssigneeModalKey(key string) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.assigneeModalOpen = false
 	case "j", "down":
-		if m.assigneeIdx < len(roster)-1 {
-			m.assigneeIdx++
-		}
+		m.assigneeIdx = shiftIndex(m.assigneeIdx, len(roster), 1)
 	case "k", "up":
-		if m.assigneeIdx > 0 {
-			m.assigneeIdx--
-		}
+		m.assigneeIdx = shiftIndex(m.assigneeIdx, len(roster), -1)
 	case "enter":
-		if len(roster) > 0 {
-			m.assigneeDetail = true
-			m.assigneeOffdayIdx = 0
-		}
+		// El roster nunca está vacío, así que siempre hay a quién entrar.
+		m.assigneeDetail = true
+		m.assigneeOffdayIdx = 0
 	case "a":
-		if len(roster) > 0 {
-			return m, m.openOffdayForm()
-		}
+		return m, m.openOffdayForm()
 	}
 	return m, nil
 }
@@ -227,17 +216,22 @@ func (m Model) handleOffdaySaved(msg offdaySavedMsg) (tea.Model, tea.Cmd) {
 // renderAssigneeModal dibuja el modal de assignees: lista de personas o, si se
 // entró a una, su detalle con tareas activas y off-days.
 func (m *Model) renderAssigneeModal(content string) string {
+	// El clamp va antes de la bifurcación: el detalle usa currentAssignee, que
+	// es el elemento del roster en assigneeIdx, y sin acotar el índice un
+	// assigneeIdx viejo pintaría un detalle sin nombre. Antes vivía después,
+	// y el camino del detalle depended de que otro lo hubiera ejecutado.
+	m.clampAssigneeIdx()
+
 	if m.assigneeDetail {
 		return m.renderAssigneeDetail(content)
 	}
 
-	m.clampAssigneeIdx()
 	roster := m.assigneeRoster()
 
+	// El roster nunca está vacío: buildAssigneeRoster mete siempre a "Me". Por
+	// eso no hay rama para el caso sin personas; el "(no assignees)" que había
+	// aquí era inalcanzable.
 	lines := []string{""}
-	if len(roster) == 0 {
-		lines = append(lines, styleDim.Render("  (no assignees)"))
-	}
 	start, end := visibleRange(m.assigneeIdx, len(roster), assigneeModalMaxRows)
 	for i, s := range roster[start:end] {
 		i += start
@@ -253,7 +247,7 @@ func (m *Model) renderAssigneeModal(content string) string {
 	}
 
 	totalWidth := modalWidthFor(58, m.width)
-	innerWidth := totalWidth - 2
+	innerWidth := modalInnerWidth(totalWidth)
 	for i := range lines {
 		lines[i] = truncateLines(lines[i], innerWidth)
 	}
@@ -262,12 +256,10 @@ func (m *Model) renderAssigneeModal(content string) string {
 
 // renderAssigneeDetail dibuja el detalle de la persona seleccionada.
 func (m *Model) renderAssigneeDetail(content string) string {
+	// El roster nunca está vacío y el índice ya está acotado, así que hay
+	// persona. La rama que volvía a la lista cuando el nombre salía vacío era
+	// inalcanzable; lo que la sustituía, el clamp de arriba, sí hace falta.
 	name := m.currentAssignee()
-	if name == "" {
-		// El roster quedó vacío (p. ej. se borró todo): volver a la lista.
-		m.assigneeDetail = false
-		return m.renderAssigneeModal(content)
-	}
 	m.clampOffdayIdx()
 
 	tasks := m.assigneeActiveTasks(name)
@@ -309,7 +301,7 @@ func (m *Model) renderAssigneeDetail(content string) string {
 	}
 
 	totalWidth := modalWidthFor(58, m.width)
-	innerWidth := totalWidth - 2
+	innerWidth := modalInnerWidth(totalWidth)
 	for i := range lines {
 		lines[i] = truncateLines(lines[i], innerWidth)
 	}
@@ -340,7 +332,7 @@ func (m *Model) renderOffdayForm(content string) string {
 	}
 
 	totalWidth := modalWidthFor(58, m.width)
-	innerWidth := totalWidth - 2
+	innerWidth := modalInnerWidth(totalWidth)
 	for i := range lines {
 		lines[i] = truncateLines(lines[i], innerWidth)
 	}

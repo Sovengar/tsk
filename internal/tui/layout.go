@@ -54,6 +54,20 @@ func cellWidth(s string, width int) string {
 	return s
 }
 
+// modalInnerWidth es el ancho útil de un modal: el ancho total menos los dos
+// caracteres del borde izquierdo y el derecho.
+//
+// modalWidthFor deja siempre al menos dos columnas de margen (si no, el modal se
+// pegaría al borde de la pantalla), así que el resultado es positivo. El suelo
+// en 1 cubre el caso en que totalWidth venga ya recortado por otro camino.
+//
+// Estaba escrito cinco veces, y cada copia era un sitio donde un "- 2" mutado
+// pasaba desapercibido: el texto se recortaba un par de columnas más o menos de
+// ancho y nadie lo notaba salvo mirando el render con atención.
+func modalInnerWidth(totalWidth int) int {
+	return max(totalWidth-2, 1)
+}
+
 // contentBudget calcula las filas disponibles para el contenido de la vista
 // descontando el preview y la barra de keybinds.
 func contentBudget(total, previewH, keybindsH int) int {
@@ -338,6 +352,12 @@ func currentProjectName(view viewKind, filterProject string, projects []model.Pr
 // Se salta a quien no tenga responsable (vacío o "unassigned"): sin nombre no
 // hay a quién atribuirle un off-day. Devuelve la lista ordenada por nombre, que
 // es lo que hace estable el índice al reordenar el mapa.
+// buildAssigneeRoster resume las tareas y los off-days por persona.
+//
+// El resultado nunca está vacío: "Me" se mete siempre, aunque no haya ninguna
+// tarea sin responsable. Eso es a propósito — siempre hay alguien a quien mirar,
+// y con eso el modal nunca se abre sin contenido. Los llamantes que preguntaban
+// "si el roster está vacío" estaban protegiéndose de algo que no puede pasar.
 func buildAssigneeRoster(tasks []model.Task, offdays []model.OffDay) []assigneeSummary {
 	byName := map[string]*assigneeSummary{}
 

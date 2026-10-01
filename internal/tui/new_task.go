@@ -503,7 +503,7 @@ func (m *Model) renderNewTaskModal(content string) string {
 	}
 
 	totalWidth := modalWidthFor(newTaskModalWidth, w)
-	innerWidth := totalWidth - 2
+	innerWidth := modalInnerWidth(totalWidth)
 	for i := range lines {
 		lines[i] = truncateLines(lines[i], innerWidth)
 	}
