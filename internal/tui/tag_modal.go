@@ -62,7 +62,6 @@ func (m Model) handleTagModalKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "tab":
-		// Completa con la sugerencia seleccionada o, si no hay, la primera.
 		// Completa con la sugerencia seleccionada y, si el índice no vale para
 		// esta lista, con la primera. Sin lista, firstOrAt devuelve "" y el
 		// input se queda como estaba.

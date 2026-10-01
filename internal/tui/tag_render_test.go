@@ -322,3 +322,35 @@ func countBoldLines(rendered string) int {
 	}
 	return n
 }
+
+// Tab y Enter completan y consumen: ambas cosas limpian la selección de
+// sugerencias, porque el input pasa a ser el valor completo y la lista de
+// sugerencias va a cambiar.
+func TestTagTabAndEnterClearSuggestionIndex(t *testing.T) {
+	tests := []struct {
+		key       string
+		wantInput string
+	}{
+		// Tab completa: el input pasa a ser la sugerencia entera.
+		{"tab", "build"},
+		// Enter la agrega y deja el input vacío para la siguiente.
+		{"enter", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			m := newTagModel(t, "bug", "build")
+			m.tagInput = "bu"
+			m.tagSuggestIdx = 1
+
+			next, _ := press(m, tt.key)
+			got := next
+
+			if got.tagSuggestIdx != -1 {
+				t.Errorf("tras %q el índice es %d, want -1", tt.key, got.tagSuggestIdx)
+			}
+			if got.tagInput != tt.wantInput {
+				t.Errorf("tras %q el input es %q, want %q", tt.key, got.tagInput, tt.wantInput)
+			}
+		})
+	}
+}
