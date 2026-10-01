@@ -80,6 +80,10 @@ func (p PreviewBar) descriptionLines(desc string) []string {
 	wrapped := strings.Split(ansi.Wrap(desc, limit, " "), "\n")
 	if len(wrapped) > maxLines {
 		wrapped = wrapped[:maxLines]
+		// El recorte de la última línea es defensivo: ansi.Wrap ya entrega
+		// líneas de limit columnas o menos, así que Truncate no quita nada y su
+		// límite exacto -- limit, limit-1, limit-2 -- da lo mismo. Lo que hace el
+		// trabajo es la elipsis. Por eso sus dos mutantes sobreviven.
 		last := strings.TrimRight(ansi.Truncate(wrapped[len(wrapped)-1], limit-1, ""), " ")
 		wrapped[len(wrapped)-1] = last + "…"
 	}
