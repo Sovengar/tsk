@@ -7,6 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"tsk/internal/model"
 )
 
 // El modal de nueva tarea tiene seis campos y el foco va en uno solo: la fila
@@ -171,5 +173,45 @@ func TestNewTaskPasteIntoDescriptionKeepsNewlines(t *testing.T) {
 	}
 	if !strings.Contains(valor, "\n") {
 		t.Errorf("el salto de línea no se conservó: %q", valor)
+	}
+}
+
+// Abrir el alta deja el modelo en un estado conocido: foco en prioridad, sin
+// título, "Me" como responsable, ninguna sugerencia seleccionada y sin tags.
+// Los dos -1 son "nada seleccionado", y un 1 ahí apuntaría a una lista de
+// sugerencias que todavía no existe.
+func TestOpeningNewTaskResetsToInitialState(t *testing.T) {
+	m := newTestModel(t)
+
+	// Antes de abrir, el estado es distinto: hay sugerencia seleccionada y tags.
+	next, _ := press(m, "i")
+	got := next
+
+	if !got.newTaskOpen {
+		t.Fatal("la tecla i no abrió el alta")
+	}
+	if got.newTaskFieldIdx != newTaskFieldPriority {
+		t.Errorf("el foco abre en %d, want %d (prioridad)", got.newTaskFieldIdx, newTaskFieldPriority)
+	}
+	if got.newTaskTitle != "" {
+		t.Errorf("el título arranca en %q, want vacío", got.newTaskTitle)
+	}
+	if got.newTaskAssignee != "Me" {
+		t.Errorf("el responsable arranca en %q, want \"Me\"", got.newTaskAssignee)
+	}
+	if got.newTaskAssigneeSuggIdx != -1 {
+		t.Errorf("suggIdx de assignee = %d, want -1", got.newTaskAssigneeSuggIdx)
+	}
+	if got.newTaskTagSuggIdx != -1 {
+		t.Errorf("suggIdx de tags = %d, want -1", got.newTaskTagSuggIdx)
+	}
+	if len(got.newTaskTags) != 0 {
+		t.Errorf("arranca con %d tags, want ninguna", len(got.newTaskTags))
+	}
+	if got.newTaskErr != "" {
+		t.Errorf("arranca con error %q, want ninguno", got.newTaskErr)
+	}
+	if got.newTaskPriority != model.PriorityLow {
+		t.Errorf("la prioridad arranca en %d, want %d", got.newTaskPriority, model.PriorityLow)
 	}
 }
