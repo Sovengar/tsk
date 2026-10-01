@@ -130,7 +130,7 @@ func (m *Model) newTaskSyncFocus() tea.Cmd {
 func (m Model) newTaskMoveField(delta int) (tea.Model, tea.Cmd) {
 	if m.newTaskFieldIdx == newTaskFieldAssignee && m.newTaskAssigneeSuggIdx >= 0 {
 		suggs := m.assigneeSuggestions()
-		if m.newTaskAssigneeSuggIdx < len(suggs) {
+		if inRange(m.newTaskAssigneeSuggIdx, len(suggs)) {
 			m.newTaskAssignee = suggs[m.newTaskAssigneeSuggIdx]
 		}
 		m.newTaskAssigneeSuggIdx = -1
@@ -157,7 +157,7 @@ func (m Model) newTaskSubmit() (tea.Model, tea.Cmd) {
 
 	if m.newTaskFieldIdx == newTaskFieldAssignee && m.newTaskAssigneeSuggIdx >= 0 {
 		suggs := m.assigneeSuggestions()
-		if m.newTaskAssigneeSuggIdx < len(suggs) {
+		if inRange(m.newTaskAssigneeSuggIdx, len(suggs)) {
 			m.newTaskAssignee = suggs[m.newTaskAssigneeSuggIdx]
 		}
 	}
@@ -283,25 +283,15 @@ func (m Model) handleNewTaskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case newTaskFieldAssignee:
 		switch key {
 		case "up":
-			suggs := m.assigneeSuggestions()
-			if len(suggs) > 0 {
-				if m.newTaskAssigneeSuggIdx <= 0 {
-					m.newTaskAssigneeSuggIdx = len(suggs) - 1
-				} else {
-					m.newTaskAssigneeSuggIdx--
-				}
-			}
+			m.newTaskAssigneeSuggIdx = cycleIndex(m.newTaskAssigneeSuggIdx, len(m.assigneeSuggestions()), -1)
 			return m, nil
 		case "down":
-			suggs := m.assigneeSuggestions()
-			if len(suggs) > 0 {
-				m.newTaskAssigneeSuggIdx = (m.newTaskAssigneeSuggIdx + 1) % len(suggs)
-			}
+			m.newTaskAssigneeSuggIdx = cycleIndex(m.newTaskAssigneeSuggIdx, len(m.assigneeSuggestions()), 1)
 			return m, nil
 		case "enter":
 			if m.newTaskAssigneeSuggIdx >= 0 {
 				suggs := m.assigneeSuggestions()
-				if m.newTaskAssigneeSuggIdx < len(suggs) {
+				if inRange(m.newTaskAssigneeSuggIdx, len(suggs)) {
 					m.newTaskAssignee = suggs[m.newTaskAssigneeSuggIdx]
 					m.newTaskAssigneeSuggIdx = -1
 					return m, nil
@@ -316,25 +306,15 @@ func (m Model) handleNewTaskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case newTaskFieldTags:
 		switch key {
 		case "up":
-			suggs := m.tagFieldSuggestions()
-			if len(suggs) > 0 {
-				if m.newTaskTagSuggIdx <= 0 {
-					m.newTaskTagSuggIdx = len(suggs) - 1
-				} else {
-					m.newTaskTagSuggIdx--
-				}
-			}
+			m.newTaskTagSuggIdx = cycleIndex(m.newTaskTagSuggIdx, len(m.tagFieldSuggestions()), -1)
 			return m, nil
 		case "down":
-			suggs := m.tagFieldSuggestions()
-			if len(suggs) > 0 {
-				m.newTaskTagSuggIdx = (m.newTaskTagSuggIdx + 1) % len(suggs)
-			}
+			m.newTaskTagSuggIdx = cycleIndex(m.newTaskTagSuggIdx, len(m.tagFieldSuggestions()), 1)
 			return m, nil
 		case "enter", ",":
 			if m.newTaskTagSuggIdx >= 0 {
 				suggs := m.tagFieldSuggestions()
-				if m.newTaskTagSuggIdx < len(suggs) {
+				if inRange(m.newTaskTagSuggIdx, len(suggs)) {
 					m.newTaskTagInput = suggs[m.newTaskTagSuggIdx]
 				}
 			}
