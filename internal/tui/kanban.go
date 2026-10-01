@@ -193,6 +193,10 @@ func (m *Model) renderKanbanColumn(col kanbanColumn, width int, headerText strin
 	for j, t := range col.tasks[win.start:win.end] {
 		j += win.start
 		assigneeLine := t.Assignee
+		// La condición compara con cero y no con "menor o igual": con la lista
+		// vacía el join da "" y la línea acabaría con dos espacios de más, que
+		// la caja no deja ver porque rellena a la derecha. Por eso su mutante
+		// sobrevive y por eso da igual.
 		if len(t.Tags) > 0 {
 			assigneeLine += "  " + styleDim.Render(strings.Join(t.Tags, ","))
 		}

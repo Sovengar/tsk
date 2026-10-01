@@ -316,3 +316,131 @@ func newKanbanModelWithWorkflow(t *testing.T, tasks int, workflow []string) *Mod
 	m.clampKanbanCursor()
 	return m
 }
+
+// La tarjeta de una columna lleva la prioridad si la columna la muestra, y sólo el
+// título si no. Y el responsable va con sus tags detrás cuando las tiene.
+func TestKanbanCardContent(t *testing.T) {
+	tags := []string{"bug", "urgente"}
+	conTags := model.Task{ID: 1, Title: "arreglar", Assignee: "@juan", Priority: 3, Tags: tags}
+
+	tests := []struct {
+		name          string
+		task          model.Task
+		showPriority  bool
+		wantPrioridad bool
+		wantTags      bool
+	}{
+		{"con prioridad y sin tags", model.Task{ID: 1, Title: "t", Assignee: "@juan", Priority: 2}, true, true, false},
+		{"sin prioridad y sin tags", model.Task{ID: 1, Title: "t", Assignee: "@juan", Priority: 2}, false, false, false},
+		{"con tags y con prioridad", conTags, true, true, true},
+		{"con tags y sin prioridad", conTags, false, false, true},
+		{"sin responsable", model.Task{ID: 1, Title: "t", Priority: 1}, true, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newKanbanModel(t, 0)
+			col := kanbanColumn{status: "todo", tasks: []model.Task{tt.task}, showPriority: tt.showPriority}
+
+			out := ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", false, columnWindow{end: 1}))
+			// El carácter de prioridad viene con color, así que se compara sin él:
+			// el render también se mide sin él.
+			barra := ansi.Strip(priorityChar(tt.task.Priority))
+			if tiene := strings.Contains(out, barra); tiene != tt.wantPrioridad {
+				t.Errorf("la barra de prioridad %q sale=%v, want %v:\n%s",
+					barra, tiene, tt.wantPrioridad, out)
+			}
+			// Las tags van dos columnas detrás del responsable, no pegadas. Sin ese
+			// hueco los nombres se leen como un bloque y el "> 0 tags" del contador
+			// deja de empezar en columna fija.
+			junto := "@juan  " + strings.Join(tags, ",")
+			if tiene := strings.Contains(out, junto); tiene != tt.wantTags {
+				t.Errorf("el hueco con las tags sale=%v, want %v:\n%s", tiene, tt.wantTags, out)
+			}
+			if tiene := strings.Contains(out, strings.Join(tags, ",")); tiene != tt.wantTags {
+				t.Errorf("las tags salen=%v, want %v:\n%s", tiene, tt.wantTags, out)
+			}
+			if !strings.Contains(out, "t") && !strings.Contains(out, "arreglar") {
+				t.Errorf("no sale el título:\n%s", out)
+			}
+		})
+	}
+}
+
+// La tarjeta seleccionada lleva "> " delante y las demás "  ". Es la única
+// diferencia entre ellas, así que lo que se compara es el prefijo de la primera
+// línea de la tarjeta, no su texto: el texto lleva la barra de prioridad con
+// color y comparar sobre el render sin color no lo deja claro.
+func TestKanbanSelectedCardIsMarked(t *testing.T) {
+	m := newKanbanModel(t, 0)
+	task := model.Task{ID: 1, Title: "tarea", Assignee: "@juan", Priority: 2}
+	// Con showPriority la tarjeta ya trae su propio prefijo de dos columnas, así
+	// que el prefijo de selección se distingue del de la tarjeta. Sin la barra,
+	// los dos prefijos se solapan y quitarlos sería invisible.
+	col := kanbanColumn{status: "todo", tasks: []model.Task{task}, showPriority: true}
+
+	seleccionada := primeraTarjeta(t, ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", true, columnWindow{end: 1})), "tarea")
+	if !strings.HasPrefix(seleccionada, "> ") {
+		t.Errorf("la tarjeta seleccionada empieza por %q, want \"> \"", seleccionada)
+	}
+
+	noSeleccionada := primeraTarjeta(t, ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", false, columnWindow{end: 1})), "tarea")
+	if strings.HasPrefix(noSeleccionada, "> ") {
+		t.Errorf("una tarjeta no seleccionada empieza por %q", noSeleccionada)
+	}
+	if !strings.HasPrefix(noSeleccionada, "    ") {
+		t.Errorf("una tarjeta no seleccionada no lleva el prefijo de dos columnas: %q", noSeleccionada)
+	}
+}
+
+// Con dos tarjetas y el cursor en la segunda, sólo esa lleva la marca.
+func TestKanbanOnlyCursorRowIsMarked(t *testing.T) {
+	m := newKanbanModel(t, 0)
+	m.kanbanRow = 1
+	col := kanbanColumn{status: "todo", tasks: []model.Task{
+		{ID: 1, Title: "primera", Assignee: "@juan", Priority: 2},
+		{ID: 2, Title: "segunda", Assignee: "@juan", Priority: 2},
+	}}
+
+	out := ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", true, columnWindow{end: 2}))
+	if n := strings.Count(out, "> "); n != 1 {
+		t.Errorf("hay %d marcas, want 1:\n%s", n, out)
+	}
+	if !strings.Contains(out, "segunda") {
+		t.Errorf("no sale la segunda tarjeta:\n%s", out)
+	}
+}
+
+// primeraTarjeta devuelve la primera línea que contiene el texto de una tarjeta,
+// con el borde izquierdo de la columna quitado. El resto del recuadro -- la caja,
+// la cabecera -- se salta buscando la línea que trae el texto.
+//
+// Todo por runes: los bordes y los guiones son multibyte, y un corte por bytes
+// parte el carácter y devuelve basura.
+func primeraTarjeta(t *testing.T, renderizado, titulo string) string {
+	t.Helper()
+	for _, linea := range strings.Split(renderizado, "\n") {
+		i := strings.Index(linea, titulo)
+		if i < 0 {
+			continue
+		}
+		runes := []rune(linea[:i])
+		// Fuera el borde izquierdo: "║", "│", "╔" o "╭".
+		for len(runes) > 0 && strings.ContainsRune("║│╔╭", runes[0]) {
+			runes = runes[1:]
+		}
+		return string(runes)
+	}
+	t.Fatalf("la columna no tiene la tarjeta %q:\n%s", titulo, renderizado)
+	return ""
+}
+
+// Una columna sin tarjetas dice "(empty)" en vez de salirse con una caja vacía.
+func TestKanbanEmptyColumnSaysSo(t *testing.T) {
+	m := newKanbanModel(t, 0)
+	col := kanbanColumn{status: "todo", tasks: nil}
+
+	out := ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", false, columnWindow{}))
+	if !strings.Contains(out, "(empty)") {
+		t.Errorf("una columna vacía no lo dice:\n%s", out)
+	}
+}
