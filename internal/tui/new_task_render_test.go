@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -81,5 +83,93 @@ func TestNewTaskNoWriteCursorOutsideTitle(t *testing.T) {
 	// de prioridad no lleva cursor aunque esté enfocado.
 	if strings.Contains(out, "mi título"+cursorGlyph) {
 		t.Errorf("con el foco fuera, el título sigue con cursor:\n%s", out)
+	}
+}
+
+// Pegar texto va al campo activo, y en los campos con sugerencias limpia la
+// selección: la lista va a cambiar y el cursor se quedaría apuntando a algo que
+// ya no está.
+func TestNewTaskPasteGoesToActiveField(t *testing.T) {
+	tests := []struct {
+		name       string
+		field      int
+		wantTitle  string
+		wantAssign string
+		wantTagIn  string
+	}{
+		// El responsable viene puesto en "Me" al abrir el alta, así que pegar
+		// encima de él lo concatena en vez de sustituirlo.
+		{"title", newTaskFieldTitle, "pegado", "", ""},
+		{"assignee", newTaskFieldAssignee, "", "Mepegado", ""},
+		{"tags", newTaskFieldTags, "", "", "pegado"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestModel(t)
+			next, _ := press(m, "i")
+			m2 := next
+			m2.newTaskFieldIdx = tt.field
+			m2.newTaskAssigneeSuggIdx = 3
+			m2.newTaskTagSuggIdx = 3
+			m2.newTaskErr = "Title is required"
+
+			pasted, _ := m2.Update(tea.PasteMsg{Content: "pegado"})
+			got := pasted.(Model)
+
+			if got.newTaskTitle != tt.wantTitle {
+				t.Errorf("title = %q, want %q", got.newTaskTitle, tt.wantTitle)
+			}
+			wantAssign := tt.wantAssign
+			if wantAssign == "" {
+				wantAssign = "Me" // el valor por defecto del campo
+			}
+			if got.newTaskAssignee != wantAssign {
+				t.Errorf("assignee = %q, want %q", got.newTaskAssignee, wantAssign)
+			}
+			if got.newTaskTagInput != tt.wantTagIn {
+				t.Errorf("tagInput = %q, want %q", got.newTaskTagInput, tt.wantTagIn)
+			}
+			// El error de "falta el título" sólo se limpia pegando en el título:
+			// en los demás campos el título sigue faltando.
+			if tt.field == newTaskFieldTitle && got.newTaskErr != "" {
+				t.Errorf("pegar en el título no limpia el error: %q", got.newTaskErr)
+			}
+			if tt.field != newTaskFieldTitle && got.newTaskErr == "" {
+				t.Errorf("pegar en %s limpió el error sin tocar el título: %q", tt.name, got.newTaskErr)
+			}
+			if tt.field == newTaskFieldAssignee && got.newTaskAssigneeSuggIdx != -1 {
+				t.Errorf("suggIdx de assignee = %d, want -1", got.newTaskAssigneeSuggIdx)
+			}
+			if tt.field == newTaskFieldTags && got.newTaskTagSuggIdx != -1 {
+				t.Errorf("suggIdx de tags = %d, want -1", got.newTaskTagSuggIdx)
+			}
+		})
+	}
+}
+
+// Pegar en la descripción va al textarea, no a los inputs de una línea: un
+// salto de línea es una línea nueva, no un espacio.
+func TestNewTaskPasteIntoDescriptionKeepsNewlines(t *testing.T) {
+	m := newTestModel(t)
+	next, _ := press(m, "i")
+	m2 := next
+	m2.newTaskFieldIdx = newTaskFieldDescription
+	m2.newTaskTitle = "antes"
+	// El textarea sólo acepta el pegado con el foco puesto, que es lo que hace el
+	// handler al abrir el modal.
+	m2.newTaskTextarea.Focus()
+
+	pasted, _ := m2.Update(tea.PasteMsg{Content: "uno\ndos"})
+	got := pasted.(Model)
+
+	if got.newTaskTitle != "antes" {
+		t.Errorf("el título cambió al pegar en la descripción: %q", got.newTaskTitle)
+	}
+	valor := got.newTaskTextarea.Value()
+	if !strings.Contains(valor, "uno") || !strings.Contains(valor, "dos") {
+		t.Errorf("el textarea quedó en %q", valor)
+	}
+	if !strings.Contains(valor, "\n") {
+		t.Errorf("el salto de línea no se conservó: %q", valor)
 	}
 }
