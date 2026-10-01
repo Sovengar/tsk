@@ -21,6 +21,10 @@ func detailKeybinds() []keybind {
 	}
 }
 
+// helpModalWidth es el ancho interior preferido del modal de ayuda. El conjunto
+// son las teclas de vista más las de detalle, y cabe de sobra en 46 columnas.
+const helpModalWidth = 46
+
 func (m *Model) renderHelpModal(content string) string {
 	w := m.width
 
@@ -60,11 +64,9 @@ func (m *Model) renderHelpModal(content string) string {
 
 	body := strings.Join(viewLines, "\n")
 
-	// Calculate modal dimensions
-	modalWidth := 46
-	if modalWidth > w-2 {
-		modalWidth = w - 2
-	}
+	// modalWidthFor deja siempre dos columnas de margen; si no, el modal se
+	// pegaría al borde de la pantalla.
+	modalWidth := modalWidthFor(helpModalWidth, w)
 
 	modal := lipgloss.JoinVertical(lipgloss.Left,
 		"",
@@ -80,30 +82,10 @@ func (m *Model) renderHelpModal(content string) string {
 		Border(lipgloss.RoundedBorder(), true).
 		Render(modal)
 
-	// Overlay on content
-	lines := strings.Split(content, "\n")
-	totalLines := len(lines)
-	modalLines := strings.Split(modal, "\n")
-	modalH := len(modalLines)
-
-	// Center vertically
-	startY := (totalLines - modalH) / 2
-	startY = max(startY, 0)
-
-	// Pad background if modal is taller (like dbx does)
-	for len(lines) < startY+modalH {
-		lines = append(lines, strings.Repeat(" ", w))
-	}
-
-	// Center horizontally — account for border (2 chars total)
-	totalModalW := modalWidth + 2
-	startX := (w - totalModalW) / 2
-	startX = max(startX, 0)
-
-	for i, ml := range modalLines {
-		y := startY + i
-		lines[y] = OverlayLine(lines[y], ml, startX)
-	}
-
-	return strings.Join(lines, "\n")
+	// El centrado vertical y horizontal es el de overlayModal, no una segunda
+	// versión: estaba reimplementado aquí línea por línea, con sus propios
+	// suelos, y por eso cada uno de esos números era un sitio donde un mutante
+	// podía colarse sin que ningún test lo notara. El ancho que recibe
+	// overlayModal incluye los bordes.
+	return overlayModal(content, modal, modalWidth+2, w)
 }
