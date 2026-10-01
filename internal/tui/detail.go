@@ -59,23 +59,9 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 
 	commentLines := m.renderCommentLines(w)
 
-	// Reparto de alto entre descripción y comentarios.
-	// fixed = líneas que no son contenido:
-	//   caja tarea:      2 bordes + 5 meta + sep + "Description:" = 9
-	//   separación:      1
-	//   caja comentarios: 2 bordes = 2
-	const fixed = 12
-	avail := h - fixed
-	avail = max(avail, 3)
-
-	// Al menos una línea de comentarios (o "(no comments)").
-	maxCommentLines := avail - 2
-	maxCommentLines = max(maxCommentLines, 1)
-	commentBudget := len(m.detailComments)
-	commentBudget = max(commentBudget, 1)
-	commentBudget = min(commentBudget, maxCommentLines)
-	descBudget := avail - commentBudget
-	descBudget = max(descBudget, 1)
+	// Reparto de alto entre comentarios y descripción. La aritmética vive en
+	// detailHeightBudget: aquí sólo se aplica.
+	commentBudget, descBudget := detailHeightBudget(h, len(m.detailComments))
 
 	if len(descLines) > descBudget {
 		descLines = descLines[:descBudget]
@@ -151,26 +137,19 @@ func formatCommentTime(s string) string {
 		return "—"
 	}
 	s = strings.Replace(s, "T", " ", 1)
-	if len(s) >= 16 {
-		return s[:16]
-	}
-	return s
+	return truncateAt(s, 16)
 }
 
 func formatTime(s string) string {
 	if s == "" {
 		return "—"
 	}
-	// Simple truncation to date+time
-	if len(s) >= 19 {
-		return s[:19]
-	}
-	return s
+	return truncateAt(s, 19)
 }
 
+// formatCompleted es formatTime: el caso vacío ya lo cubre. La guarda que tenía
+// aquí devolvía lo mismo que la de formatTime, así que era una rama que ningún
+// test podía distinguir.
 func formatCompleted(s string) string {
-	if s == "" {
-		return "—"
-	}
 	return formatTime(s)
 }

@@ -176,6 +176,54 @@ func firstValidIndex(idx, n int) int {
 	return min(max(idx, 0), n-1)
 }
 
+// detailHeightBudget reparte el alto del detalle entre comentarios y
+// descripción.
+//
+// fixed son las líneas que no son contenido: bordes de las dos cajas, la
+// metadata, el separador y el rótulo de Description. avail es lo que queda, con
+// un mínimo de 3 para que la caja tenga sentido aunque el terminal sea minúsculo.
+//
+// De avail se reservan 2 líneas para el separador y el rótulo de los comentarios
+// antes de decidir cuántas caben: maxCommentLines. El presupuesto real es el
+// número de comentarios, acotado entre 1 y maxCommentLines (al menos una línea,
+// o el "(no comments)"). El resto va a la descripción, también con un mínimo de
+// una línea.
+//
+// Se extrajo porque eran seis operaciones encadenadas dentro del render, con
+// cuatro suelos distintos, y ninguna se podía comprobar sin montar el modal.
+func detailHeightBudget(maxHeight, commentCount int) (commentBudget, descBudget int) {
+	const fixed = 12
+	avail := max(maxHeight-fixed, 3)
+
+	maxCommentLines := max(avail-2, 1)
+	commentBudget = min(max(commentCount, 1), maxCommentLines)
+	// Lo que sobra para la descripción no necesita suelo: los comentarios se
+	// quedan como mucho en avail-2, así que siempre quedan al menos 2 líneas. Un
+	// max(..., 1) aquí era una rama que no se podía activar.
+	descBudget = avail - commentBudget
+	return commentBudget, descBudget
+}
+
+// truncateAt devuelve s recortada a n bytes, o el propio s si es más corta.
+//
+// Los bytes y no los runes a propósito: son timestamps RFC3339, que son ASCII.
+// En un timestamp todos los "caracteres" son de un byte y un slice por runes
+// sólo añadiría una conversión sin efecto.
+//
+// n <= 0 devuelve vacío. Sin ese suelo, s[:-1] revienta: los dos llamantes
+// pasan constantes positivas, así que hoy es inalcanzable, pero una función que
+// admite un int y peta con un negativo es una trampa esperando a un llamante
+// nuevo.
+func truncateAt(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	// min en vez de `if len(s) <= n { return s }`: cuando la longitud coincide con
+	// el límite las dos ramas dan el mismo string, así que ese borde era otro
+	// mutante equivalente.
+	return s[:min(len(s), n)]
+}
+
 // clampTo acota un índice a [0, n). Con n <= 0 devuelve 0: sin lista no hay
 // posición, y 0 es lo que todos los llamantes muestran como "nada".
 //
