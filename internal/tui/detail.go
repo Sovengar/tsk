@@ -19,8 +19,9 @@ var detailBorderFg = lipgloss.Color("8")
 func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 	w := m.width
 	h := maxHeight
-	inner := w - 2 // ancho interior de las cajas (descuenta los bordes)
-	inner = max(inner, 1)
+	// El ancho interior de las cajas: el mismo que el de un modal, porque es el
+	// mismo descuento por los dos bordes.
+	inner := modalInnerWidth(w)
 
 	// Priority with colored character
 	prio := priorityChar(t.Priority) + " " + model.PriorityLabel(t.Priority)
