@@ -22,6 +22,10 @@ func RenderWithTitleEx(border lipgloss.Border, borderFg color.Color, align int, 
 // otro texto en la línea inferior, cada uno con su propia alineación. Un título
 // vacío no se dibuja (la línea queda rellena por completo).
 func RenderWithTitlesEx(border lipgloss.Border, borderFg color.Color, topTitle string, topAlign int, bottomTitle string, bottomAlign int, content string, width int) string {
+	// El suelo son dos columnas, una por cada esquina del borde. Con el suelo, un
+	// width de 1 se sube a 2 y el interior queda en 0; sin él, el interior sería
+	// -1 y el suelo de abajo lo dejaría en 0 también. Por eso el ">=" de este
+	// suelo y el "< 0" del de abajo son equivalentes entre sí.
 	if width < 2 {
 		width = 2
 	}
@@ -51,6 +55,8 @@ func RenderWithTitlesEx(border lipgloss.Border, borderFg color.Color, topTitle s
 	tlW := ansi.StringWidth(topLeft)
 	trW := ansi.StringWidth(topRight)
 
+	// Por strings.Repeat, que revienta con un número negativo. Ver la nota del
+	// suelo de width: el único caso que lo alcanzaría, width 1, lo cubre ese suelo.
 	innerWidth := width - tlW - trW
 	if innerWidth < 0 {
 		innerWidth = 0
@@ -100,6 +106,7 @@ func buildBorderLine(style *ansi.Style, left, fill, right string, innerWidth, al
 	titleDisplay := ansi.Strip(title)
 	titleWidth := ansi.StringWidth(string(titleDisplay))
 
+	// A igual anchura el recorte es una identidad, así que ">=" daría lo mismo.
 	if titleWidth > innerWidth {
 		title = ansi.Truncate(title, innerWidth, "")
 		titleWidth = innerWidth
@@ -207,9 +214,11 @@ func parseAnsiSegments(s string) []ansiSegment {
 		if k := strings.Index(s, csiPrefix); k >= 0 {
 			end = k
 		}
+		// end no puede ser negativo: es len(s) o el índice de una búsqueda. Por
+		// eso "< 0" en vez de "== 0" no cambia nada.
 		if end == 0 {
 			// Un ESC suelto que no abre CSI: es texto, y tiene que avanzar
-			// uno o el bucle no saldría.
+			// uno o el bucle no salría.
 			end = 1
 		}
 		segments = append(segments, ansiSegment{style: "", text: s[:end]})
