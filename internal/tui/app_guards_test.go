@@ -355,3 +355,98 @@ func TestProjectsLoadedWithoutPendingKeepsSelection(t *testing.T) {
 		t.Errorf("apareció un pendiente %q sin pedirlo", got.pendingSelectName)
 	}
 }
+
+// Con el detalle ya abierto y comentarios cargados, reabrirlo con Enter vuelve a
+// dejar la selección en -1.
+func TestReopeningDetailClearsCommentSelection(t *testing.T) {
+	m := newTestModel(t)
+	m.cursor = 0
+	m.detailOpen = false
+	m.detailTask = nil
+	m.detailCommentSel = 3
+
+	next, _ := press(m, "enter")
+	got := next
+
+	if !got.detailOpen {
+		t.Fatal("Enter no abrió el detalle")
+	}
+	if got.detailCommentSel != -1 {
+		t.Errorf("detailCommentSel = %d, want -1 (nada seleccionado)", got.detailCommentSel)
+	}
+	if got.detailComments != nil {
+		t.Error("los comentarios arrancan sin cargar, no como lista vacía")
+	}
+}
+
+// Abrir el modal de tags deja el índice de sugerencia en -1, por el mismo motivo
+// que el detalle con los comentarios.
+func TestOpeningTagModalClearsSuggestionIndex(t *testing.T) {
+	m := newTestModel(t)
+	task := m.tasks[0]
+	m.detailOpen = true
+	m.detailTask = &task
+	m.tagInput = "algo"
+	m.tagSuggestIdx = 4
+
+	next, _ := press(m, "t")
+	got := next
+
+	if !got.tagOpen {
+		t.Fatal("la tecla t no abrió el modal de tags")
+	}
+	if got.tagSuggestIdx != -1 {
+		t.Errorf("tagSuggestIdx = %d, want -1", got.tagSuggestIdx)
+	}
+	if got.tagInput != "" {
+		t.Errorf("el input quedó en %q, want vacío", got.tagInput)
+	}
+}
+
+// En Kanban, abrir el detalle sobre la tarjeta seleccionada también limpia la
+// selección de comentarios.
+func TestKanbanOpeningDetailClearsCommentSelection(t *testing.T) {
+	m := newTestModel(t)
+	m.currentView = viewKanban
+	cols := m.kanbanColumns()
+	m.kanbanCol = clampTo(m.kanbanCol, len(cols))
+	m.kanbanRow = clampTo(m.kanbanRow, len(cols[m.kanbanCol].tasks))
+	m.detailCommentSel = 2
+
+	next, _ := press(m, "enter")
+	got := next
+
+	if !got.detailOpen {
+		t.Fatal("Enter en Kanban no abrió el detalle")
+	}
+	if got.detailCommentSel != -1 {
+		t.Errorf("detailCommentSel = %d, want -1", got.detailCommentSel)
+	}
+}
+
+// Con una sola columna no hay a dónde moverse con las flechas horizontales, y la
+// fila no se resetea: el reset es consecuencia de cambiar de columna, no de
+// apretar la tecla. Con más de una columna, mover sí resetea.
+func TestKanbanColumnArrowsWithASingleColumn(t *testing.T) {
+	m := newKanbanModelWithWorkflow(t, 2, []string{"todo", "done"})
+	if len(m.kanbanColumns()) != 2 {
+		t.Skipf("el fixture tiene %d columnas", len(m.kanbanColumns()))
+	}
+	m.kanbanCol = 0
+	m.kanbanRow = 1
+
+	next, _ := press(m, "h")
+	if next.kanbanRow != 1 {
+		t.Errorf("con una sola columna a la izquierda la fila pasó a %d, want 1", next.kanbanRow)
+	}
+
+	// Y con dos columnas, mover a la izquierda desde la primera no mueve y la fila
+	// se queda: no hubo cambio de columna.
+	next2, _ := press(m, "h")
+	if next2.kanbanCol != 0 {
+		t.Errorf("la columna se movió a %d desde el borde", next2.kanbanCol)
+	}
+	if next2.kanbanRow != 1 {
+		t.Errorf("la fila se reseteó a %d sin cambiar de columna", next2.kanbanRow)
+	}
+}

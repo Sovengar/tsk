@@ -310,6 +310,10 @@ func newKanbanModelWithWorkflow(t *testing.T, tasks int, workflow []string) *Mod
 	// "solo" y no la unión de todos. Sin él, el proyecto auxiliar "api" de
 	// newEmptyDBModel mete su workflow por defecto, que trae "cancelled", y la
 	// columna aparecería siempre.
+	// newEmptyDBModel deja el modal de personas abierto, y ése se queda con las
+	// teclas antes de que la vista reciba ninguna. Sin cerrarlo, "h" y "l" nunca
+	// llegarían al board.
+	m.assigneeModalOpen = false
 	m.filterProject = "solo"
 	m.currentView = viewKanban
 	m.width = 240
