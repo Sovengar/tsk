@@ -68,19 +68,11 @@ func (m *Model) kanbanColumns() []kanbanColumn {
 // que el índice puede quedar fuera.
 func (m *Model) clampKanbanCursor() {
 	cols := m.kanbanColumns()
-	if len(cols) == 0 {
-		m.kanbanCol, m.kanbanRow = 0, 0
-		return
+	colLens := make([]int, len(cols))
+	for i, col := range cols {
+		colLens[i] = len(col.tasks)
 	}
-	m.kanbanCol = max(m.kanbanCol, 0)
-	if m.kanbanCol >= len(cols) {
-		m.kanbanCol = len(cols) - 1
-	}
-	if n := len(cols[m.kanbanCol].tasks); n == 0 {
-		m.kanbanRow = 0
-	} else if m.kanbanRow >= n {
-		m.kanbanRow = n - 1
-	}
+	m.kanbanCol, m.kanbanRow = clampKanban(m.kanbanCol, m.kanbanRow, colLens)
 }
 
 // renderKanban renderiza la vista Kanban dentro del alto disponible.
@@ -94,10 +86,7 @@ func (m *Model) renderKanban(maxHeight int) string {
 
 	// Solo se muestran las tarjetas que entran en el alto disponible, con la
 	// ventana desplazada en la columna activa para que el cursor sea visible.
-	colContentHeight := maxHeight - kanbanBoardChrome - filterHeaderRows
-	colContentHeight = max(colContentHeight, 2)
-	maxCards := (colContentHeight + 1) / kanbanCardRows
-	maxCards = max(maxCards, 1)
+	maxCards := kanbanMaxCards(maxHeight)
 
 	windows := make([]columnWindow, len(cols))
 	for i, col := range cols {
@@ -119,11 +108,7 @@ func (m *Model) renderKanban(maxHeight int) string {
 	for i, col := range cols {
 		total := len(col.tasks)
 		shown := windows[i].end - windows[i].start
-		if shown < total {
-			headers[i] = fmt.Sprintf("─ %s (%d/%d) ", col.status, shown, total)
-		} else {
-			headers[i] = fmt.Sprintf("─ %s (%d) ", col.status, total)
-		}
+		headers[i] = kanbanHeader(col.status, shown, total)
 		minWidths[i] = lipgloss.Width(headers[i]) + 2 // + bordes
 		minWidths[i] = max(minWidths[i], kanbanMinColWidth)
 	}
@@ -202,9 +187,16 @@ func kanbanColumnWidths(minWidths []int, avail int) []int {
 // mostrando solo las tarjetas del rango [win.start, win.end).
 func (m *Model) renderKanbanColumn(col kanbanColumn, width int, headerText string, selected bool, win columnWindow) string {
 	var cards []string
-	for j := win.start; j < win.end; j++ {
-		t := col.tasks[j]
+	// range sobre la rebanada en vez de un índice que avanza a mano: un `j--`
+	// invertido dejaría el bucle girando para siempre y el mutant se reportaría
+	// como TIMED OUT en vez de como muerto, que es la peor señal para un gate.
+	for j, t := range col.tasks[win.start:win.end] {
+		j += win.start
 		assigneeLine := t.Assignee
+		// La condición compara con cero y no con "menor o igual": con la lista
+		// vacía el join da "" y la línea acabaría con dos espacios de más, que
+		// la caja no deja ver porque rellena a la derecha. Por eso su mutante
+		// sobrevive y por eso da igual.
 		if len(t.Tags) > 0 {
 			assigneeLine += "  " + styleDim.Render(strings.Join(t.Tags, ","))
 		}

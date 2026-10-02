@@ -123,7 +123,9 @@ func (s KeybindsBar) renderRows(kbs []keybind) []string {
 	for r := range nrows {
 		i := r * keybindsPerRow
 		end := min(i+keybindsPerRow, len(kbs))
-		parts := make([]string, 0, end-i)
+		// Sin pista de capacidad: es una aritmética que ningún test mira, y
+		// append calcula el crecimiento por su cuenta.
+		var parts []string
 		for _, kb := range kbs[i:end] {
 			parts = append(parts, s.renderKey(kb.key, kb.desc))
 		}

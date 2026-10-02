@@ -72,11 +72,11 @@ func (m *Model) renderList(maxHeight int) string {
 	w := m.width
 	innerW := w - 2 // ancho interior para el contenido dentro del borde
 
-	sep := styleSep.Render(strings.Repeat("─", innerW-2))
+	sep := styleSep.Render(strings.Repeat("─", separatorWidth(innerW)))
 
 	// Columnas que entran en el ancho disponible. Si no alcanza para todas, las
 	// últimas se descartan (Description primero) en vez de cortarse a la mitad.
-	cols := visibleListColumns(innerW - 2) // -2 por el prefijo "> " / "  "
+	cols := visibleListColumns(listContentWidth(innerW))
 
 	headerCells := make([]string, len(listColumns))
 	for i, col := range listColumns {
@@ -87,14 +87,9 @@ func (m *Model) renderList(maxHeight int) string {
 	tasks := m.filteredTasks()
 	pageStart, pageEnd := m.pageBounds()
 
-	// Solo se pinta la página actual. Si la página no entra en el alto
-	// disponible, se recorta la ventana manteniendo el cursor visible
-	// (fallback para terminales chicas).
-	start, end := pageStart, pageEnd
-	if visible := maxHeight - listFixedRows; visible > 0 && end-start > visible {
-		relStart, relEnd := visibleRange(m.cursor-pageStart, end-pageStart, visible)
-		start, end = pageStart+relStart, pageStart+relEnd
-	}
+	// Sólo se pinta la página actual, recortada al alto disponible si no cabe
+	// entera. La aritmética vive en listWindowForHeight.
+	start, end := listWindowForHeight(pageStart, pageEnd, m.cursor, maxHeight)
 
 	// Tasks
 	taskLines := []string{}
@@ -176,7 +171,7 @@ func (m *Model) renderFilterBar() string {
 // renderFilterHeader dibuja la barra de filtros seguida de un separador, al
 // ancho interior de la caja. Es la cabecera común de List, Kanban y Gantt.
 func (m *Model) renderFilterHeader(innerW int) string {
-	sep := styleSep.Render(strings.Repeat("─", innerW-2))
+	sep := styleSep.Render(strings.Repeat("─", separatorWidth(innerW)))
 	return lipgloss.JoinVertical(lipgloss.Left, m.renderFilterBar(), sep)
 }
 

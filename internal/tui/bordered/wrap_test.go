@@ -594,6 +594,36 @@ func TestParseAnsiSegments(t *testing.T) {
 			},
 		},
 		{
+			// '@' (0x40) es el PRIMER byte del rango de finalizadores, así que
+			// es un final byte válido. Si el rango empezara en 0x41, esta
+			// secuencia se tragaría el texto que viene detrás.
+			name: "CSI terminado en @",
+			in:   "\033[?7@después",
+			want: []ansiSegment{
+				{style: "\033[?7@", text: ""},
+				{style: "", text: "después"},
+			},
+		},
+		{
+			// Y lo mismo por el otro extremo del rango.
+			name: "CSI terminado en ~",
+			in:   "\033[1~final",
+			want: []ansiSegment{
+				{style: "\033[1~", text: ""},
+				{style: "", text: "final"},
+			},
+		},
+		{
+			// 'm' (0x6D) es el finalizer del SGR, el caso más común.
+			name: "SGR",
+			in:   "\033[31mrojo\033[0m",
+			want: []ansiSegment{
+				{style: "\033[31m", text: ""},
+				{style: "", text: "rojo"},
+				{style: "\033[0m", text: ""},
+			},
+		},
+		{
 			name: "cadena vacía",
 			in:   "",
 			want: nil,
@@ -628,21 +658,21 @@ func TestParseAnsiSegments(t *testing.T) {
 // no-avance se manifiesta como timeout en vez de como un valor incorrecto.
 func TestParseAnsiSegmentsTermina(t *testing.T) {
 	for _, in := range []string{
-		"\033",                 // ESC solo: no alcanza a ser CSI
-		"\033[",                // CSI sin byte final
-		"a\033",                // texto + ESC truncado
-		"a\033[",               // texto + CSI incompleto
-		"\033[1",               // CSI con parámetro sin byte final
-		"a\033[1m",             // CSI completa tras texto
-		"\033[0m\033[",         // CSI completa y luego truncada
-		"[\033[",               // corchete suelto + CSI truncada
-		"\033[[",               // corchete doble tras ESC
-		"\033[\033[",           // ESC dentro de una CSI
-		"\033[\033",            // ESC truncado dentro de una CSI
-		"\033[;;;;;;",          // CSI larga sin byte final
-		"\033[1;2;3;4;5",       // CSI parametrizada sin byte final
+		"\033",                       // ESC solo: no alcanza a ser CSI
+		"\033[",                      // CSI sin byte final
+		"a\033",                      // texto + ESC truncado
+		"a\033[",                     // texto + CSI incompleto
+		"\033[1",                     // CSI con parámetro sin byte final
+		"a\033[1m",                   // CSI completa tras texto
+		"\033[0m\033[",               // CSI completa y luego truncada
+		"[\033[",                     // corchete suelto + CSI truncada
+		"\033[[",                     // corchete doble tras ESC
+		"\033[\033[",                 // ESC dentro de una CSI
+		"\033[\033",                  // ESC truncado dentro de una CSI
+		"\033[;;;;;;",                // CSI larga sin byte final
+		"\033[1;2;3;4;5",             // CSI parametrizada sin byte final
 		strings.Repeat("\033[", 200), // muchas CSI truncadas seguidas
-		strings.Repeat("a", 5000),     // texto largo sin CSI
+		strings.Repeat("a", 5000),    // texto largo sin CSI
 		strings.Repeat("a\033[1m", 500),
 	} {
 		// Que la llamada termine es la aserción. El contenido se comprueba sólo
@@ -669,22 +699,24 @@ func TestParseAnsiSegmentsTermina(t *testing.T) {
 // debe devolver como segmentos con estilo.
 func stripCSI(s string) string {
 	var out strings.Builder
-	runes := []rune(s)
-	for i := 0; i < len(runes); {
-		if startsCSI(runes, i) {
-			j := i + 2
-			for j < len(runes) {
-				b := runes[j]
-				j++
-				if b >= 0x40 && b <= 0x7E {
-					break
-				}
+	for len(s) > 0 {
+		if strings.HasPrefix(s, csiPrefix) {
+			end := len(s)
+			if k := strings.IndexFunc(s[len(csiPrefix):], isCSIFinalizer); k >= 0 {
+				end = len(csiPrefix) + k + 1
 			}
-			i = j
+			s = s[end:]
 			continue
 		}
-		out.WriteRune(runes[i])
-		i++
+		end := strings.Index(s, csiPrefix)
+		if end < 0 {
+			end = len(s)
+		}
+		if end == 0 {
+			end = 1
+		}
+		out.WriteString(s[:end])
+		s = s[end:]
 	}
 	return out.String()
 }

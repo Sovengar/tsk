@@ -99,9 +99,10 @@ func (m *Model) filterCurrentValue(field int) string {
 		}
 		return m.filterAssignee
 	case filterFieldPriority:
+		// Sólo los cuatro valores que son un filtro de verdad. -1 es "sin filtro"
+		// y cualquier otra cosa también: las dos caen en el "all" del final, así
+		// que ponerlas como un caso más sólo añadía una rama indistinguible de ésa.
 		switch m.filterPriority {
-		case -1:
-			return "all"
 		case 0:
 			return "none"
 		case 1:
@@ -226,6 +227,12 @@ func (m *Model) openFilterModal() tea.Cmd {
 // filterVisibleOptions devuelve las opciones del campo activo, filtradas por la
 // búsqueda fuzzy. Los modos agregados ("all active"/"all") quedan siempre
 // disponibles para poder volver atrás sin borrar la búsqueda.
+// filterVisibleOptions devuelve las opciones del campo activo, con la búsqueda
+// escrita encima.
+//
+// El resultado nunca está vacío: "all" es un agregador y se cuela siempre, esté
+// o no la búsqueda. Los llamantes que preguntaban "y si no hay opciones" estaban
+// protegiéndose de algo que no puede pasar.
 func (m *Model) filterVisibleOptions() []string {
 	opts := m.filterFieldOptions(m.filterFieldIdx)
 	if m.filterSearch == "" {
@@ -263,15 +270,7 @@ func (m *Model) filterSyncOption() {
 
 // clampFilterOption mantiene el cursor de opciones dentro de la lista visible.
 func (m *Model) clampFilterOption() {
-	opts := m.filterVisibleOptions()
-	if len(opts) == 0 {
-		m.filterOptionIdx = 0
-		return
-	}
-	if m.filterOptionIdx >= len(opts) {
-		m.filterOptionIdx = len(opts) - 1
-	}
-	m.filterOptionIdx = max(m.filterOptionIdx, 0)
+	m.filterOptionIdx = clampTo(m.filterOptionIdx, len(m.filterVisibleOptions()))
 }
 
 // filterMoveField mueve el foco entre campos y resincroniza el cursor.
@@ -283,11 +282,7 @@ func (m Model) filterMoveField(delta int) (tea.Model, tea.Cmd) {
 
 // filterMoveOption mueve el cursor dentro de las opciones visibles.
 func (m *Model) filterMoveOption(delta int) {
-	opts := m.filterVisibleOptions()
-	if len(opts) == 0 {
-		return
-	}
-	m.filterOptionIdx = (m.filterOptionIdx + delta + len(opts)) % len(opts)
+	m.filterOptionIdx = cycleIndex(m.filterOptionIdx, len(m.filterVisibleOptions()), delta)
 }
 
 // filterCycle aplica en vivo la opción anterior/siguiente del campo activo.
@@ -296,15 +291,11 @@ func (m *Model) filterCycle(forward bool) {
 	if len(opts) == 0 {
 		return
 	}
-	idx := m.filterOptionIdx
-	if idx < 0 || idx >= len(opts) {
-		idx = 0
+	delta := 1
+	if !forward {
+		delta = -1
 	}
-	if forward {
-		idx = (idx + 1) % len(opts)
-	} else {
-		idx = (idx - 1 + len(opts)) % len(opts)
-	}
+	idx := cycleIndex(firstValidIndex(m.filterOptionIdx, len(opts)), len(opts), delta)
 	m.filterApplySelection(m.filterFieldIdx, opts[idx])
 	m.filterSyncOption()
 }
@@ -356,9 +347,13 @@ func (m Model) handleFilterModalKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "enter":
-		if opts := m.filterVisibleOptions(); len(opts) > 0 {
-			m.filterApplySelection(m.filterFieldIdx, opts[m.filterOptionIdx])
-		}
+		// opts nunca está vacío, así que la comprobación que había aquí no podía
+		// ser falsa. Lo que sí hace falta es acotar el índice: el render ya lo
+		// hace, pero entre el render y esta tecla la lista puede haber cambiado
+		// de tamaño.
+		opts := m.filterVisibleOptions()
+		m.filterOptionIdx = clampTo(m.filterOptionIdx, len(opts))
+		m.filterApplySelection(m.filterFieldIdx, opts[m.filterOptionIdx])
 		// En el último campo, Enter cierra; en el resto, avanza.
 		if m.filterFieldIdx == filterFieldTag {
 			m.filterOpen = false
@@ -413,11 +408,8 @@ func (m *Model) renderFilterModal(content string) string {
 			continue
 		}
 
+		// Nunca sin opciones: "all" sobrevive a cualquier búsqueda.
 		opts := m.filterVisibleOptions()
-		if len(opts) == 0 {
-			lines = append(lines, styleDim.Render("        (no matches)"))
-			continue
-		}
 		start, end := visibleRange(m.filterOptionIdx, len(opts), filterMaxVisibleOptions)
 		for i, opt := range opts[start:end] {
 			i += start
@@ -441,7 +433,7 @@ func (m *Model) renderFilterModal(content string) string {
 	}
 
 	totalWidth := modalWidthFor(54, w)
-	innerWidth := totalWidth - 2
+	innerWidth := modalInnerWidth(totalWidth)
 	for i := range lines {
 		lines[i] = truncateLines(lines[i], innerWidth)
 	}

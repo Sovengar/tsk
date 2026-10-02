@@ -40,9 +40,7 @@ func (m Model) handleTagModalKey(key string) (tea.Model, tea.Cmd) {
 	case "enter":
 		tag := strings.TrimSpace(m.tagInput)
 		if tag == "" {
-			if suggs := m.tagSuggestions(); m.tagSuggestIdx >= 0 && m.tagSuggestIdx < len(suggs) {
-				tag = suggs[m.tagSuggestIdx]
-			}
+			tag = taskAt2(m.tagSuggestions(), m.tagSuggestIdx)
 		}
 		if tag == "" || m.detailTask == nil {
 			return m, nil
@@ -52,37 +50,22 @@ func (m Model) handleTagModalKey(key string) (tea.Model, tea.Cmd) {
 		m.tagSuggestIdx = -1
 		return m, m.toggleTagCmd(taskID, tag)
 
-	case "up":
-		suggs := m.tagSuggestions()
-		if len(suggs) == 0 {
-			return m, nil
+	case "up", "down":
+		// La misma aritmética que el resto de navegaciones del programa:
+		// cicloIndex la resuelve para cualquier lista, sin lista no hay a dónde
+		// moverse. Estaba escrita aquí por tercera vez.
+		delta := 1
+		if key == "up" {
+			delta = -1
 		}
-		if m.tagSuggestIdx <= 0 {
-			m.tagSuggestIdx = len(suggs) - 1
-		} else {
-			m.tagSuggestIdx--
-		}
-		return m, nil
-
-	case "down":
-		suggs := m.tagSuggestions()
-		if len(suggs) == 0 {
-			return m, nil
-		}
-		m.tagSuggestIdx = (m.tagSuggestIdx + 1) % len(suggs)
+		m.tagSuggestIdx = cycleIndex(m.tagSuggestIdx, len(m.tagSuggestions()), delta)
 		return m, nil
 
 	case "tab":
-		// Completa con la sugerencia seleccionada o, si no hay, la primera.
-		suggs := m.tagSuggestions()
-		if len(suggs) == 0 {
-			return m, nil
-		}
-		idx := m.tagSuggestIdx
-		if idx < 0 || idx >= len(suggs) {
-			idx = 0
-		}
-		m.tagInput = suggs[idx]
+		// Completa con la sugerencia seleccionada y, si el índice no vale para
+		// esta lista, con la primera. Sin lista, firstOrAt devuelve "" y el
+		// input se queda como estaba.
+		m.tagInput = firstOrAt(m.tagSuggestions(), m.tagSuggestIdx)
 		m.tagSuggestIdx = -1
 		return m, nil
 
@@ -96,6 +79,12 @@ func (m Model) handleTagModalKey(key string) (tea.Model, tea.Cmd) {
 	}
 
 	// Texto imprimible: alimenta el input y reinicia la selección.
+	//
+	// El suelo es 32 (el espacio) porque Bubbletea nunca entrega una tecla de un
+	// solo carácter por debajo de ahí -- las de control llegan con nombre ("esc",
+	// "tab"), no como un byte suelto -- pero dejarlo escrito.documenta la
+	// intención en vez de dejar un 33 que parece arbitrario. El precio es que el
+	// espacio no se puede escribir: llega como "space" y lo descarta el == 1.
 	if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
 		m.tagInput += key
 		m.tagSuggestIdx = -1
@@ -130,6 +119,8 @@ func (m *Model) renderTagModal(content string) string {
 	lines = append(lines, "")
 	lines = append(lines, "  > "+m.tagInput+styleTitle.Render("▏"))
 
+	// A exactamente el tope el recorte es una identidad, así que `>` y `>=` dan
+	// lo mismo aquí.
 	suggs := m.tagSuggestions()
 	if len(suggs) > tagMaxSuggestions {
 		suggs = suggs[:tagMaxSuggestions]

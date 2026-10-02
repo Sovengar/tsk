@@ -122,3 +122,74 @@ func TestSelectedTaskFollowsKanbanCursor(t *testing.T) {
 		t.Errorf("selectedTask = %d, want %d", got.ID, want)
 	}
 }
+
+// El preview envuelve la descripción al ancho y, si no cabe en el alto dado,
+// recorta las líneas que sobran. La última que se ve lleva una elipsis y sigue
+// midiendo el ancho entero: por eso el recorte es de limit-1 y no de limit, y por
+// eso la elipsis entra justo.
+func TestPreviewTruncatedLastLineKeepsWidth(t *testing.T) {
+	p := NewPreviewBar(40)
+	p.SetTask(&model.Task{Description: strings.Repeat("palabra ", 40)})
+	p.SetMaxLines(2)
+
+	lineas := strings.Split(ansi.Strip(p.View()), "\n")
+	if len(lineas) < 2 {
+		t.Fatalf("el preview tiene %d líneas:\n%q", len(lineas), p.View())
+	}
+	// Lo que se comprueba es que la última línea lleva elipsis: es lo que dice
+	// que la descripción sigue más allá de las líneas que caben. El ancho de la
+	// línea no sirve aquí -- la caja rellena hasta su borde y todas miden lo
+	// mismo.
+	if !strings.Contains(strings.Join(lineas, "\n"), "…") {
+		t.Errorf("una descripción recortada no lleva elipsis:\n%q", p.View())
+	}
+}
+
+// Si la descripción cabe entera, no hay ni recorte ni elipsis.
+func TestPreviewNoEllipsisWhenItFits(t *testing.T) {
+	p := NewPreviewBar(80)
+	p.SetTask(&model.Task{Description: "corta"})
+	p.SetMaxLines(20)
+
+	if out := ansi.Strip(p.View()); strings.Contains(out, "…") {
+		t.Errorf("una descripción corta lleva elipsis:\n%q", out)
+	}
+}
+
+// maxLines nunca baja de uno: un preview de alto cero no puede no mostrar nada,
+// porque entonces la fila de la tarea desaparece.
+func TestPreviewMaxLinesFloor(t *testing.T) {
+	p := NewPreviewBar(40)
+	p.SetTask(&model.Task{Description: strings.Repeat("palabra ", 50)})
+	p.SetMaxLines(0)
+
+	if lineCount(ansi.Strip(p.View())) < 1 {
+		t.Errorf("con maxLines 0 el preview no muestra nada:\n%q", p.View())
+	}
+}
+
+// Con la descripción justo al límite de líneas no hay elipsis: cabe entera. El
+// borde es donde `len(wrapped) > maxLines` deja de recortar.
+func TestPreviewEllipsisOnlyWhenClipped(t *testing.T) {
+	desc := strings.Repeat("palabra ", 40)
+	for _, maxLines := range []int{1, 2, 5, 20} {
+		p := NewPreviewBar(40)
+		p.SetTask(&model.Task{Description: desc})
+		p.SetMaxLines(maxLines)
+
+		// La caja añade bordes y cabecera, así que se cuentan sólo las líneas de
+		// la descripción.
+		desc := 0
+		for _, linea := range strings.Split(ansi.Strip(p.View()), "\n") {
+			if strings.Contains(linea, "palabra") {
+				desc++
+			}
+		}
+		if desc > maxLines {
+			t.Errorf("con maxLines %d salen %d líneas de descripción", maxLines, desc)
+		}
+		if desc == 0 {
+			t.Errorf("con maxLines %d no sale ninguna línea de descripción", maxLines)
+		}
+	}
+}

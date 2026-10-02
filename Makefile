@@ -12,13 +12,17 @@ MUTATE_BASE ?= main
 # loosening the gate.
 MUTATE_TIMEOUT ?= 8
 
-# Mutation gate scope. Only packages with real test coverage are gated. A full-module
-# baseline measured: internal/tui (472 surviving mutants, 25% uncovered) and cmd/ are
-# still untested, so gating them would be a green check that cannot fail. Those are
-# excluded until they have tests. internal/cli used to be excluded too; it was
-# brought in on 2026-09-28 once its coverage went from 0% to 94% and its surviving
-# mutants were either killed or documented in .mutation-allowlist.
-MUTATE_EXCLUDE ?= internal/tui/|cmd/
+# Mutation gate scope. Only packages with real test coverage are gated. cmd/ is the
+# entry point and has no logic of its own, so it stays out; everything else is in.
+#
+# internal/tui was excluded until 2026-10-02: it had 472 surviving mutants, a third
+# of the code duplicated across five files with its own copy of the index
+# arithmetic, and seven mutants that hung the suite. It came in at 47 survivors out
+# of 937, which means the other 890 are either killed or documented in
+# .mutation-allowlist. The work that got it there was mostly extraction -- the
+# duplicated arithmetic became pure functions in layout.go, and the dead branches
+# went away -- rather than tests alone.
+MUTATE_EXCLUDE ?= cmd/
 
 .PHONY: all test lint check build install uninstall clean overdue mutate mutate-diff
 

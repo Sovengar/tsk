@@ -29,16 +29,12 @@ func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
 		}
 	}
 
-	// Escribir formato editable
-	content := fmt.Sprintf("# %s\n\n%s\n\n---\nassignee: %s\npriority: %d\nestimate: %g\ntags: %s\n",
-		task.Title,
-		task.Description,
-		task.Assignee,
-		task.Priority,
-		task.Estimate,
-		strings.Join(task.Tags, ","),
-	)
-	if _, err := tmpFile.WriteString(content); err != nil {
+	// Los dos errores siguientes -- escritura y cierre -- no tienen forma de
+	// provocarse sin un disco lleno o un fichero que se cierra dos veces, y no
+	// hay punto de inyección para hacerlo. Sus dos ramas hacen lo mismo que la de
+	// arriba: devolver el error con el id de la tarea. Sus mutantes están en
+	// .mutation-allowlist como riesgo aceptado, no como equivalencia.
+	if _, err := tmpFile.WriteString(editTemplate(task)); err != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpFile.Name())
 		return func() tea.Msg {
@@ -75,6 +71,24 @@ func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
 	})
 }
 
+// editTemplate es el archivo que se abre en el editor externo: el cuerpo legible
+// arriba, los metadatos abajo separados por "---".
+//
+// Se extrajo de editTaskCmd porque el ciclo completo es escribir este texto y
+// volver a leerlo con parseEditFile. Con las dos mitades exposed se puede
+// comprobar el viaje entero sin lanzar un editor: si una de las dos cambia sin
+// la otra, la tarea se guarda con un campo perdido y no hay quien lo note.
+func editTemplate(task model.Task) string {
+	return fmt.Sprintf("# %s\n\n%s\n\n---\nassignee: %s\npriority: %d\nestimate: %g\ntags: %s\n",
+		task.Title,
+		task.Description,
+		task.Assignee,
+		task.Priority,
+		task.Estimate,
+		strings.Join(task.Tags, ","),
+	)
+}
+
 // parseEditFile parsea el contenido del archivo editado.
 func parseEditFile(content string) (title, description, assignee string, priority int, estimate float64, tags []string) {
 	mainPart := content
@@ -92,14 +106,17 @@ func parseEditFile(content string) (title, description, assignee string, priorit
 		}
 	}
 
+	// La línea 0 es siempre la del título y se descarta por POSICIÓN, no por
+	// empezar con "# ". El `if len(descLines) > 1` que había aquí no hacía
+	// nada: con una sola línea, descLines[1:] también está vacío, así que la
+	// descripción salía igual. Era una rama con tres mutantes que nadie podía
+	// distinguir, porque las tres dan el mismo resultado.
 	descLines := strings.Split(mainPart, "\n")
-	if len(descLines) > 1 {
-		start := 1
-		for start < len(descLines) && strings.TrimSpace(descLines[start]) == "" {
-			start++
-		}
-		description = strings.TrimSpace(strings.Join(descLines[start:], "\n"))
+	start := 1
+	for start < len(descLines) && strings.TrimSpace(descLines[start]) == "" {
+		start++
 	}
+	description = strings.TrimSpace(strings.Join(descLines[start:], "\n"))
 
 	assignee = ""
 	priority = 0
@@ -114,6 +131,11 @@ func parseEditFile(content string) (title, description, assignee string, priorit
 					priority = p
 				}
 			} else if strings.HasPrefix(line, "estimate:") {
+				// `e >= 0` contra `e > 0` es equivalente: lo único que separa a
+				// las dos comparaciones es e == 0, y la línea asigna
+				// `estimate = e`, con lo que poner un cero sobre el cero que ya
+				// tenía el valor de retorno no cambia nada. Un negativo tampoco
+				// las separa: ambas lo rechazan.
 				if e, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(line, "estimate:")), 64); err == nil && e >= 0 {
 					estimate = e
 				}
@@ -158,14 +180,16 @@ func (m *Model) selectedEditableTask() *model.Task {
 	switch m.currentView {
 	case viewList:
 		tasks := m.filteredTasks()
-		if len(tasks) > 0 && m.cursor < len(tasks) {
+		// inRange cubre las dos mitades: con la lista vacía ningún índice vale,
+		// así que el "len(tasks) > 0" que hacía la primera era redundante.
+		if inRange(m.cursor, len(tasks)) {
 			return &tasks[m.cursor]
 		}
 	case viewKanban:
 		cols := m.kanbanColumns()
-		if m.kanbanCol < len(cols) {
+		if inRange(m.kanbanCol, len(cols)) {
 			colTasks := cols[m.kanbanCol].tasks
-			if len(colTasks) > 0 && m.kanbanRow < len(colTasks) {
+			if inRange(m.kanbanRow, len(colTasks)) {
 				return &colTasks[m.kanbanRow]
 			}
 		}
@@ -184,10 +208,7 @@ func (m *Model) editSelectedTask() tea.Cmd {
 		return nil
 	}
 
-	editorCmd := m.config.Editor.Command
-	if editorCmd == "" {
-		editorCmd = "nvim"
-	}
+	editorCmd := editorCommand(m.config.Editor.Command)
 
 	return editTaskCmd(*t, editorCmd)
 }
@@ -216,14 +237,5 @@ func (m *Model) newTask() tea.Cmd {
 
 // currentProjectName devuelve el nombre del proyecto según la vista activa.
 func (m *Model) currentProjectName() string {
-	switch m.currentView {
-	case viewList, viewKanban:
-		if m.filterProject != "" {
-			return m.filterProject
-		}
-	}
-	if len(m.projects) > 0 {
-		return m.projects[0].Name
-	}
-	return ""
+	return currentProjectName(m.currentView, m.filterProject, m.projects)
 }

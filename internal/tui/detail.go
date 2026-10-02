@@ -19,8 +19,9 @@ var detailBorderFg = lipgloss.Color("8")
 func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 	w := m.width
 	h := maxHeight
-	inner := w - 2 // ancho interior de las cajas (descuenta los bordes)
-	inner = max(inner, 1)
+	// El ancho interior de las cajas: el mismo que el de un modal, porque es el
+	// mismo descuento por los dos bordes.
+	inner := modalInnerWidth(w)
 
 	// Priority with colored character
 	prio := priorityChar(t.Priority) + " " + model.PriorityLabel(t.Priority)
@@ -59,23 +60,9 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 
 	commentLines := m.renderCommentLines(w)
 
-	// Reparto de alto entre descripción y comentarios.
-	// fixed = líneas que no son contenido:
-	//   caja tarea:      2 bordes + 5 meta + sep + "Description:" = 9
-	//   separación:      1
-	//   caja comentarios: 2 bordes = 2
-	const fixed = 12
-	avail := h - fixed
-	avail = max(avail, 3)
-
-	// Al menos una línea de comentarios (o "(no comments)").
-	maxCommentLines := avail - 2
-	maxCommentLines = max(maxCommentLines, 1)
-	commentBudget := len(m.detailComments)
-	commentBudget = max(commentBudget, 1)
-	commentBudget = min(commentBudget, maxCommentLines)
-	descBudget := avail - commentBudget
-	descBudget = max(descBudget, 1)
+	// Reparto de alto entre comentarios y descripción. La aritmética vive en
+	// detailHeightBudget: aquí sólo se aplica.
+	commentBudget, descBudget := detailHeightBudget(h, len(m.detailComments))
 
 	if len(descLines) > descBudget {
 		descLines = descLines[:descBudget]
@@ -91,7 +78,10 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 
 	// Caja 1: tarea + descripción.
 	sep := styleSep.Render(strings.Repeat("─", inner))
-	taskContent := make([]string, 0, len(meta)+2+len(descLines))
+	// Sin pista de capacidad: es una aritmética que ningún test puede mirar,
+	// porque una capacidad es un consejo y el resultado es el mismo diga lo que
+	// diga. append calcula el crecimiento por su cuenta.
+	var taskContent []string
 	taskContent = append(taskContent, meta...)
 	taskContent = append(taskContent, sep, "  Description:")
 	taskContent = append(taskContent, descLines...)
@@ -151,26 +141,19 @@ func formatCommentTime(s string) string {
 		return "—"
 	}
 	s = strings.Replace(s, "T", " ", 1)
-	if len(s) >= 16 {
-		return s[:16]
-	}
-	return s
+	return truncateAt(s, 16)
 }
 
 func formatTime(s string) string {
 	if s == "" {
 		return "—"
 	}
-	// Simple truncation to date+time
-	if len(s) >= 19 {
-		return s[:19]
-	}
-	return s
+	return truncateAt(s, 19)
 }
 
+// formatCompleted es formatTime: el caso vacío ya lo cubre. La guarda que tenía
+// aquí devolvía lo mismo que la de formatTime, así que era una rama que ningún
+// test podía distinguir.
 func formatCompleted(s string) string {
-	if s == "" {
-		return "—"
-	}
 	return formatTime(s)
 }

@@ -131,10 +131,7 @@ type Model struct {
 
 // New construye el modelo con la base de datos.
 func New(database *db.DB, cfg config.Config) Model {
-	pageSize := cfg.ListPageSize
-	if pageSize <= 0 {
-		pageSize = config.DefaultPageSize
-	}
+	pageSize := resolvePageSize(cfg.ListPageSize)
 	return Model{
 		database:         database,
 		config:           cfg,
@@ -326,17 +323,8 @@ func (m *Model) commonWorkflow() []string {
 // exacta. Lo comparten List, Kanban y Gantt para que la cabecera de filtros sea
 // consistente en todas las vistas.
 func (m *Model) taskMatchesFilter(t model.Task) bool {
-	switch m.filterStatus {
-	case statusFilterAllActive:
-		if !t.IsActive() {
-			return false
-		}
-	case "":
-		// "all": sin restricción de estado
-	default:
-		if t.Status != m.filterStatus {
-			return false
-		}
+	if !matchesStatus(m.filterStatus, t.Status, t.IsActive()) {
+		return false
 	}
 	if m.filterProject != "" && t.ProjectName != m.filterProject {
 		return false
@@ -347,10 +335,7 @@ func (m *Model) taskMatchesFilter(t model.Task) bool {
 	if m.filterTag != "" && !model.HasTag(t.Tags, m.filterTag) {
 		return false
 	}
-	if m.filterPriority >= 0 && t.Priority != m.filterPriority {
-		return false
-	}
-	return true
+	return matchesPriority(m.filterPriority, t.Priority)
 }
 
 // filteredTasks devuelve las tareas filtradas.
@@ -669,13 +654,9 @@ func (m Model) handleDashboardKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "tab", "j", "down":
 		// Cycle through visible projects
-		if n := len(m.dashProjectList()); n > 0 {
-			m.dashProjectIdx = (m.dashProjectIdx + 1) % n
-		}
+		m.dashProjectIdx = cycleIndex(m.dashProjectIdx, len(m.dashProjectList()), 1)
 	case "k", "up":
-		if n := len(m.dashProjectList()); n > 0 {
-			m.dashProjectIdx = (m.dashProjectIdx - 1 + n) % n
-		}
+		m.dashProjectIdx = cycleIndex(m.dashProjectIdx, len(m.dashProjectList()), -1)
 	case "i":
 		// Nuevo proyecto: el Dashboard concentra la config global
 		return m, m.openProjectModal(false)
@@ -752,7 +733,7 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		// New task
 		return m, m.newTask()
 	case "enter":
-		if len(tasks) > 0 && m.cursor < len(tasks) {
+		if inRange(m.cursor, len(tasks)) {
 			t := tasks[m.cursor]
 			m.detailOpen = true
 			m.detailTask = &t
@@ -762,33 +743,26 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 		}
 	case "s":
 		// Start: move to next status
-		if m.cursor < len(tasks) {
+		if inRange(m.cursor, len(tasks)) {
 			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.StartTask)
 		}
 	case "d":
 		// Done
-		if m.cursor < len(tasks) {
+		if inRange(m.cursor, len(tasks)) {
 			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.DoneTask)
 		}
 	case "x":
 		// Cancel
-		if m.cursor < len(tasks) {
+		if inRange(m.cursor, len(tasks)) {
 			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.CancelTask)
 		}
 	case "/":
 		// Open filter modal
 		return m, m.openFilterModal()
 	case "ctrl+p":
-		if m.cursor < len(tasks) {
+		if inRange(m.cursor, len(tasks)) {
 			t := tasks[m.cursor]
-			var next int
-			if t.Status == "backlog" {
-				// backlog: none→LOW→MED→HIGH→none
-				next = (t.Priority + 1) % 4
-			} else {
-				// fuera de backlog: LOW→MED→HIGH→LOW
-				next = (t.Priority % 3) + 1
-			}
+			next := nextPriority(t.Status, t.Priority)
 			return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
 				return m.database.UpdateTask(id, map[string]any{"priority": next})
 			})
@@ -823,28 +797,27 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 
 	switch key {
 	case "h", "left":
-		if m.kanbanCol > 0 {
-			m.kanbanCol--
+		// Cambiar de columna reinicia la fila: el índice de fila es por
+		// columna, así que dejarlo apuntando donde ya no está sería un
+		// "selectedTask" de otra columna.
+		if prev := shiftIndex(m.kanbanCol, len(cols), -1); prev != m.kanbanCol {
+			m.kanbanCol = prev
 			m.kanbanRow = 0
 		}
 	case "l", "right":
-		if m.kanbanCol < len(cols)-1 {
-			m.kanbanCol++
+		if next := shiftIndex(m.kanbanCol, len(cols), 1); next != m.kanbanCol {
+			m.kanbanCol = next
 			m.kanbanRow = 0
 		}
 	case "j", "down":
-		if len(colTasks) > 0 {
-			m.kanbanRow = (m.kanbanRow + 1) % len(colTasks)
-		}
+		m.kanbanRow = cycleIndex(m.kanbanRow, len(colTasks), 1)
 	case "k", "up":
-		if len(colTasks) > 0 {
-			m.kanbanRow = (m.kanbanRow - 1 + len(colTasks)) % len(colTasks)
-		}
+		m.kanbanRow = cycleIndex(m.kanbanRow, len(colTasks), -1)
 	case "s":
 		// Move task right (advance status) según el workflow de SU proyecto:
 		// el orden del merge puede no existir en el proyecto y el move sería
 		// rechazado en silencio por MoveTask.
-		if m.kanbanRow < len(colTasks) {
+		if inRange(m.kanbanRow, len(colTasks)) {
 			t := colTasks[m.kanbanRow]
 			if p := m.projectByName(t.ProjectName); p != nil {
 				if nextStatus, ok := model.NextStatus(p.Workflow, t.Status); ok {
@@ -856,7 +829,7 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 		}
 	case "S":
 		// Move task left (retreat status) según el workflow de su proyecto.
-		if m.kanbanRow < len(colTasks) {
+		if inRange(m.kanbanRow, len(colTasks)) {
 			t := colTasks[m.kanbanRow]
 			if p := m.projectByName(t.ProjectName); p != nil {
 				if prevStatus, ok := model.PrevStatus(p.Workflow, t.Status); ok {
@@ -868,12 +841,12 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 		}
 	case "d":
 		// Done
-		if m.kanbanRow < len(colTasks) {
+		if inRange(m.kanbanRow, len(colTasks)) {
 			return m, m.taskActionCmd(colTasks[m.kanbanRow].ID, m.database.DoneTask)
 		}
 	case "x":
 		// Cancel
-		if m.kanbanRow < len(colTasks) {
+		if inRange(m.kanbanRow, len(colTasks)) {
 			return m, m.taskActionCmd(colTasks[m.kanbanRow].ID, m.database.CancelTask)
 		}
 	case "e":
@@ -886,7 +859,7 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 		// New task
 		return m, m.newTask()
 	case "enter":
-		if m.kanbanRow < len(colTasks) {
+		if inRange(m.kanbanRow, len(colTasks)) {
 			t := colTasks[m.kanbanRow]
 			m.detailOpen = true
 			m.detailTask = &t
@@ -895,16 +868,9 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 			return m, m.loadCommentsCmd(t.ID)
 		}
 	case "ctrl+p":
-		if m.kanbanRow < len(colTasks) {
+		if inRange(m.kanbanRow, len(colTasks)) {
 			t := colTasks[m.kanbanRow]
-			var next int
-			if t.Status == "backlog" {
-				// backlog: none→LOW→MED→HIGH→none
-				next = (t.Priority + 1) % 4
-			} else {
-				// fuera de backlog: LOW→MED→HIGH→LOW
-				next = (t.Priority % 3) + 1
-			}
+			next := nextPriority(t.Status, t.Priority)
 			return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
 				return m.database.UpdateTask(id, map[string]any{"priority": next})
 			})
@@ -944,26 +910,15 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		if len(m.detailComments) == 0 {
 			return m, nil
 		}
-		if m.detailCommentSel < 0 {
-			m.detailCommentSel = 0
-		} else if m.detailCommentSel < len(m.detailComments)-1 {
-			m.detailCommentSel++
-		}
+		m.detailCommentSel = nextCommentSel(m.detailCommentSel, len(m.detailComments))
 		return m, nil
 	case "k", "up":
-		if m.detailCommentSel > 0 {
-			m.detailCommentSel--
-		} else if m.detailCommentSel == 0 {
-			m.detailCommentSel = -1
-		}
+		m.detailCommentSel = prevCommentSel(m.detailCommentSel)
 		return m, nil
 	case "c":
 		// Nuevo comentario en el editor externo.
 		if m.detailTask != nil {
-			editorCmd := m.config.Editor.Command
-			if editorCmd == "" {
-				editorCmd = "nvim"
-			}
+			editorCmd := editorCommand(m.config.Editor.Command)
 			return m, commentCmd(m.detailTask.ID, editorCmd)
 		}
 	case "t":
@@ -981,10 +936,7 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 	case "E":
 		// Editor externo completo (write in nvim).
 		if m.detailTask != nil {
-			editorCmd := m.config.Editor.Command
-			if editorCmd == "" {
-				editorCmd = "nvim"
-			}
+			editorCmd := editorCommand(m.config.Editor.Command)
 			cmd := editTaskCmd(*m.detailTask, editorCmd)
 			m.detailOpen = false
 			m.detailTask = nil
@@ -1002,7 +954,7 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Con un comentario seleccionado, borra el comentario.
-		if m.detailCommentSel >= 0 && m.detailCommentSel < len(m.detailComments) {
+		if inRange(m.detailCommentSel, len(m.detailComments)) {
 			comment := m.detailComments[m.detailCommentSel]
 			return m, m.deleteCommentCmd(m.detailTask.ID, comment.ID, m.detailCommentSel)
 		}
@@ -1059,16 +1011,16 @@ func (m *Model) selectedTask() *model.Task {
 	switch m.currentView {
 	case viewList:
 		tasks := m.filteredTasks()
-		if m.cursor >= 0 && m.cursor < len(tasks) {
+		if inRange(m.cursor, len(tasks)) {
 			return &tasks[m.cursor]
 		}
 	case viewKanban:
 		cols := m.kanbanColumns()
-		if m.kanbanCol < 0 || m.kanbanCol >= len(cols) {
+		if !inRange(m.kanbanCol, len(cols)) {
 			break
 		}
 		tasks := cols[m.kanbanCol].tasks
-		if m.kanbanRow >= 0 && m.kanbanRow < len(tasks) {
+		if inRange(m.kanbanRow, len(tasks)) {
 			return &tasks[m.kanbanRow]
 		}
 	case viewGantt:
@@ -1083,10 +1035,7 @@ func (m *Model) selectedTask() *model.Task {
 // previewBudget calcula cuántas líneas de descripción puede mostrar el preview
 // sin empujar el contenido ni los keybinds fuera de la pantalla.
 func (m Model) previewBudget(keybindsHeight int) int {
-	budget := m.height - keybindsHeight - minContentHeight - 2 // 2 = bordes de la caja
-	budget = max(budget, 1)
-	budget = min(budget, previewMaxLines)
-	return budget
+	return previewBudgetFor(m.height, keybindsHeight)
 }
 
 // overlayKind devuelve el modal activo, en el mismo orden de prioridad que

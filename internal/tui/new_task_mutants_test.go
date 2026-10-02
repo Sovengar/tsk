@@ -1193,3 +1193,71 @@ func TestNewTaskMoveFieldCommitsPendingTag(t *testing.T) {
 		t.Errorf("campo = %d, want priority tras el wrap", m.newTaskFieldIdx)
 	}
 }
+
+// El caso que separa `>= 0` de `> 0` es el índice cero: con la primera
+// sugerencia seleccionada, un "> 0" dejaría el texto a medias y crearía la tarea
+// con "@j" en vez de "@juan". El índice 1 ya lo cubría el test de arriba; este
+// pone el que faltaba.
+func TestNewTaskSubmitCompletesFirstSuggestion(t *testing.T) {
+	m := modelWithPeopleAndTags(t, []string{"@ana", "@carla"}, nil)
+	m.newTaskOpen = true
+	m.newTaskProject = "api"
+	m.newTaskFieldIdx = newTaskFieldAssignee
+	m.newTaskTitle = "tarea con la primera sugerencia"
+	m.newTaskAssignee = "@"
+	m.newTaskAssigneeSuggIdx = 0
+
+	suggs := m.assigneeSuggestions()
+	if len(suggs) == 0 {
+		t.Fatal("fixture: sin sugerencias")
+	}
+
+	_, cmd := ntKey(m, "ctrl+s")
+	mustRun(t, cmd)
+
+	tasks, err := m.database.ListTasks("api", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var creada *model.Task
+	for i := range tasks {
+		if tasks[i].Title == "tarea con la primera sugerencia" {
+			creada = &tasks[i]
+		}
+	}
+	if creada == nil {
+		t.Fatal("la tarea no se creó")
+	}
+	if creada.Assignee != suggs[0] {
+		t.Errorf("la tarea se creó con responsable %q, want %q (la primera sugerencia)", creada.Assignee, suggs[0])
+	}
+}
+
+// Y sin sugerencia seleccionada el texto se queda como está: la condición exige
+// el índice, no sólo estar en el campo.
+func TestNewTaskSubmitKeepsTypedAssigneeWithoutSelection(t *testing.T) {
+	m := modelWithPeopleAndTags(t, []string{"@ana", "@carla"}, nil)
+	m.newTaskOpen = true
+	m.newTaskProject = "api"
+	m.newTaskFieldIdx = newTaskFieldAssignee
+	m.newTaskTitle = "tarea sin sugerencia"
+	m.newTaskAssignee = "@escrito"
+	m.newTaskAssigneeSuggIdx = -1
+
+	_, cmd := ntKey(m, "ctrl+s")
+	mustRun(t, cmd)
+
+	tasks, err := m.database.ListTasks("api", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range tasks {
+		if tasks[i].Title == "tarea sin sugerencia" {
+			if tasks[i].Assignee != "@escrito" {
+				t.Errorf("el responsable es %q, want @escrito tal cual", tasks[i].Assignee)
+			}
+			return
+		}
+	}
+	t.Fatal("la tarea no se creó")
+}

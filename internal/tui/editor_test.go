@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"tsk/internal/model"
@@ -104,4 +106,64 @@ func TestEditorFinishedFlow(t *testing.T) {
 	}
 
 	_ = next
+}
+
+// Si no se puede crear el fichero temporal, el comando devuelve el error con el
+// id de la tarea y no lanza el editor. TMPDIR es el punto de entrada: os.CreateTemp
+// lo respeta, así que apuntarlo a un directorio inexistente hace fallar la
+// creación sin necesidad de inyectar nada en producción.
+func TestEditTaskCmdReportsTempFileFailure(t *testing.T) {
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "no-existe"))
+
+	task := model.Task{ID: 42, Title: "t"}
+	msg := editTaskCmd(task, "true")()
+	finished, ok := msg.(editorFinishedMsg)
+	if !ok {
+		t.Fatalf("mensaje %T, want editorFinishedMsg", msg)
+	}
+	if finished.err == nil {
+		t.Fatal("no se reportó el fallo de crear el temporal")
+	}
+	if finished.taskID != task.ID {
+		t.Errorf("taskID = %d, want %d", finished.taskID, task.ID)
+	}
+	if finished.file != "" {
+		t.Errorf("file = %q, want vacío sin fichero", finished.file)
+	}
+}
+
+// El editor recibe un fichero con el template de la tarea dentro, y el comando
+// sólo devuelve el mensaje si el editor terminó sin error.
+func TestEditTemplateCarriesTheTask(t *testing.T) {
+	task := model.Task{
+		ID:          7,
+		Title:       "Arreglar el N+1",
+		Description: "Cascade en tres tablas",
+		Status:      "doing",
+		Assignee:    "@juan",
+		Priority:    2,
+		Estimate:    2.5,
+		Tags:        []string{"db", "perf"},
+	}
+
+	contenido := editTemplate(task)
+	for _, want := range []string{
+		task.Title,
+		task.Description,
+		task.Assignee,
+		"2",       // prioridad
+		"2.5",     // estimate con decimales, no redondeado
+		"db,perf", // tags separadas por comas
+	} {
+		if !strings.Contains(contenido, want) {
+			t.Errorf("el template no lleva %q:\n%s", want, contenido)
+		}
+	}
+
+	// El estado NO va en el template, a propósito: editar el fichero no debe poder
+	// mover la tarea de estado por accidente, porque el flujo de estados tiene su
+	// propio camino (s/d/x) y sus propias reglas de proyecto.
+	if strings.Contains(contenido, task.Status) {
+		t.Errorf("el template lleva el estado %q, y no debería:\n%s", task.Status, contenido)
+	}
 }

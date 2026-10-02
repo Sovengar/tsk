@@ -16,6 +16,11 @@ const dashboardChrome = 4
 // dashboardTeamHeader son las líneas que ocupa la cabecera de Team Workload.
 const dashboardTeamHeader = 3
 
+// dashStatusLabelWidth es lo que cabe de un estado en la columna del Overview.
+// El "%-14s" del formato reserva el hueco; recortar aquí evita que un nombre
+// largo desborde la barra que va detrás.
+const dashStatusLabelWidth = 14
+
 // dashboardActiveHeader son las líneas que ocupa la cabecera de Active.
 const dashboardActiveHeader = 2
 
@@ -31,12 +36,7 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	list := m.dashProjectList()
 	projParts := []string{}
 	for i, p := range list {
-		count := 0
-		for _, t := range m.tasks {
-			if t.ProjectName == p.Name && t.IsActive() {
-				count++
-			}
-		}
+		count := dashProjectTasks(m.tasks, p.Name)
 		if i == m.dashProjectIdx {
 			projParts = append(projParts, styleSelected.Render(fmt.Sprintf("[%s(%d)]", p.Name, count)))
 		} else {
@@ -68,58 +68,30 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	overviewLines = append(overviewLines, styleColumnHeader.Render("Overview"))
 	overviewLines = append(overviewLines, "")
 
-	totalActive := 0
-	totalDone := 0
-	totalCancelled := 0
-	byStatus := map[string]int{}
-	for _, t := range m.tasks {
-		if selectedProject != "" && t.ProjectName != selectedProject {
-			continue
-		}
-		switch t.Status {
-		case "cancelled":
-			totalCancelled++
-			byStatus["cancelled"]++
-		case "done":
-			totalDone++
-			byStatus["done"]++
-		default:
-			totalActive++
-			byStatus[t.Status]++
-		}
-	}
+	totalActive, totalDone, totalCancelled, byStatus := dashStatusCounts(m.tasks, selectedProject)
 
 	overviewLines = append(overviewLines, fmt.Sprintf("  Total         %d", totalActive+totalDone+totalCancelled))
 
 	// Build status bars from project workflows
 	statusOrder := m.mergedWorkflow()
 	for _, status := range statusOrder {
+		// El recuento sale de un mapa de contadores, así que no puede ser
+		// negativo: la comparación con cero no tiene otro lado posible.
 		count := byStatus[status]
 		if count == 0 {
 			continue
 		}
 		bar := strings.Repeat("░", count)
-		label := status
-		if len(label) > 14 {
-			label = label[:14]
-		}
+		// min en vez de comparar longitudes: a exactamente 14 el recorte no hace
+		// nada, así que la comparación era otro mutante equivalente.
+		label := status[:min(len(status), dashStatusLabelWidth)]
 		overviewLines = append(overviewLines, fmt.Sprintf("  %-14s %d  %s", label, count, bar))
 	}
 
 	overview := strings.Join(overviewLines, "\n")
 
 	// Team workload
-	assigneeTasks := map[string]int{}
-	assigneeActive := map[string]int{}
-	for _, t := range m.tasks {
-		if selectedProject != "" && t.ProjectName != selectedProject {
-			continue
-		}
-		assigneeTasks[t.Assignee]++
-		if t.IsActive() {
-			assigneeActive[t.Assignee]++
-		}
-	}
+	assigneeTasks, assigneeActive := dashAssigneeCounts(m.tasks, selectedProject)
 
 	// Orden estable + tope de filas: el sobrante de alto se descarta por abajo.
 	assignees := make([]string, 0, len(assigneeTasks))
@@ -133,8 +105,7 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	teamLines = append(teamLines, styleColumnHeader.Render("Team Workload"))
 	teamLines = append(teamLines, "")
 
-	teamBudget := colLines - len(overviewLines) - dashboardTeamHeader
-	teamBudget = max(teamBudget, 0)
+	teamBudget := dashRowsAvailable(colLines, len(overviewLines), dashboardTeamHeader)
 	for _, assignee := range assignees {
 		if len(teamLines)-dashboardTeamHeader >= teamBudget {
 			break
@@ -149,8 +120,7 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	activeLines = append(activeLines, styleColumnHeader.Render("Active"))
 	activeLines = append(activeLines, "")
 
-	activeBudget := colLines - dashboardActiveHeader
-	activeBudget = max(activeBudget, 0)
+	activeBudget := dashRowsAvailable(colLines, 0, dashboardActiveHeader)
 	for _, t := range m.tasks {
 		if len(activeLines)-dashboardActiveHeader >= activeBudget {
 			break
@@ -169,8 +139,7 @@ func (m *Model) renderDashboard(maxHeight int) string {
 
 	// Layout: two columns
 	innerW := w - 2 // ancho interior para el contenido dentro del borde
-	leftW := innerW/2 - 1
-	rightW := innerW/2 - 1
+	leftW, rightW := dashColumnWidths(innerW)
 
 	// Recortar cada columna a su ancho antes de renderizarla: si una línea no
 	// entra, lipgloss la wrapéaría y la caja crecería más allá del alto

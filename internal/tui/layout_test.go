@@ -131,3 +131,39 @@ func TestCellWidthTruncates(t *testing.T) {
 		t.Errorf("cellWidth = %q, want %q", got, "una pa..")
 	}
 }
+
+// El ancho útil de un modal: el total menos los dos bordes. modalWidthFor deja
+// siempre margen, así que en uso real nunca llega a 1; el suelo cubre el total
+// que venga ya recortado por otro camino.
+func TestModalInnerWidth(t *testing.T) {
+	tests := []struct {
+		name string
+		in   int
+		want int
+	}{
+		{"ancho de un modal", 58, 56},
+		{"modal ancho", 120, 118},
+		{"modal de tres", 3, 1},
+		{"suelo en 1", 2, 1},
+		{"uno más del suelo", 1, 1},
+		{"cero", 0, 1},
+		{"negativo", -10, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := modalInnerWidth(tt.in); got != tt.want {
+				t.Errorf("modalInnerWidth(%d) = %d, want %d", tt.in, got, tt.want)
+			}
+		})
+	}
+}
+
+// Nunca devuelve 0 ni negativo: un ancho de recorte en 0 o menos haría que
+// truncateLines no recorte nada, que es lo contrario de lo que se quiere.
+func TestModalInnerWidthNeverZero(t *testing.T) {
+	for w := -50; w <= 200; w++ {
+		if got := modalInnerWidth(w); got < 1 {
+			t.Fatalf("modalInnerWidth(%d) = %d, want >= 1", w, got)
+		}
+	}
+}

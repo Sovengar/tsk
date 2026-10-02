@@ -82,6 +82,10 @@ func press(m *Model, key string) (*Model, tea.Cmd) {
 		km = tea.KeyPressMsg{Code: tea.KeyUp}
 	case "down":
 		km = tea.KeyPressMsg{Code: tea.KeyDown}
+	case "backspace":
+		km = tea.KeyPressMsg{Code: tea.KeyBackspace}
+	case "space":
+		km = tea.KeyPressMsg{Code: ' ', Text: " "}
 	default:
 		km = tea.KeyPressMsg{Code: rune(key[0]), Text: key}
 	}

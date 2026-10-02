@@ -888,3 +888,92 @@ func TestResizeDescEditorFollowsTerminal(t *testing.T) {
 		t.Errorf("con el editor cerrado el ancho cambió: %d -> %d", before, got)
 	}
 }
+
+// El contador de secuencia existe para que un tick viejo no borre un toast más
+// nuevo: cada setToast incrementa y guarda el valor, y el tick sólo limpia si su
+// número sigue siendo el actual.
+func TestToastSeqIgnoresStaleTick(t *testing.T) {
+	m := newTestModel(t)
+	primero := m.setToast("primero", "info")
+	seqPrimerTick := m.toastSeq
+
+	segundo := m.setToast("segundo", "error")
+	if m.toastSeq == seqPrimerTick {
+		t.Fatalf("el contador no avanzó: %d", m.toastSeq)
+	}
+
+	// Llega el tick del primer toast, que ya no es el actual: el toast sigue.
+	if msg := primero(); msg != nil {
+		if exp, ok := msg.(toastExpiredMsg); ok && exp.seq == m.toastSeq {
+			t.Errorf("el tick viejo lleva la secuencia actual %d", exp.seq)
+		}
+	}
+
+	next, _ := m.Update(toastExpiredMsg{seq: m.toastSeq})
+	if next.(Model).toast != "" {
+		t.Errorf("el tick de la secuencia actual no limpió el toast: %q", next.(Model).toast)
+	}
+
+	// Y el segundo tick tampoco lo que ya está limpio.
+	if cmd := segundo(); cmd == nil {
+		t.Error("el segundo toast no devolvió comando")
+	}
+}
+
+// El toast se recorta al ancho menos el margen, y el margen es lo que impide que
+// el texto toque los bordes. Sin recorte no hay nada que recortar.
+func TestToastTruncationWidth(t *testing.T) {
+	tests := []struct {
+		name     string
+		toast    string
+		width    int
+		wantTrim bool
+	}{
+		{"corta", "hola", 40, false},
+		{"justo al ancho", strings.Repeat("x", 38), 40, false},
+		{"una de más", strings.Repeat("x", 39), 40, true},
+		{"muy larga", strings.Repeat("x", 100), 40, true},
+		// Con menos de cinco columnas no se recorta, aunque el texto no quepa:
+		// el margen de dos columnas se comería el texto entero. Por eso el umbral
+		// es "> 4" y no "> 2".
+		{"ancho de cinco, cabe", "abc", 5, false},
+		{"ancho de cinco, no cabe", "abcd", 5, true},
+		{"ancho de cuatro", "abcd", 4, false},
+		{"ancho de tres", "abcd", 3, false},
+		{"ancho de dos", "abcd", 2, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestModel(t)
+			m.toast = tt.toast
+			m.toastKind = "info"
+			m.width = tt.width
+
+			out := ansi.Strip(m.renderToast())
+			// El toast se dibuja con un espacio de margen delante, así que la
+			// comparación es contra el texto con ese espacio.
+			if got := out != " "+tt.toast; got != tt.wantTrim {
+				t.Errorf("recortado=%v, want %v (salida %q)", got, tt.wantTrim, out)
+			}
+		})
+	}
+}
+
+// El estilo del toast depende del kind, y "error" no es lo mismo que "info".
+func TestToastErrorStyle(t *testing.T) {
+	m := newTestModel(t)
+	m.toast = "falló"
+	m.width = 40
+
+	m.toastKind = "error"
+	conError := m.renderToast()
+	m.toastKind = "info"
+	conInfo := m.renderToast()
+
+	if conError == conInfo {
+		t.Error("un toast de error se ve igual que uno de información")
+	}
+	if !strings.Contains(ansi.Strip(conError), "falló") {
+		t.Errorf("el toast de error no sale:\n%q", conError)
+	}
+}

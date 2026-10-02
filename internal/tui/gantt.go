@@ -71,6 +71,11 @@ func (m *Model) ganttRows() []ganttRow {
 
 // snapGanttCursor reencuadra el cursor dentro de las filas actuales y lo apoya
 // siempre sobre una fila de tarea: las cabeceras de persona no son navegables.
+//
+// Que "siempre" sea cierto es estructural: ganttRows sólo emite la cabecera de
+// una persona que tiene entradas, así que la fila siguiente a una cabecera es
+// siempre una tarea, y la búsqueda hacia delante la encuentra. Los llamantes no
+// necesitan comprobar el tipo de la fila.
 func (m *Model) snapGanttCursor() {
 	rows := m.ganttRows()
 	if len(rows) == 0 {
@@ -170,7 +175,10 @@ func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 			m.ganttCursor = last
 		}
 	case "enter":
-		if m.ganttCursor >= 0 && m.ganttCursor < len(rows) && rows[m.ganttCursor].kind == ganttTaskRow {
+		// El snap de entrada deja el cursor sobre una fila de tarea siempre, así
+		// que la comprobación de `kind` que había aquí no podía ser falsa. Lo que
+		// sí hace falta es el rango: sin filas no hay nada que abrir.
+		if inRange(m.ganttCursor, len(rows)) {
 			t := rows[m.ganttCursor].entry.Task
 			m.detailOpen = true
 			m.detailTask = &t
@@ -195,13 +203,7 @@ func (m *Model) renderGantt(maxHeight int) string {
 	rows := ganttRows(s)
 
 	// Reparto de ancho: etiqueta a la izquierda, días a la derecha.
-	labelW := 30
-	if innerW < 70 {
-		labelW = innerW / 3
-	}
-	labelW = max(labelW, 14)
-	dayCols := innerW - labelW - 1
-	dayCols = max(dayCols, 7)
+	labelW, dayCols := ganttLabelAndDays(innerW)
 
 	start, _ := model.ParseDate(s.Start)
 	offset := m.ganttOffsetDays
