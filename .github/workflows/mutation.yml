@@ -165,8 +165,17 @@ jobs:
             exit 0
           fi
 
-          grep -vE '^[[:space:]]*(#|$)' "$ALLOWLIST" | sed 's/[[:space:]]*$//' | sort -u > /tmp/allow.txt
-          comm -23 /tmp/lived.txt /tmp/allow.txt > /tmp/new_lived.txt
+          # `|| true`: grep sale con 1 cuando no encuentra nada, y una allowlist
+          # sin entradas -- que es lo que queda cuando no hay ningún superviviente
+          # aceptado -- es exactamente ese caso. Con el `set -e` que Actions pone
+          # por defecto en `run:`, eso tumbaba el gate entero con un allowlist
+          # limpio: verde de verdad, STEP FALLIDO. Es un fallo que sólo aparece
+          # cuando todo va bien, que es la forma más difícil de ver.
+          grep -vE '^[[:space:]]*(#|$)' "$ALLOWLIST" | sed 's/[[:space:]]*$//' | sort -u > /tmp/allow.txt || true
+          # El pipeline con pipefail devuelve el primer fallo que vea, así que el
+          # `|| true` tiene que cubrirlo. Sin allowlist el fichero sale vacío, que
+          # es lo que comm espera: cualquier superviviente cuenta como nuevo.
+          comm -23 /tmp/lived.txt /tmp/allow.txt > /tmp/new_lived.txt || true
           new=$(wc -l < /tmp/new_lived.txt)
 
           echo "- surviving in diff: $total (allowlisted: $((total - new)), new: $new)" >> "$S"
