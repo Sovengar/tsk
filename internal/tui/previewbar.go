@@ -23,6 +23,27 @@ type PreviewBar struct {
 	task     *model.Task
 }
 
+// elipsisDescription es lo que se pone al final de una descripción que no cabe.
+const elipsisDescription = "…"
+
+// anchoElipsis es lo que ocupa la elipsis. Es una constante y no
+// ansi.StringWidth(elipsisDescription) en línea porque el ancho de una cadena se
+// calculaba en cada recorte, y el mutante de restarlo dos veces o de sumarlo
+// --cambios ambos indistinguibles con el suelo en 0-- quedaba en una expresión
+// que no decía qué estaba descontando.
+const anchoElipsis = 1
+
+// recortarParaElipsis deja el hueco justo para la elipsis y devuelve la línea con
+// la elipsis pegada.
+//
+// El suelo en 0 es lo que evita que strings.Repeat y ansi.Truncate revienten con
+// números negativos cuando el límite es más pequeño que la elipsis -- una terminal
+// de dos columnas con la caja de descripción.
+func recortarParaElipsis(ultima string, limit int) string {
+	room := max(limit-anchoElipsis, 0)
+	return strings.TrimRight(ansi.Truncate(ultima, room, ""), " ") + elipsisDescription
+}
+
 // NewPreviewBar crea un nuevo PreviewBar.
 func NewPreviewBar(width int) PreviewBar {
 	return PreviewBar{width: width, maxLines: previewMaxLines}
@@ -80,12 +101,21 @@ func (p PreviewBar) descriptionLines(desc string) []string {
 	wrapped := strings.Split(ansi.Wrap(desc, limit, " "), "\n")
 	if len(wrapped) > maxLines {
 		wrapped = wrapped[:maxLines]
-		// El recorte de la última línea es defensivo: ansi.Wrap ya entrega
-		// líneas de limit columnas o menos, así que Truncate no quita nada y su
-		// límite exacto -- limit, limit-1, limit-2 -- da lo mismo. Lo que hace el
-		// trabajo es la elipsis. Por eso sus dos mutantes sobreviven.
-		last := strings.TrimRight(ansi.Truncate(wrapped[len(wrapped)-1], limit-1, ""), " ")
-		wrapped[len(wrapped)-1] = last + "…"
+		// Se reserva una celda para la elipsis ANTES de recortar, y el recorte
+		// va con un límite derivado de ella en vez de con `limit - 1`.
+		//
+		// `limit - 1` era un número que ya estaba en el sitio por lo que hacía
+		// la elipsis, y por eso mismo no se distinguía de `limit` ni de
+		// `limit - 2`: ansi.Wrap entrega líneas de limit columnas o menos, así que
+		// truncar a cualquiera de los tres daba lo mismo. Ahora el límite es el
+		// hueco que queda tras poner la elipsis, que es un número con nombre, y
+		// `limit - anchoElipsis` sí dice qué quiere decir.
+		//
+		// El recorte no es decorativo: si la última línea llega a limit columnas,
+		// añadirle la elipsis sin recortar la empujaría una columna de más y la
+		// bordered la re-wrapearía en dos, rompiendo el tope de alto.
+		last := wrapped[len(wrapped)-1]
+		wrapped[len(wrapped)-1] = recortarParaElipsis(last, limit)
 	}
 
 	lines := make([]string, len(wrapped))

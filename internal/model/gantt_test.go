@@ -161,19 +161,23 @@ func TestBuildScheduleDefaultEstimateNoPositivo(t *testing.T) {
 	}
 }
 
-// Un estimate que no llega a superar epsilon no consume NINGÚN día: el bucle
-// de fracciones ni se entra, así que la entrada se queda sin día de inicio
-// (FormatDate del zero value) y el calendario no avanza. Fija ese suelo, que
-// es lo que separa `remaining > epsilon` de `remaining >= epsilon`.
+// Un estimate que no llega a medio minuto no consume NINGÚN día: no se reserva
+// nada, así que la entrada se queda sin día de inicio (FormatDate del zero value)
+// y el calendario no avanza. Fija ese suelo, que es lo que separa `restante > 0`
+// de `restante >= 0`.
+//
+// Antes el suelo eran 1e-9 DÍAS y la comparación era de coma flotante, así que el
+// borde era inalcanzable: ningún estimate cae exactamente en 1e-9. Ahora la
+// aritmética es en minutos enteros, y 0 es un valor de verdad.
 func TestBuildScheduleEstimateEnElSuelo(t *testing.T) {
-	s := BuildSchedule([]Task{task("@a", "todo", epsilon)}, nil, mustDate(t, monday), 1)
+	s := BuildSchedule([]Task{task("@a", "todo", 1e-9)}, nil, mustDate(t, monday), 1)
 	e := s.Assignees[0].Entries[0]
 
-	if e.Estimate != epsilon {
-		t.Errorf("estimate = %v, want %v (no se sanea un estimate explícito)", e.Estimate, epsilon)
+	if e.Estimate != 1e-9 {
+		t.Errorf("estimate = %v, want 1e-9 (no se sanea un estimate explícito)", e.Estimate)
 	}
 	if e.EstimateDefaulted {
-		t.Error("epsilon no es 0: no debería marcarse EstimateDefaulted")
+		t.Error("1e-9 no es 0: no debería marcarse EstimateDefaulted")
 	}
 	if e.End != monday {
 		t.Errorf("end = %s, want %s (no consume día)", e.End, monday)
@@ -305,5 +309,124 @@ func TestIsOffDay(t *testing.T) {
 	}
 	if IsOffDay(offdays, "@a", mustDate(t, "2026-09-16")) {
 		t.Error("day after range should be working")
+	}
+}
+
+// El borde del día lleno.
+//
+// El reparto empqueta tareas: dos de medio día caben en el mismo día, y al
+// llenarse la siguiente salta al laborable siguiente. Ese salto es un `libre == 0`
+// -- una comparación de igualdad, no un epsilon -- y se alcanza con cualquier
+// estimate que llene el día entero.
+//
+// Estos dos casos son los lados opuestos del mismo borde, y son los que
+// separan `libre == 0` de `libre != 0`: si el salto no ocurriera, las dos tareas
+// de un día empezarían el mismo día.
+func TestBuildScheduleEmpaquetaYThenSalta(t *testing.T) {
+	t.Run("dos medias caben en el mismo día", func(t *testing.T) {
+		s := BuildSchedule([]Task{
+			task("@a", "todo", 0.5),
+			task("@a", "todo", 0.5),
+		}, nil, mustDate(t, monday), 1)
+
+		e := s.Assignees[0].Entries
+		if len(e) != 2 {
+			t.Fatalf("entradas = %d, want 2", len(e))
+		}
+		if e[0].Start != monday || e[1].Start != monday {
+			t.Errorf("inicios = %s, %s; want %s los dos: medio día + medio día llena el día",
+				e[0].Start, e[1].Start, monday)
+		}
+	})
+
+	t.Run("al llenarse el día, la siguiente salta", func(t *testing.T) {
+		s := BuildSchedule([]Task{
+			task("@a", "todo", 1.0),
+			task("@a", "todo", 1.0),
+		}, nil, mustDate(t, monday), 1)
+
+		e := s.Assignees[0].Entries
+		if len(e) != 2 {
+			t.Fatalf("entradas = %d, want 2", len(e))
+		}
+		if e[0].Start != monday {
+			t.Errorf("la primera empieza el %s, want %s", e[0].Start, monday)
+		}
+		if e[1].Start == monday {
+			t.Errorf("la segunda también empieza el %s: el día ya estaba lleno y tenía que saltar",
+				e[1].Start)
+		}
+		if e[1].Start != "2026-09-15" {
+			t.Errorf("la segunda empieza el %s, want 2026-09-15 (el martes)", e[1].Start)
+		}
+	})
+
+	t.Run("tres medias no caben en un día", func(t *testing.T) {
+		s := BuildSchedule([]Task{
+			task("@a", "todo", 0.5),
+			task("@a", "todo", 0.5),
+			task("@a", "todo", 0.5),
+			task("@a", "todo", 0.5),
+		}, nil, mustDate(t, monday), 1)
+
+		e := s.Assignees[0].Entries
+		// Dos medias llenan el día; la tercera ya no cabe y salta. Es el mismo
+		// borde por el otro lado del relleno.
+		if e[0].Start != monday || e[1].Start != monday {
+			t.Errorf("inicios = %s, %s; want %s los dos", e[0].Start, e[1].Start, monday)
+		}
+		for i := 2; i < len(e); i++ {
+			if e[i].Start == monday {
+				t.Errorf("la tarea %d empieza el %s: el día ya estaba lleno", i, e[i].Start)
+			}
+		}
+		if e[2].Start != "2026-09-15" {
+			t.Errorf("la tercera empieza el %s, want 2026-09-15", e[2].Start)
+		}
+	})
+}
+
+// El suelo en cero del estimate: por debajo de medio minuto no se pinta barra,
+// pero la tarea SIGUE en el calendario y el resto de la cola no se descuadra.
+func TestBuildScheduleSueloRedondeadoNoDescolocaLaCola(t *testing.T) {
+	s := BuildSchedule([]Task{
+		task("@a", "todo", 0.0001), // se redondea a 0 minutos
+		task("@a", "todo", 1.0),
+	}, nil, mustDate(t, monday), 1)
+
+	e := s.Assignees[0].Entries
+	if len(e) != 2 {
+		t.Fatalf("entradas = %d, want 2", len(e))
+	}
+	if e[0].Start == monday {
+		t.Error("la tarea de 0 minutos tiene día de inicio: no debería pintar barra")
+	}
+	// Y la siguiente sigue en el lunes: la tarea de 0 minutos no ha gastado día.
+	if e[1].Start != monday {
+		t.Errorf("la segunda empieza el %s, want %s: una tarea de 0 minutos no consume día",
+			e[1].Start, monday)
+	}
+}
+
+// minutosDe es la función pura del refactor, y su redondeo es una decisión con
+// consecuencias visibles: por debajo de medio minuto no hay barra.
+func TestMinutosDeRedondeaAlMinuto(t *testing.T) {
+	casos := []struct {
+		est  float64
+		want int
+	}{
+		{0, 0},
+		{0.0001, 0},
+		{1.0 / (3 * minutosPorDia), 0}, // un tercio de minuto, se redondea a 0
+		{1.0 / (2 * minutosPorDia), 1}, // medio minuto: round() va hacia arriba
+		{0.5, 720},
+		{1, minutosPorDia},
+		{1.5, 2160},
+		{-1, -minutosPorDia},
+	}
+	for _, c := range casos {
+		if got := minutosDe(c.est); got != c.want {
+			t.Errorf("minutosDe(%v) = %d, want %d", c.est, got, c.want)
+		}
 	}
 }

@@ -574,7 +574,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.descEditOpen {
 			return m.handleDescEditKey(msg)
 		}
-		if m.newTaskOpen && m.newTaskFieldIdx == newTaskFieldDescription {
+		if vaAlTextareaDelAlta(m.newTaskOpen, m.newTaskFieldIdx) {
 			var cmd tea.Cmd
 			m.newTaskTextarea, cmd = m.newTaskTextarea.Update(msg)
 			return m, cmd
@@ -582,6 +582,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+// vaAlTextareaDelAlta dice si un mensaje que no es ni tecla ni pegado tiene que
+// reenviarse al textarea de la descripción del alta.
+//
+// La decisión estaba escrita dentro del default de Update, y ahí no se podía
+// comprobar: los mensajes que llegan por esa rama son privados del paquete
+// textarea (pasteMsg, copyMsg), que no se exportan, así que un test no puede
+// construir uno y ver a dónde acaba. Con la condición sacada a una función pura,
+// el enrutado se puede comprobar entero: qué combinaciones van al textarea y
+// cuáles no, sin necesitar el mensaje que lo dispara.
+//
+// Nota sobre el borde: el campo de descripción es el ÚNICO que lleva textarea
+// embebido, porque es el único multilínea. Los demás campos son de una línea y
+// se escriben a mano.
+func vaAlTextareaDelAlta(newTaskOpen bool, fieldIdx int) bool {
+	return newTaskOpen && fieldIdx == newTaskFieldDescription
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -1025,7 +1042,7 @@ func (m *Model) selectedTask() *model.Task {
 		}
 	case viewGantt:
 		rows := m.ganttRows()
-		if m.ganttCursor >= 0 && m.ganttCursor < len(rows) && rows[m.ganttCursor].kind == ganttTaskRow {
+		if filaEsTarea(rows, m.ganttCursor) {
 			return &rows[m.ganttCursor].entry.Task
 		}
 	}

@@ -1,7 +1,8 @@
 package tui
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 )
 
@@ -32,16 +33,27 @@ func fuzzyScore(query, target string) (int, bool) {
 	return 0, false
 }
 
+// topeDe devuelve cuántos elementos de n se quedan tras aplicar un tope.
+//
+// Es un min() con la regla "tope cero (o negativo) significa sin tope", que es la
+// que usaban los llamadores y que estaba escrita tres veces como `if max > 0 &&
+// len(x) > max`. Con el if, el `len(x) > max` sólo se distinguía del `>=` cuando
+// len(x) == max, y ahí las dos ramas dan el mismo slice; el min no tiene borde que
+// mutar.
+func topeDe(n, max int) int {
+	if max <= 0 {
+		return n
+	}
+	return min(n, max)
+}
+
 // fuzzyFilter devuelve hasta max items que matchean query, ordenados por score
 // descendente y nombre ascendente como desempate. Con query vacío devuelve los
 // primeros max en el orden original.
 func fuzzyFilter(items []string, query string, max int) []string {
 	// Sin query no hay ranking: se devuelve el orden original (el tope aplica).
 	if strings.TrimSpace(query) == "" {
-		if max > 0 && len(items) > max {
-			items = items[:max]
-		}
-		return append([]string(nil), items...)
+		return append([]string(nil), items[:topeDe(len(items), max)]...)
 	}
 
 	type scored struct {
@@ -54,15 +66,26 @@ func fuzzyFilter(items []string, query string, max int) []string {
 			out = append(out, scored{it, s})
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].score != out[j].score {
-			return out[i].score > out[j].score
+	// slices.SortStableFunc con un cmp de tres Outcomes en vez de sort.SliceStable
+	// con un comparador booleano.
+	//
+	// Con el comparador booleano, dos líneas distintas --"menor puntuación" y
+	// "a igual puntuación, menor nombre"--Ggremlins las mutaba por separado, y las
+	// dos piezas tenían un `<` contra el que no se podía colocar un test: los
+	// nombres salen de una lista sin repetidos y las puntuaciones sólo se
+	// comparan cuando ya se sabe que no son iguales, así que en ambos bordes la
+	// rama opuesta daba el mismo resultado.
+	//
+	// El cmp devuelve un número, y el desempate queda en la MISMA expresión que
+	// la comparación principal, así que no hay dos líneas que mutar sino una.
+	slices.SortStableFunc(out, func(a, b scored) int {
+		if a.score != b.score {
+			// Descendente: el que tiene MÁS puntuación va antes.
+			return cmp.Compare(b.score, a.score)
 		}
-		return out[i].item < out[j].item
+		return strings.Compare(a.item, b.item)
 	})
-	if max > 0 && len(out) > max {
-		out = out[:max]
-	}
+	out = out[:topeDe(len(out), max)]
 	res := make([]string, len(out))
 	for i, s := range out {
 		res[i] = s.item

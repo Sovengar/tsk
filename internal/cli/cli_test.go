@@ -262,3 +262,29 @@ func TestCompletionShells(t *testing.T) {
 		t.Errorf("completion sin shell debería listar los shells: %q", out)
 	}
 }
+
+// runErr es run pero devolviendo stderr, que es donde outputError escribe. Los
+// errores de escritura se leen ahí; la salida normal, en stdout.
+func runErr(t *testing.T, args ...string) (stderrText string, code int) {
+	t.Helper()
+	out := &bytes.Buffer{}
+	origOut, origErr, origExit := stdout, stderr, exit
+	stdout, stderr = &bytes.Buffer{}, out
+	exit = func(c int) { panic(exitPanic{c}) }
+	t.Cleanup(func() { stdout, stderr, exit = origOut, origErr, origExit })
+
+	code = 0
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				e, ok := r.(exitPanic)
+				if !ok {
+					panic(r)
+				}
+				code = e.code
+			}
+		}()
+		Run(args)
+	}()
+	return out.String(), code
+}

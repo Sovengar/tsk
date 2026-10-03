@@ -824,8 +824,12 @@ func cmdGantt(args []string) {
 				fromStr = v
 			}
 		case "--weeks":
+			// Aquí no se descarta el cero ni los negativos: se acepta lo que
+			// Atoi entienda y lo normaliza el `if weeks <= 0` de abajo, que es
+			// donde se cae a la config. Filtrar en los dos sitios obligaba a
+			// tener la misma regla escrita dos veces.
 			if v, ok := s.next(); ok {
-				if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				if n, err := strconv.Atoi(v); err == nil {
 					weeks = n
 				}
 			}

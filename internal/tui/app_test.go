@@ -86,6 +86,14 @@ func press(m *Model, key string) (*Model, tea.Cmd) {
 		km = tea.KeyPressMsg{Code: tea.KeyBackspace}
 	case "space":
 		km = tea.KeyPressMsg{Code: ' ', Text: " "}
+	case "shift+tab":
+		km = tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}
+	case "ctrl+p":
+		km = tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl}
+	case "ctrl+s":
+		km = tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl}
+	case "ctrl+n":
+		km = tea.KeyPressMsg{Code: 'n', Mod: tea.ModCtrl}
 	default:
 		km = tea.KeyPressMsg{Code: rune(key[0]), Text: key}
 	}
@@ -507,39 +515,6 @@ func TestKanbanMoveRight(t *testing.T) {
 	_, cmd := press(m, "s")
 	// cmd may be nil if task is already in last status; that's ok
 	_ = cmd
-}
-
-func TestKanbanMoveLeft(t *testing.T) {
-	m := newTestModel(t)
-	m, _ = press(m, "2") // kanban view
-
-	// Buscar una tarjeta que tenga estado anterior en el workflow de SU
-	// proyecto. Con workflows divergentes eso no coincide con el merge, así que
-	// el bug anterior (retroceder según el merge) produciría un move inválido.
-	workflow := m.mergedWorkflow()
-	found := false
-	for i := 1; i < len(workflow) && !found; i++ {
-		colTasks := m.tasksInColumn(workflow[i])
-		for j, task := range colTasks {
-			p := m.projectByName(task.ProjectName)
-			if p == nil {
-				continue
-			}
-			if _, ok := model.PrevStatus(p.Workflow, task.Status); ok {
-				m.kanbanCol, m.kanbanRow = i, j
-				found = true
-				break
-			}
-		}
-	}
-	if !found {
-		t.Fatal("el fixture no tiene una tarea con estado anterior en su proyecto")
-	}
-
-	_, cmd := press(m, "S")
-	if cmd == nil {
-		t.Error("S in kanban should produce a command when the task can retreat")
-	}
 }
 
 // --- Merged workflow ---

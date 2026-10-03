@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -173,19 +174,41 @@ func (m *Model) filterApplySelection(field int, value string) {
 // opciones y validaciones del modal de filtros, de modo que Tab se comporta
 // igual en List, Kanban y Gantt. Con 0 o 1 opción no hace nada.
 func (m *Model) cycleProjectFilter(dir int) {
-	opts := m.filterFieldOptions(filterFieldProject)
-	if len(opts) <= 1 {
-		return
+	// El salto entero vive en siguienteOpcion, una función pura. Aquí no queda
+	// ninguna condición: ni el "no hay lista" ni el "el valor actual no está en
+	// la lista" -- los dos casos los resuelve ella y los dos se pueden probar
+	// pasándole la lista directamente.
+	//
+	// El `if len(opts) <= 1` que había antes era un bug, no una guarda: las
+	// opciones del filtro de proyecto SIEMPRE empiezan por "all", así que con un
+	// solo proyecto hay DOS opciones y el Tab no movía nada. Contaba mal porque
+	// trataba "all" como si no contara.
+	m.filterApplySelection(filterFieldProject,
+		siguienteOpcion(m.filterFieldOptions(filterFieldProject),
+			m.filterCurrentValue(filterFieldProject), dir))
+}
+
+// siguienteOpcion devuelve la opción que va una posición antes o después de
+// current en opts, dando la vuelta por los extremos.
+//
+// Con opts vacía devuelve "", que es un valor que ninguna opción puede tener: las
+// opciones del filtro de proyecto empiezan siempre por "all", así que la lista
+// nunca está vacía de verdad, pero la función es total y se puede probar con nil.
+func siguienteOpcion(opts []string, current string, dir int) string {
+	if len(opts) == 0 {
+		return ""
 	}
-	current := m.filterCurrentValue(filterFieldProject)
-	idx := 0
-	for i, o := range opts {
-		if o == current {
-			idx = i
-			break
-		}
-	}
-	m.filterApplySelection(filterFieldProject, opts[(idx+dir+len(opts))%len(opts)])
+	// El índice arranca en 0 y slices.Index devuelve -1 cuando no lo encuentra, de
+	// modo que el "no está en la lista" se resuelve con un max y no con un if:
+	// `max(idx, 0)` y el `if idx < 0 { idx = 0 }` dan lo mismo, y con el if el
+	// mutante de su condición no tenía un valor que lo distinguiera del índice 0
+	// que ya produce el max.
+	//
+	// El valor actual puede no estar en la lista: un proyecto borrado, o un
+	// nombre escrito a mano. Se arranca por el principio en vez de quedarse donde
+	// está.
+	idx := max(slices.Index(opts, current), 0)
+	return opts[cycleIndex(idx, len(opts), dir)]
 }
 
 // clearInvalidStatusFilter limpia el filtro de estado cuando dejó de existir en

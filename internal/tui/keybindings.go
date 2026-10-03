@@ -120,12 +120,13 @@ func handleGlobalKeys(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		m.currentView = viewDashboard
 		return m, nil, true
 	case "esc":
+		// La ayuda y el filtro abierto los cierra su propio modal, y el filtro
+		// activo lo limpia aquí. La rama que cerraba filterOpen estaba aquí por
+		// simetría con las otras dos, pero handleKey enruta al modal de filtro
+		// ANTES de las teclas globales, así que nunca llegaba con el filtro
+		// abierto: era código muerto.
 		if m.helpOpen {
 			m.helpOpen = false
-			return m, nil, true
-		}
-		if m.filterOpen {
-			m.filterOpen = false
 			return m, nil, true
 		}
 		if m.filterActive {

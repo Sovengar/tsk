@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -89,23 +90,58 @@ func (m *Model) snapGanttCursor() {
 	if rows[m.ganttCursor].kind == ganttTaskRow {
 		return
 	}
-	// Cabecera: saltar a la primera tarea posterior; si no hay, a la anterior.
+	// Cabecera: saltar a la primera tarea posterior. No hay caso "si no hay, a la
+	// anterior": ganttRows sólo emite la cabecera de una persona que tiene
+	// entradas, así que la fila siguiente a una cabecera es siempre una tarea y
+	// esta búsqueda termina siempre. La búsqueda hacia atrás que había aquí no
+	// era una red de seguridad: era código muerto con su propio comentario
+	// diciendo que no podía llegar a ejecutarse.
+	//
 	// Se recorre con range sobre sub-rebanadas en vez de con un for de índice
 	// manual: un `i++` invertido deja el bucle colgado y el mutant se reporta
 	// como TIMED OUT, no como muerto.
-	for i, r := range rows[m.ganttCursor+1:] {
-		if r.kind == ganttTaskRow {
-			m.ganttCursor += 1 + i
-			return
+	// El salto se hace con un índice que cuenta desde el cursor, y no con el
+	// desplazamiento dentro de la sub-rebanada: `1 + i` con i siendo el índice
+	// de la sub-rebanada era una suma de dos números que describen lo mismo, y
+	// su mutante (`+ 2 * i`, `+ i - i`) no se distinguía porque i siempre era 0
+	// -- la fila siguiente a una cabecera es siempre una tarea.
+	//
+	// Con nextGanttTaskRow el salto es una operación con nombre y el índice es
+	// el absoluto desde el principio, que es lo que se guarda. Menos aritmética
+	// que pueda mutar sin que nadie lo note.
+	m.ganttCursor = nextGanttTaskRow(rows, m.ganttCursor)
+}
+
+// filaEsTarea dice si el índice cae sobre una fila de tarea del gantt, es decir,
+// si hay una tarea seleccionada.
+//
+// El rango va con inRange, el mismo helper que usa el Kanban para su cursor. La
+// condición suelta -- `>= 0 && < len(rows)` -- tenía un `>= 0` cuyo mutante
+// (`> 0`) sólo se distinguía en la fila 0, y la fila 0 de un gantt con filas es
+// siempre una cabecera de persona: ganttRows emite la cabecera antes que las
+// entradas de esa persona. Así que el mutante era indistinguible no por falta de
+// test sino porque el valor que lo separaba no existía.
+//
+// inRange no tiene ese borde: comprobar que el índice está en la lista y que la
+// fila de ese índice es una tarea son dos preguntas y las dos se contestan.
+func filaEsTarea(rows []ganttRow, i int) bool {
+	return inRange(i, len(rows)) && rows[i].kind == ganttTaskRow
+}
+
+// nextGanttTaskRow devuelve el índice de la primera fila de tarea en o después de
+// `from`, o -1 si no hay ninguna.
+//
+// La búsqueda empieza en `from` y no en `from+1` a propósito: quien llama ya sabe
+// que la fila actual no es una tarea, así que empezar en ella no cambia el
+// resultado, y empezar en `from` hace que el caso "no hay ninguna fila" sea un
+// -1 de verdad y no un acierto con i == 0.
+func nextGanttTaskRow(rows []ganttRow, from int) int {
+	for i := max(from, 0); i < len(rows); i++ {
+		if rows[i].kind == ganttTaskRow {
+			return i
 		}
 	}
-	for i := range m.ganttCursor {
-		if rows[m.ganttCursor-1-i].kind == ganttTaskRow {
-			m.ganttCursor -= 1 + i
-			return
-		}
-	}
-	m.ganttCursor = 0
+	return -1
 }
 
 // ganttNoTasks es el centinela que devuelve ganttTaskRange cuando la vista no
@@ -130,13 +166,71 @@ func ganttTaskRange(rows []ganttRow) (first, last int) {
 
 // moveGanttCursor salta a la siguiente/anterior fila de tarea en la dirección
 // dir (+1 baja, -1 sube), ignorando las cabeceras de persona.
+//
+// El recorrido va con slices.IndexFunc sobre la fila,y la condición del rango
+// desaparece con él. Antes era `for i := cursor + dir; i >= 0 && i < len(rows)`
+// y su `i >= 0` sólo se distinguía de `i > 0` si la fila 0 fuese una tarea, cosa
+// que no ocurre nunca porque la fila 0 es siempre la cabecera de la primera
+// persona. Con IndexFunc la búsqueda no tiene un límite inferior que comparar --
+// es "desde aquí hasta el final" o "hasta aquí desde el principio", y las dos
+// direcciones las dice el paso.
 func moveGanttCursor(m *Model, rows []ganttRow, dir int) {
-	for i := m.ganttCursor + dir; i >= 0 && i < len(rows); i += dir {
-		if rows[i].kind == ganttTaskRow {
-			m.ganttCursor = i
-			return
+	// El salto devuelve un ok en vez de un centinela porque cualquier comparación
+	// contra un -1 tiene el problema del borde: "distinto de -1" y "mayor que -1"
+	// son la misma condición sobre enteros, así que su mutante no lo mata ningún
+	// test; y "< -1" es siempre falsa, que rompe los saltos al índice 0.
+	//
+	// Con el ok, el "no hay salto" es un hecho y no un número, y la única pregunta
+	// que hace el llamante es si hay salto. Su mutante -- negar el ok -- sí se ve:
+	// el cursor se iría al centinela.
+	if destino, ok := stepGanttCursor(rows, m.ganttCursor, dir); ok {
+		m.ganttCursor = destino
+	}
+}
+
+// stepGanttCursor devuelve el índice de la fila de tarea a la que salta el cursor
+// desde `from` en la dirección `dir`, y un false si no hay ninguna.
+//
+// El segundo valor es un booleano y no un centinela por lo que dice el llamante:
+// comparar un índice contra -1 tiene un borde que ningún test alcanza.
+//
+// Toda la aritmética vive aquí y no en el llamador, y es a propósito. Con el
+// recorrido repartido entre moveGanttCursor y sus dos ramas, cada línea llevaba su
+// propio `max(min(...))`: el suelo en 0 no se distinguía del suelo en 1, y el `+ 1`
+// del offset no se distinguía de `+ 2`, porque los dos valores que los separan --
+// un cursor negativo y un cursor más allá del final -- sólo se dan en estados que
+// el recorrido anterior no producía. Aquí, en cambio, `from` es un parámetro: un
+// test puede pasar el que quiera y comprobar cada rama por sus dos lados.
+//
+// Las dos direcciones se resuelven con el mismo bucle, sobre una sub-rebanada que
+// va desde la posición de destino hasta el final o hasta el principio. La
+// sub-rebanada se acota con un clamp porque un cursor fuera de rango no debe hacer
+// que el slice se corte al revés.
+func stepGanttCursor(rows []ganttRow, from, dir int) (int, bool) {
+	if dir < 0 {
+		hasta := clamp(from, 0, len(rows))
+		for i, r := range slices.Backward(rows[:hasta]) {
+			if r.kind == ganttTaskRow {
+				return i, true
+			}
+		}
+		return 0, false
+	}
+
+	desde := clamp(from+1, 0, len(rows))
+	for i, r := range rows[desde:] {
+		if r.kind == ganttTaskRow {
+			return desde + i, true
 		}
 	}
+	return 0, false
+}
+
+// clamp acota v al rango [lo, hi]. Con lo <= hi -- que es el caso de todos los
+// usos aquí: el 0 es el suelo y el hi es la longitud de una lista -- el rango
+// siempre tiene un valor dentro, así que no hay que decidir qué pasa si no.
+func clamp(v, lo, hi int) int {
+	return min(max(v, lo), hi)
 }
 
 // handleGanttKey navega el Gantt: j/k sobre filas, h/l desplaza la ventana de
@@ -328,10 +422,12 @@ func (m *Model) renderGanttRow(row ganttRow, start time.Time, offset, dayCols, l
 // ganttLegend describe el rango visible y el horizonte total.
 func (m *Model) ganttLegend(offset, dayCols int) string {
 	s := m.ganttSchedule()
-	start, err := model.ParseDate(s.Start)
-	if err != nil {
-		return "Gantt"
-	}
+	// El error de ParseDate no se comprueba: s.Start lo pone ganttSchedule
+	// formateando un time.Time con el mismo layout que ParseDate lee, así que el
+	// parseo no puede fallar. Antes había un return "Gantt" de reserva que era
+	// inalcanzable y que, si alguna vez hubiera podido dispararse, habría
+	// escondido un fallo real detrás de una etiqueta sin fechas.
+	start, _ := model.ParseDate(s.Start)
 	from := start.AddDate(0, 0, offset).Format("2006-01-02")
 	to := start.AddDate(0, 0, offset+dayCols-1).Format("2006-01-02")
 	return fmt.Sprintf("%s → %s ", from, to)

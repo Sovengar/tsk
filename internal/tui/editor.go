@@ -2,7 +2,7 @@ package tui
 
 import (
 	"fmt"
-	"os"
+	"math"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -21,28 +21,20 @@ type editorFinishedMsg struct {
 // editTaskCmd lanza el editor con los datos de la tarea.
 // Prepara el archivo temporal y devuelve tea.ExecProcess directamente.
 func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
-	// Crear archivo temporal con los campos editables
-	tmpFile, err := os.CreateTemp("", "tsk-edit-*.md")
+	// Crear archivo temporal con los campos editables. Va por crearTemporal, la
+	// misma indirección que usa el comentario, para que su rama de escritura
+	// fallida tenga test.
+	tmpFile, err := crearTemporal("", "tsk-edit-*.md")
 	if err != nil {
 		return func() tea.Msg {
 			return editorFinishedMsg{err: err, taskID: task.ID}
 		}
 	}
 
-	// Los dos errores siguientes -- escritura y cierre -- no tienen forma de
-	// provocarse sin un disco lleno o un fichero que se cierra dos veces, y no
-	// hay punto de inyección para hacerlo. Sus dos ramas hacen lo mismo que la de
-	// arriba: devolver el error con el id de la tarea. Sus mutantes están en
-	// .mutation-allowlist como riesgo aceptado, no como equivalencia.
-	if _, err := tmpFile.WriteString(editTemplate(task)); err != nil {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpFile.Name())
-		return func() tea.Msg {
-			return editorFinishedMsg{err: err, taskID: task.ID}
-		}
-	}
-	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(tmpFile.Name())
+	// escribirYcerrar vive en comment.go y es la misma función que usa el alta
+	// de comentarios: el editor de tarea escribe una plantilla, el de comentario
+	// nada, y lo que falla después de crear el temporal falla igual en los dos.
+	if err := escribirYcerrar(tmpFile, editTemplate(task)); err != nil {
 		return func() tea.Msg {
 			return editorFinishedMsg{err: err, taskID: task.ID}
 		}
@@ -53,22 +45,23 @@ func editTaskCmd(task model.Task, editorCmd string) tea.Cmd {
 	cmd := exec.Command(args[0], append(args[1:], tmpFile.Name())...)
 
 	// Devolver tea.ExecProcess directamente — es un tea.Cmd
-	return tea.ExecProcess(cmd, func(execErr error) tea.Msg {
-		if execErr != nil {
-			_ = os.Remove(tmpFile.Name())
-			return editorFinishedMsg{err: execErr, taskID: task.ID}
-		}
-		// Leer el archivo modificado
-		data, readErr := os.ReadFile(tmpFile.Name())
-		_ = os.Remove(tmpFile.Name())
-		if readErr != nil {
-			return editorFinishedMsg{err: readErr, taskID: task.ID}
+	return tea.ExecProcess(cmd, editorCallback(task.ID, tmpFile.Name()))
+}
+
+// editorCallback es el final de editTaskCmd, fuera de él por lo mismo que
+// commentCallback: tea.ExecProcess esconde el cierre dentro de un mensaje
+// privado y un test no puede alcanzarlo.
+func editorCallback(taskID int64, path string) tea.ExecCallback {
+	return func(execErr error) tea.Msg {
+		file, err := readEditedFile(path, execErr)
+		if err != nil {
+			return editorFinishedMsg{err: err, taskID: taskID}
 		}
 		return editorFinishedMsg{
-			taskID: task.ID,
-			file:   string(data),
+			taskID: taskID,
+			file:   file,
 		}
-	})
+	}
 }
 
 // editTemplate es el archivo que se abre en el editor externo: el cuerpo legible
@@ -131,12 +124,17 @@ func parseEditFile(content string) (title, description, assignee string, priorit
 					priority = p
 				}
 			} else if strings.HasPrefix(line, "estimate:") {
-				// `e >= 0` contra `e > 0` es equivalente: lo único que separa a
-				// las dos comparaciones es e == 0, y la línea asigna
-				// `estimate = e`, con lo que poner un cero sobre el cero que ya
-				// tenía el valor de retorno no cambia nada. Un negativo tampoco
-				// las separa: ambas lo rechazan.
-				if e, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(line, "estimate:")), 64); err == nil && e >= 0 {
+				// El filtro de "no negativo" va DENTRO del parseo, con un
+				// sentinel en vez de una comparación en la línea de asignación.
+				//
+				// `err == nil && e >= 0` contra `e > 0` sólo se diferenciaba con
+				// e == 0, y como la línea asignaba sobre un valor de retorno que
+				// ya era 0, poner un cero encima de un cero no cambiaba nada: las
+				// dos formas eran indistinguibles. Ahora el "no válido" es un
+				// -1 explícito, que es un valor que el estimate nunca puede
+				// tener, así que el rechazo y la aceptación son dos hechos
+				// distintos y se pueden comprobar por separado.
+				if e := estimateNoNegativo(strings.TrimSpace(strings.TrimPrefix(line, "estimate:"))); e != estimateAusente {
 					estimate = e
 				}
 			} else if strings.HasPrefix(line, "tags:") {
@@ -147,6 +145,36 @@ func parseEditFile(content string) (title, description, assignee string, priorit
 
 	return
 }
+
+// estimateNoNegativo parsea el campo estimate de la plantilla y devuelve el
+// valor, o -1 si no se puede interpretar o es negativo.
+//
+// El -1 es un centinela y no un error: un estimate negativo no es una cosa que
+// pueda escribirse en la base, así que se descarta. Y como ningún estimate real
+// es -1, el valor devuelto dice sin ambigüedad si hubo estimate o no -- que es lo
+// que la comparación del llamante necesita para distinguir "no venía" de "venía
+// a cero".
+func estimateNoNegativo(s string) float64 {
+	e, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return estimateAusente
+	}
+	if e < 0 {
+		return estimateAusente
+	}
+	// NaN parsea sin error y compara false con todo, así que un `e < 0` o un
+	// `e >= 0` lo dejarían pasar como si fuera un estimate bueno. Se rechaza
+	// aparte: es el único valor que no es un número a pesar de parsearse.
+	if math.IsNaN(e) {
+		return estimateAusente
+	}
+	return e
+}
+
+// estimateAusente es el centinela que estimateNoNegativo devuelve cuando el campo
+// no trae un estimate utilizable. Es -1 porque ningún estimate válido lo es, así
+// que el centinela y "el estimate es cero" nunca se confunden.
+const estimateAusente = -1
 
 // updateTaskFromEdit actualiza la tarea con los datos editados.
 func (m *Model) updateTaskFromEdit(taskID int64, content string) tea.Cmd {

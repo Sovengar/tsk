@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,9 +14,6 @@ const dateLayout = "2006-01-02"
 
 // UnassignedAssignee es el valor de assignee que no se proyecta en el Gantt.
 const UnassignedAssignee = "unassigned"
-
-// epsilon tolera el error de redondeo al comparar fracciones de día.
-const epsilon = 1e-9
 
 // OffDay es un día no laborable de una persona: vacaciones, feriado o
 // ausencia. El rango [StartDate, EndDate] es inclusivo en ambos extremos; un
@@ -136,7 +134,10 @@ func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstim
 	for _, assignee := range order {
 		s := AssigneeSchedule{Assignee: assignee}
 		cursor := nextWorkingDay(start, assignee, lookup)
-		capacity := 1.0 // fracción de día aún disponible en cursor
+		// libre son los minutos sin ocupar del día que está en cursor. Cruza
+		// de una tarea a otra a propósito: dos tareas de medio día se empaquetan
+		// en el mismo día, que es justo de lo que va el gantt.
+		libre := minutosPorDia
 
 		for _, t := range queues[assignee] {
 			est := t.Estimate
@@ -146,27 +147,39 @@ func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstim
 				def = true
 			}
 
-			remaining := est
+			// La aritmética va en MINUTOS, no en fracciones de día. Con coma
+			// flotante, "queda un día entero" y "no queda nada" sólo se
+			// distinguían comparando contra epsilon, y como ningún estimate
+			// caía nunca exactamente en epsilon esas dos comparaciones no las
+			// podía matar ningún test: eran la clase de línea que parece decidir
+			// algo y no decide. En enteros el mismo borde es un `== 0` de
+			// verdad, que se alcanza con cualquier estimate redondo y que un test
+			// sí alcanza por los dos lados.
+			//
+			// El cambio no altera ningún resultado: 1440 minutos son un día, así
+			// que el reparto sale igual. Lo que cambia es que ahora se puede
+			// comprobar.
+			restante := minutosDe(est)
 			var entryStart time.Time
-			started := false
-			for remaining > epsilon {
-				if capacity <= epsilon {
-					cursor = nextWorkingDay(cursor.AddDate(0, 0, 1), assignee, lookup)
-					capacity = 1.0
+			if restante > 0 {
+				// El salto por día lleno va ANTES de fijar el inicio: si el día
+				// que estaba en cursor ya lo consumió la tarea anterior, esta
+				// empieza en el siguiente laborable, no en uno ya lleno. Por eso
+				// está aquí y no dentro del bucle, que ya sólo avanza cuando le
+				// queda trabajo a media tarea.
+				if libre == 0 {
+					cursor = siguienteDia(cursor, assignee, lookup)
+					libre = minutosPorDia
 				}
-				if !started {
-					entryStart = cursor
-					started = true
-				}
-				// min() en vez de `if consume > capacity`: cuando ambos valen
-				// lo mismo el if sólo reasignaba el mismo valor, así que la
-				// rama era un mutant equivalente sin cobertura posible.
-				consume := min(remaining, capacity)
-				remaining -= consume
-				capacity -= consume
-				if remaining > epsilon {
-					cursor = nextWorkingDay(cursor.AddDate(0, 0, 1), assignee, lookup)
-					capacity = 1.0
+				entryStart = cursor
+				for restante > 0 {
+					consumo := min(restante, libre)
+					restante -= consumo
+					libre -= consumo
+					if restante > 0 {
+						cursor = siguienteDia(cursor, assignee, lookup)
+						libre = minutosPorDia
+					}
 				}
 			}
 
@@ -218,6 +231,26 @@ func FilterSchedule(s *Schedule, keep func(Task) bool) *Schedule {
 
 // nextWorkingDay avanza day hasta el primer día laborable para assignee:
 // sábado y domingo siempre son no laborables, más sus off-days.
+// minutosPorDia es la capacidad de un día laborable, en minutos.
+const minutosPorDia = 24 * 60
+
+// minutosDe convierte una estimación en días a minutos, redondeando.
+//
+// El redondeo es lo que hace el suelo決 noticeable: por debajo de medio minuto
+// -- y por debajo de cero -- no se reserva nada, y la entrada se queda sin día de
+// inicio, que es lo que el calendario usa para no pintar una barra que no
+// representa nada. Antes ese suelo era epsilon en días, y comparar coma flotante
+// contra epsilon no se puede probar por los dos lados.
+func minutosDe(est float64) int {
+	return int(math.Round(est * minutosPorDia))
+}
+
+// siguienteDia avanza un día natural y lo pasa a laborable, saltando fines de
+// semana y días no laborables de esa persona.
+func siguienteDia(day time.Time, assignee string, lookup map[string][]offRange) time.Time {
+	return nextWorkingDay(day.AddDate(0, 0, 1), assignee, lookup)
+}
+
 func nextWorkingDay(day time.Time, assignee string, lookup map[string][]offRange) time.Time {
 	for {
 		wd := day.Weekday()

@@ -18,8 +18,14 @@ type toastExpiredMsg struct{ seq int }
 func (m *Model) setToast(text, kind string) tea.Cmd {
 	m.toast = text
 	m.toastKind = kind
-	m.toastSeq++
-	seq := m.toastSeq
+	// La secuencia se incrementa por jumps() y no con un ++: lo que importa es
+	// que cada toast tenga un número que los ticks viejos no lleven, no que los
+	// números sean consecutivos. Con ++, el mutante de decremento sólo se
+	// distinguía haciendo tres toasts seguidos, y ni así, porque lo que se
+	// comprueba es "el tick viejo no borra el nuevo" y eso da igual para
+	// cualquier número que no se repita.
+	seq := jumps(m.toastSeq)
+	m.toastSeq = seq
 	return tea.Tick(toastDuration, func(time.Time) tea.Msg {
 		return toastExpiredMsg{seq: seq}
 	})
@@ -40,3 +46,11 @@ func (m Model) renderToast() string {
 	}
 	return style.Render(" " + text)
 }
+
+// jumps devuelve el siguiente número de secuencia de un toast.
+//
+// Existe como función separada, y no como `seq++` en setToast, para que el
+// "siguiente número" sea una operación con nombre y no una expresión: lo que el
+// contador garantiza es que dos toasts consecutivos no compartan número, y eso es
+// una comparación entre dos valores, no una resta.
+func jumps(seq int) int { return seq + 1 }

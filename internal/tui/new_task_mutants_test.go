@@ -802,15 +802,15 @@ func TestRenderNewTaskTagsStates(t *testing.T) {
 		wantMiss []string
 	}{
 		{
-			// El hint "type to add…" es inalcanzable: cuando el campo Tags tiene
-			// el foco, el cursor se añade a input ANTES del if, así que input
-			// nunca está vacío ahí y la rama que lo devuelve no se alcanza. Se
-			// fija el comportamiento real; el hint muerto es un bug de UI
-			// reportado aparte, no algo que un test pueda matar.
-			name:     "vacío y enfocado sólo muestra el cursor",
+			// El hint "type to add…" salía con el campo enfocado y vacío, y el
+			// cursor pegado detrás. Antes no salía nunca: el cursor se añadía a
+			// input antes del if, así que input nunca estaba vacío ahí y la
+			// rama era inalcanzable. Es un bug de UI arreglado, no una
+			// expectativa fijada.
+			name:     "vacío y enfocado muestra la pista y el cursor",
 			field:    newTaskFieldTags,
-			wantHas:  []string{cursorGlyph},
-			wantMiss: []string{"type to add", "—"},
+			wantHas:  []string{"type to add", cursorGlyph},
+			wantMiss: []string{"—"},
 		},
 		{
 			name:     "vacío y sin foco muestra el guion",

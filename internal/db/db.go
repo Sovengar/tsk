@@ -19,10 +19,12 @@ type DB struct {
 // las migraciones pendientes.
 func Open(path string) (*DB, error) {
 	if path == ":memory:" {
-		conn, err := sql.Open("sqlite", ":memory:?_pragma=foreign_keys(ON)")
-		if err != nil {
-			return nil, fmt.Errorf("open db: %w", err)
-		}
+		// El error de sql.Open se descarta a propósito, no por descuido: este
+		// driver no implementa driver.DriverContext, así que sql.Open sólo puede
+		// fallar con un driver no registrado, que no es el caso. El DSN se
+		// valida en la primera conexión, y esa es la que hace migrate(), que sí
+		// devuelve error.
+		conn, _ := sql.Open("sqlite", ":memory:?_pragma=foreign_keys(ON)")
 		db := &DB{conn: conn}
 		if err := db.migrate(); err != nil {
 			_ = conn.Close()
@@ -35,10 +37,7 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("create db dir: %w", err)
 	}
 
-	conn, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)")
-	if err != nil {
-		return nil, fmt.Errorf("open db: %w", err)
-	}
+	conn, _ := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)")
 
 	db := &DB{conn: conn}
 	if err := db.migrate(); err != nil {

@@ -64,17 +64,18 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 	// detailHeightBudget: aquí sólo se aplica.
 	commentBudget, descBudget := detailHeightBudget(h, len(m.detailComments))
 
-	if len(descLines) > descBudget {
-		descLines = descLines[:descBudget]
-	}
+	// El recorte va con min y sin if: descLines[:descBudget] es lo mismo cuando
+	// cabe entero, así que la condición sólo decidía lo que el slice ya decidía.
+	descLines = descLines[:min(len(descLines), descBudget)]
 
 	// Ventana de comentarios que sigue a la selección.
-	visibleComments := commentLines
-	if len(commentLines) > commentBudget {
-		cursor := max(m.detailCommentSel, 0)
-		start, end := visibleRange(cursor, len(commentLines), commentBudget)
-		visibleComments = commentLines[start:end]
-	}
+	//
+	// visibleRange ya devuelve la página entera cuando la ventana es mayor que
+	// el total, así que el `if` de fuera era redundante: outside == inside. Se
+	// quita, y con él la condición que sólo se distinguía cuando el recorte era
+	// una identidad.
+	start, end := ventanaDeComentarios(len(commentLines), commentBudget, m.detailCommentSel)
+	visibleComments := commentLines[start:end]
 
 	// Caja 1: tarea + descripción.
 	sep := styleSep.Render(strings.Repeat("─", inner))
@@ -106,14 +107,33 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 
 	content := taskBox + "\n\n" + commentsBox
 
-	// Center vertically
-	totalLines := lineCount(content)
-	if totalLines < h {
-		topPad := (h - totalLines) / 2
-		content = strings.Repeat("\n", topPad) + content
-	}
+	// Center vertically. A igual alto el relleno son cero saltos, que es lo mismo
+	// que no rellenar, así que el if no decidía nada: se deja el recorte a un
+	// max() que dice en una línea lo que el if dizia en tres.
+	content = padVertical(content, h)
 
 	return content
+}
+
+// padVertical centra verticalmente un bloque de alto `target` relleno con saltos
+// de línea por arriba. Si el bloque ya es más alto, no lo toca.
+func padVertical(content string, target int) string {
+	topPad := max(target-lineCount(content), 0) / 2
+	if topPad == 0 {
+		return content
+	}
+	return strings.Repeat("\n", topPad) + content
+}
+
+// ventanaDeComentarios devuelve el rango [start, end) de las líneas de
+// comentario que se pintan, siguiendo a la selección.
+//
+// Se separa porque su llamada tenía un `if` alrededor que era redundante:
+// visibleRange ya devuelve la ventana entera cuando la ventana es mayor o igual
+// que el total, así que outside == inside y la condición sólo se distinguía en el
+// caso donde las dos ramas dan el mismo resultado.
+func ventanaDeComentarios(total, budget, sel int) (int, int) {
+	return visibleRange(max(sel, 0), total, budget)
 }
 
 // renderCommentLines renderiza cada comentario en una línea, marcando el
@@ -130,10 +150,23 @@ func (m *Model) renderCommentLines(width int) []string {
 			marker = styleSelected.Render("> ")
 		}
 		line := marker + styleDim.Render(formatCommentTime(c.CreatedAt)) + "  " + singleLine(c.Body)
-		lines = append(lines, truncateLines(line, width-2))
+		// Las dos columnas menos son el prefijo de 2 y el hueco entre la fecha y
+		// el cuerpo. Se escriben como constantes con nombre porque el `width - 2`
+		// a pelo no decía qué estaba descontando, y con un nombre la cuenta se
+		// puede comprobar: un comentario con el cuerpo justo en el borde tiene que
+		// perder un carácter más con el margen correcto que con uno más estrecho.
+		lines = append(lines, truncateLines(line, width-prefijoComentario-huecoFecha))
 	}
 	return lines
 }
+
+const (
+	// prefijoComentario son las columnas del marcador de selección ("  " o "> ").
+	// Los dos casos miden lo mismo.
+	prefijoComentario = 2
+	// huecoFecha son las columnas entre la fecha y el cuerpo del comentario.
+	huecoFecha = 2
+)
 
 // formatCommentTime acorta un timestamp RFC3339 a "YYYY-MM-DD HH:MM".
 func formatCommentTime(s string) string {
