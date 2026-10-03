@@ -159,9 +159,9 @@ func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstim
 			// El cambio no altera ningún resultado: 1440 minutos son un día, así
 			// que el reparto sale igual. Lo que cambia es que ahora se puede
 			// comprobar.
-			restante := minutosDe(est)
+			total := minutosDe(est)
 			var entryStart time.Time
-			if restante > 0 {
+			if total > 0 {
 				// El salto por día lleno va ANTES de fijar el inicio: si el día
 				// que estaba en cursor ya lo consumió la tarea anterior, esta
 				// empieza en el siguiente laborable, no en uno ya lleno. Por eso
@@ -172,15 +172,30 @@ func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstim
 					libre = minutosPorDia
 				}
 				entryStart = cursor
-				for restante > 0 {
-					consumo := min(restante, libre)
-					restante -= consumo
-					libre -= consumo
-					if restante > 0 {
+
+				// El reparto es un `for range` sobre el número de DÍAS COMPLETOS,
+				// no un bucle que descuenta un saldo. La cuenta no depende de que
+				// el saldo llegue a cero, así que ninguna mutación de la condición
+				// puede dejarla dando vueltas: con `restante >= 0` el saldo se
+				// quedaba en cero, libre en cero, y siguienteDia avanzaba el cursor
+				// para siempre. Un `for range` sobre un entero que no se decrementa
+				// dentro no puede colgar.
+				//
+				// El resto del día se consume a mano, después de los días completos.
+				// Es lo que quedaba como última vuelta del bucle anterior, y queda
+				// aquí porque así el bucle no tiene salida: siempre se sale por el
+				// final.
+				resto := libre
+				for range divRound(total, minutosPorDia) {
+					consumo := min(resto, total)
+					resto -= consumo
+					total -= consumo
+					if total > 0 {
 						cursor = siguienteDia(cursor, assignee, lookup)
-						libre = minutosPorDia
+						resto = minutosPorDia
 					}
 				}
+				libre = resto
 			}
 
 			s.Entries = append(s.Entries, ScheduleEntry{
@@ -234,9 +249,21 @@ func FilterSchedule(s *Schedule, keep func(Task) bool) *Schedule {
 // minutosPorDia es la capacidad de un día laborable, en minutos.
 const minutosPorDia = 24 * 60
 
+// divRound divide redondeando al entero más cercano. Se usa para el número de
+// días completos de una estimación: un estimate de medio día son 0 días y el resto
+// se consume aparte, y uno de un día y medio es 1 día completo más medio minuto.
+//
+// El divisor es siempre minutosPorDia, así que la guarda contra cero no hace
+// falta: con ella, el `b < 1` tenía un borde (b == 1) que ningún test alcanza, y
+// por eso su mutante era indistinguible. El divisor es un parámetro para que los
+// tests puedan pasar otros, y se documenta que en producción es siempre 1440.
+func divRound(a, b int) int {
+	return (a + b/2) / b
+}
+
 // minutosDe convierte una estimación en días a minutos, redondeando.
 //
-// El redondeo es lo que hace el suelo決 noticeable: por debajo de medio minuto
+// El redondeo es lo que hace el suelo noticeable: por debajo de medio minuto
 // -- y por debajo de cero -- no se reserva nada, y la entrada se queda sin día de
 // inicio, que es lo que el calendario usa para no pintar una barra que no
 // representa nada. Antes ese suelo era epsilon en días, y comparar coma flotante

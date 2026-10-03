@@ -430,3 +430,121 @@ func TestMinutosDeRedondeaAlMinuto(t *testing.T) {
 		}
 	}
 }
+
+// divRound redondea al entero más cercano, y el redondeo tiene un borde: la
+// mitad exacta.
+//
+// Es el número de DÍAS COMPLETOS de una estimación. La cuenta decide cuántos
+// días completos se consumen por el bucle y cuál es el resto, así que un
+// redondeo distinto da un reparto distinto -- y es un reparto que se ve en las
+// fechas del calendario, no en un detalle interno.
+//
+// Los tres casos del borde: por debajo de la mitad (redondea a 0), justo en la
+// mitad (redondea a 1, que es lo que hace el `+ b/2`), y por encima (1).
+func TestDivRoundEnLaFronteraDeLaMitad(t *testing.T) {
+	const dia = minutosPorDia
+
+	casos := []struct {
+		nombre string
+		a, b   int
+		want   int
+	}{
+		{"cero", 0, dia, 0},
+		{"muy por debajo de media jornada", 1, dia, 0},
+		{"casi media jornada", dia/2 - 1, dia, 0},
+		{"JUSTO media jornada", dia / 2, dia, 1},
+		{"casi una jornada", dia - 1, dia, 1},
+		{"una jornada", dia, dia, 1},
+		{"una jornada y un minuto", dia + 1, dia, 1},
+		{"justo una y media", dia + dia/2, dia, 2},
+		{"dos jornadas", 2 * dia, dia, 2},
+
+		{"media jornada exacta, en días", 0, 1, 0},
+		{"tres días y medio", 3*dia + dia/2, dia, 4},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			if got := divRound(c.a, c.b); got != c.want {
+				t.Errorf("divRound(%d, %d) = %d, want %d", c.a, c.b, got, c.want)
+			}
+		})
+	}
+}
+
+// El mismo borde, visto a través del calendario -- y en la tarea SIGUIENTE,
+// que es donde el redondeo se nota de verdad.
+//
+// El resto que deja un reparto es la capacidad que hereda la tarea siguiente. Un
+// redondeo que ceque de más deja la tarea siguiente con más sitio del que
+// corresponde, y entonces empieza un día antes. Es la diferencia entre el
+// redondeo correcto y uno que trunque, y se ve en las dos fechas.
+func TestElRedondeoSeVeEnLaTareaSiguiente(t *testing.T) {
+	// Dos y media jornadas, y luego una jornada entera.
+	//
+	// Con el redondeo a entero más cercano: 2,5 jornadas son 2 días completos más
+	// media jornada de resto. La siguiente tarea hereda esa media jornada, no le
+	// cabe entera, y tiene que pasar al día siguiente.
+	//
+	// Con un redondeo que trunque: los 2,5 jornadas son 2 días completos y el
+	// medio día que sobra no se descuenta. La siguiente tarea hereda un día entero
+	// libre, le cabe, y empieza el MISMO día.
+	casos := []struct {
+		nombre         string
+		primera        float64
+		segunda        float64
+		wantSegundaIni string
+		wantSegundaFin string
+	}{
+		{"2,5 jornadas y luego 1", 2.5, 1.0, "2026-09-16", "2026-09-17"},
+		{"3,5 jornadas y luego 1", 3.5, 1.0, "2026-09-17", "2026-09-18"},
+		{"2,5 jornadas y luego media", 2.5, 0.5, "2026-09-16", "2026-09-16"},
+		{"1,5 jornadas y luego 1", 1.5, 1.0, "2026-09-15", "2026-09-16"},
+	}
+
+	for _, c := range casos {
+		t.Run(c.nombre, func(t *testing.T) {
+			s := BuildSchedule([]Task{
+				task("@a", "todo", c.primera),
+				task("@a", "todo", c.segunda),
+			}, nil, mustDate(t, monday), 1)
+
+			e := s.Assignees[0].Entries
+			if len(e) != 2 {
+				t.Fatalf("entradas = %d, want 2", len(e))
+			}
+			if e[1].Start != c.wantSegundaIni {
+				t.Errorf("la segunda empieza el %s, want %s (la primera acaba el %s)",
+					e[1].Start, c.wantSegundaIni, e[0].End)
+			}
+			if e[1].End != c.wantSegundaFin {
+				t.Errorf("la segunda acaba el %s, want %s", e[1].End, c.wantSegundaFin)
+			}
+		})
+	}
+
+	// El caso de la mitad exacta, que es el que separa "redondeo" de "trunco".
+	// 1,5 jornadas son 1 día completo más media jornada de resto, así que la
+	// siguiente hereda media jornada y cabe en el mismo día.
+	//
+	// Si el redondeo truncase, los 1,5 serían un día entero sin resto, la
+	// siguiente heredaría un día entero, y las dos acabarían el mismo día en vez
+	// de repartirse lunes y martes. Es el caso donde el redondeo se ve.
+	s := BuildSchedule([]Task{
+		task("@a", "todo", 1.5),
+		task("@a", "todo", 0.5),
+	}, nil, mustDate(t, monday), 1)
+	e := s.Assignees[0].Entries
+	if len(e) != 2 {
+		t.Fatalf("entradas = %d, want 2", len(e))
+	}
+	if e[0].Start != "2026-09-14" || e[0].End != "2026-09-15" {
+		t.Errorf("la primera es %s→%s, want lunes→martes", e[0].Start, e[0].End)
+	}
+	// La segunda, media jornada, cabe en el resto del martes: mismo día que el fin
+	// de la primera.
+	if e[1].Start != "2026-09-15" || e[1].End != "2026-09-15" {
+		t.Errorf("la segunda es %s→%s, want martes→martes: la media jornada libre "+
+			"tiene que caber en el mismo día que acaba la primera", e[1].Start, e[1].End)
+	}
+}
