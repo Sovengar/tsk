@@ -44,3 +44,9 @@ Thumbs.db
 # Mutation testing (gremlins)
 report.json
 .gremlins*
+
+# Artefactos de SQLite que sueltan los tests de internal/db al probar DSNs
+# inválidos: el driver crea ficheros con el DSN como nombre.
+/internal/db/tsk*
+/internal/db/sqlite:*
+/internal/db/::memory:*

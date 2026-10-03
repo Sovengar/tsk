@@ -14,6 +14,11 @@ const (
 	AlignRight
 )
 
+// minAnchoBorde es el ancho mínimo de una caja: dos columnas, una por cada
+// esquina. Por debajo no queda interior, así que la caja se dibujaría pero sin
+// hueco para el contenido.
+const minAnchoBorde = 2
+
 func RenderWithTitleEx(border lipgloss.Border, borderFg color.Color, align int, title, content string, width int) string {
 	return RenderWithTitlesEx(border, borderFg, title, align, "", AlignLeft, content, width)
 }
@@ -22,13 +27,11 @@ func RenderWithTitleEx(border lipgloss.Border, borderFg color.Color, align int, 
 // otro texto en la línea inferior, cada uno con su propia alineación. Un título
 // vacío no se dibuja (la línea queda rellena por completo).
 func RenderWithTitlesEx(border lipgloss.Border, borderFg color.Color, topTitle string, topAlign int, bottomTitle string, bottomAlign int, content string, width int) string {
-	// El suelo son dos columnas, una por cada esquina del borde. Con el suelo, un
-	// width de 1 se sube a 2 y el interior queda en 0; sin él, el interior sería
-	// -1 y el suelo de abajo lo dejaría en 0 también. Por eso el ">=" de este
-	// suelo y el "< 0" del de abajo son equivalentes entre sí.
-	if width < 2 {
-		width = 2
-	}
+	// El suelo son dos columnas, una por cada esquina del borde: por debajo, no
+	// queda interior donde dibujar nada. Se escribe con max y no con un if a
+	// propósito -- es una clamped y max dice lo que hace; el if hacía falta sólo
+	// porque no había forma de decirlo en una línea.
+	width = max(width, minAnchoBorde)
 
 	topLeft := border.TopLeft
 	topRight := border.TopRight
@@ -55,12 +58,12 @@ func RenderWithTitlesEx(border lipgloss.Border, borderFg color.Color, topTitle s
 	tlW := ansi.StringWidth(topLeft)
 	trW := ansi.StringWidth(topRight)
 
-	// Por strings.Repeat, que revienta con un número negativo. Ver la nota del
-	// suelo de width: el único caso que lo alcanzaría, width 1, lo cubre ese suelo.
-	innerWidth := width - tlW - trW
-	if innerWidth < 0 {
-		innerWidth = 0
-	}
+	// Suelo en cero porque strings.Repeat revienta con un número negativo, y
+	// porque un interior negativo no se puede rellenar. Con el suelo de width ya
+	// no es alcanzable -- tlW + trW son los caracteres de una esquina, uno cada
+	// uno -- pero el suelo se queda: las esquinas anchas de un borde de terceros
+	// podrían pasarse, y entonces el suelo es lo que evita el pánico.
+	innerWidth := max(width-tlW-trW, 0)
 
 	var borderStyle *ansi.Style
 	if borderFg != nil {
@@ -106,11 +109,16 @@ func buildBorderLine(style *ansi.Style, left, fill, right string, innerWidth, al
 	titleDisplay := ansi.Strip(title)
 	titleWidth := ansi.StringWidth(string(titleDisplay))
 
-	// A igual anchura el recorte es una identidad, así que ">=" daría lo mismo.
-	if titleWidth > innerWidth {
-		title = ansi.Truncate(title, innerWidth, "")
-		titleWidth = innerWidth
-	}
+	// El recorte va SIEMPRE, sin condición. ansi.Truncate es identidad cuando el
+	// texto ya cabe -- verificado con un texto de anchura exactamente igual al
+	// límite -- y por eso el `if titleWidth > innerWidth` que había aquí era una
+	// rama que sólo se distinguía de no-escribirla por un caso donde las dos
+	// dan lo mismo. Ahora no hay rama: se recorta, y si cabía no cambia nada.
+	//
+	// El ancho se recorta con min y no reasignándolo dentro de un if, por el
+	// mismo motivo.
+	title = ansi.Truncate(title, innerWidth, "")
+	titleWidth = min(titleWidth, innerWidth)
 
 	remaining := innerWidth - titleWidth
 	var leftPad, rightPad int
@@ -148,22 +156,21 @@ func buildContentLines(style *ansi.Style, leftChar, rightChar, content string, i
 		} else {
 			wrapped := wrapLine(line, innerWidth)
 			for _, wl := range wrapped {
-				displayWidth := ansi.StringWidth(wl)
-				padding := innerWidth - displayWidth
-				if padding < 0 {
-					padding = 0
-				}
-				paddedLine := wl + strings.Repeat(" ", padding)
-				result = append(result, styledChar(style, leftChar)+paddedLine+styledChar(style, rightChar))
+				// Cada línea envuelta cabe en innerWidth... o no: wrapLine corta
+				// por columnas y una palabra más larga que el interior se
+				// desborda. El suelo en cero es lo que evita el pánico de
+				// strings.Repeat, y el suelo en "<= 0" haría lo mismo porque
+				// padding negativo es lo único que hay que impedir.
+				padding := max(innerWidth-ansi.StringWidth(wl), 0)
+				result = append(result,
+					styledChar(style, leftChar)+wl+strings.Repeat(" ", padding)+styledChar(style, rightChar))
 			}
 		}
 	}
 
-	if len(result) == 0 {
-		emptyLine := strings.Repeat(" ", innerWidth)
-		result = append(result, styledChar(style, leftChar)+emptyLine+styledChar(style, rightChar))
-	}
-
+	// El bucle siempre deja al menos una línea: strings.Split devuelve como
+	// mínimo un elemento, y cada vuelta del bucle añade uno al menos. La defensa
+	// que había aquí contra un resultado vacío era inalcanzable.
 	return result
 }
 
@@ -210,16 +217,20 @@ func parseAnsiSegments(s string) []ansiSegment {
 		}
 
 		// Texto: hasta la siguiente CSI o hasta el final.
+		//
+		// La búsqueda empieza en s[1:], no en s. Aquí ya sabemos que s NO
+		// empieza por CSI -- el HasPrefix de arriba lo habría cogido -- así que
+		// buscarla desde el principio sólo podía dar 0, que es justo el valor que
+		// el `>= 0` no alcanzaba y por el que el mutante no se distinguía: con `k > 0`
+		// el caso k == 0 era inalcanzable y por lo mismo indistinguible.
+		//
+		// Buscando desde el 1, un k == 0 significa "la CSI empieza justo después
+		// del primer carácter", que es el caso normal de un texto con color. Así
+		// el 0 es un valor de verdad y la comparación se puede comprobar por los
+		// dos lados.
 		end := len(s)
-		if k := strings.Index(s, csiPrefix); k >= 0 {
-			end = k
-		}
-		// end no puede ser negativo: es len(s) o el índice de una búsqueda. Por
-		// eso "< 0" en vez de "== 0" no cambia nada.
-		if end == 0 {
-			// Un ESC suelto que no abre CSI: es texto, y tiene que avanzar
-			// uno o el bucle no salría.
-			end = 1
+		if k := strings.Index(s[1:], csiPrefix); k >= 0 {
+			end = 1 + k
 		}
 		segments = append(segments, ansiSegment{style: "", text: s[:end]})
 		s = s[end:]

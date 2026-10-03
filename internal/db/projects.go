@@ -273,10 +273,11 @@ func (db *DB) UpdateProject(name string, updates map[string]any) error {
 	query := fmt.Sprintf("UPDATE projects SET %s WHERE id = ?", joinStrings(setClauses, ", "))
 	if _, err = db.conn.Exec(query, args...); err != nil {
 		if isUniqueViolation(err) {
-			if newName, ok := updates["name"]; ok {
-				return fmt.Errorf("project already exists: %s", newName)
-			}
-			return fmt.Errorf("project already exists")
+			// La única columna UNIQUE de projects es name, así que una
+			// violación sólo puede venir de updates["name"], que está siempre
+			// que se actualice el nombre. El mensaje genérico que había para el
+			// caso de que no estuviera nunca se ejecutaba.
+			return fmt.Errorf("project already exists: %s", updates["name"])
 		}
 		return err
 	}

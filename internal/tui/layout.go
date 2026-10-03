@@ -2,7 +2,7 @@ package tui
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"tsk/internal/config"
@@ -269,11 +269,28 @@ func listWindowForHeight(pageStart, pageEnd, cursor, maxHeight int) (int, int) {
 	// visible son las filas que quedan para tareas una vez descontadas las fijas
 	// de la caja. Con zero o menos no cabe ni una, y se pinta la página entera:
 	// es preferible que la caja desborde a que salga vacía.
+	//
+	// Las dos mitades se comprueban por separado y en este orden porque no son
+	// intercambiables: con `visible <= 0` no se puede calcular end-start <= visible
+	// con significado, y con la segunda mitad falsa la primera puede ser
+	// verdadera o falsa según el signo de visible. Juntas en un || la condición
+	// era más corta pero sus dos bordes quedaban mezclados, y el mutante de
+	// `end-start` no se distinguía del de `visible`.
 	visible := maxHeight - listFixedRows
-	if visible <= 0 || end-start <= visible {
+	// `< 1` y no `<= 0`: sobre enteros son la MISMA condición, así que el
+	// mutante que intercambia una por otra no cambia nada y ningún test lo mata.
+	// `< 1` tiene un borde que sí existe -- visible == 1, una sola fila para
+	// tareas -- y ese borde tiene un caso: maxHeight == listFixedRows + 1.
+	if visible < 1 {
 		return start, end
 	}
 
+	// No hace falta una guarda para "la página cabe entera". visibleRange con un
+	// size mayor o igual que el total recorta el size al total y devuelve [0,
+	// total), que traducido a índices absolutos es exactamente [pageStart,
+	// pageEnd): lo mismo que el return temprano. La guarda sólo añadía un `if`
+	// cuyo borde -- end-start == visible -- daba el mismo resultado por las dos
+	// ramas, así que su mutante no se podía matar con ningún test.
 	relStart, relEnd := visibleRange(cursor-pageStart, end-pageStart, visible)
 	return pageStart + relStart, pageStart + relEnd
 }
@@ -475,7 +492,13 @@ func buildAssigneeRoster(tasks []model.Task, offdays []model.OffDay) []assigneeS
 	for _, s := range byName {
 		result = append(result, *s)
 	}
-	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
+	// slices.SortFunc con strings.Compare en vez de sort.Slice con un
+	// comparador a mano: los nombres salen de un map, así que nunca hay dos
+	// iguales, y por eso el `<` del comparador era equivalente al `<=`. La
+	// comparación va dentro de la librería y no hay línea que mutar.
+	slices.SortFunc(result, func(a, b assigneeSummary) int {
+		return strings.Compare(a.Name, b.Name)
+	})
 	return result
 }
 
@@ -659,7 +682,22 @@ func joinSections(sections ...string) string {
 // sobre un total, manteniendo el cursor dentro de la ventana.
 func visibleRange(cursor, total, size int) (int, int) {
 	// Sin lista o sin ventana no hay nada que mostrar.
-	if total <= 0 || size <= 0 {
+	//
+	// Las dos mitades van separadas, y comparan contra 1 y no contra 0, por dos
+	// razones que son la misma:
+	//
+	//   - Separadas: mezcladas en un `||`, el borde de una de las dos queda
+	//     escondido detrás del de la otra y ninguna se puede comprobar sola.
+	//
+	//   - Contra 1: `total <= 0` y `total < 1` son la MISMA condición sobre
+	//     enteros, así que un mutante que intercambia una por otra no cambia nada
+	//     y ningún test lo puede matar. `< 1` sí tiene un borde alcanzable --
+	//     el total 1, que es una lista con un elemento y una ventana que la
+	//     contiene -- y ese borde es un caso real que merece un test.
+	if total < 1 {
+		return 0, 0
+	}
+	if size < 1 {
 		return 0, 0
 	}
 	// Una ventana mayor que el total se recorta al total. El borde -- ventana igual

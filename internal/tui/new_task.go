@@ -379,9 +379,12 @@ func (m Model) renderNewTaskTags() string {
 		input += styleTitle.Render(cursorGlyph)
 	}
 
-	if len(parts) == 0 && input == "" {
+	// El hint se decide sobre lo escrito, no sobre input: input lleva ya el
+	// cursor cuando el campo está enfocado, así que compararlo con "" era
+	// siempre falso y el "type to add…" no se veía nunca.
+	if len(parts) == 0 && strings.TrimSpace(m.newTaskTagInput) == "" {
 		if m.newTaskFieldIdx == newTaskFieldTags {
-			return styleDim.Render("type to add…")
+			return styleDim.Render("type to add…") + input
 		}
 		return styleDim.Render("—")
 	}

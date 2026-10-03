@@ -80,17 +80,48 @@ func (m Model) handleTagModalKey(key string) (tea.Model, tea.Cmd) {
 
 	// Texto imprimible: alimenta el input y reinicia la selección.
 	//
-	// El suelo es 32 (el espacio) porque Bubbletea nunca entrega una tecla de un
-	// solo carácter por debajo de ahí -- las de control llegan con nombre ("esc",
-	// "tab"), no como un byte suelto -- pero dejarlo escrito.documenta la
-	// intención en vez de dejar un 33 que parece arbitrario. El precio es que el
-	// espacio no se puede escribir: llega como "space" y lo descarta el == 1.
-	if len(key) == 1 && key[0] >= 32 && key[0] < 127 {
+	// La condición es una llamada a esImprimible y no tres comparaciones sueltas,
+	// porque el rango [32, 127) se puede probar por los dos lados y las
+	// comparaciones no: con `key[0] > 31` la mitad baja del rango es un 32 que
+	// Bubbletea nunca entrega -- la barra espaciadora llega como "space", y el
+	// `len(key) == 1` de aquí la descarta -- así que el 32 y el 33 dan lo mismo y
+	// el mutante de uno con el otro sobrevivía.
+	//
+	// esImprimible tiene que ser comprobable por sus dos lados, y para eso el
+	// suelo se pone en el primer carácter que LLEGA, que es el 33. El 32 sigue
+	// documentado en el comentario porque explica por qué no hay 33 "arbitrario".
+	if len(key) == 1 && esImprimible(key[0]) {
 		m.tagInput += key
 		m.tagSuggestIdx = -1
 	}
 	return m, nil
 }
+
+// esImprimible dice si un byte es un carácter imprimible de una tecla.
+//
+// El suelo es el 33 ('!') y no el 32 (espacio) a propósito: Bubbletea entrega la
+// barra espaciadora con nombre ("space"), no como un byte suelto, así que un 32
+// suelto no llega nunca y ponerlo sólo añadía una comparación que ningún test
+// podía distinguir de la siguiente. El 33 es el primer byte que sí llega, así que
+// la comparación tiene los dos lados alcanzables.
+//
+// El techo es el 127 (DEL), que es el último carácter imprimible de ASCII: el
+// 128 en adelante es no-ASCII, y aunque llegara como varios bytes el `len(key) ==
+// 1` ya lo habría descartado.
+func esImprimible(b byte) bool {
+	return b >= primerByteImprimible && b < ultimoByteImprimible
+}
+
+const (
+	// primerByteImprimible es 33, el signo de exclamación: el primer byte que
+	// Bubbletea entrega como tecla de un solo carácter. El espacio (32) no cuenta
+	// porque llega con nombre ("space") y el `len(key) == 1` lo descarta, así que
+	// un suelo de 32 no tenía ningún byte debajo que lo distinguiera del 33.
+	primerByteImprimible = 33
+	// ultimoByteImprimible es 127, el DEL: el último carácter imprimible de
+	// ASCII.
+	ultimoByteImprimible = 127
+)
 
 // handleTagPaste agrega el texto pegado al input, sin saltos de línea.
 func (m Model) handleTagPaste(content string) (tea.Model, tea.Cmd) {
@@ -119,12 +150,10 @@ func (m *Model) renderTagModal(content string) string {
 	lines = append(lines, "")
 	lines = append(lines, "  > "+m.tagInput+styleTitle.Render("▏"))
 
-	// A exactamente el tope el recorte es una identidad, así que `>` y `>=` dan
-	// lo mismo aquí.
+	// El recorte va con min y sin if: a exactamente el tope, suggs[:6] es el
+	// mismo slice, así que la condición no decidía nada.
 	suggs := m.tagSuggestions()
-	if len(suggs) > tagMaxSuggestions {
-		suggs = suggs[:tagMaxSuggestions]
-	}
+	suggs = suggs[:min(len(suggs), tagMaxSuggestions)]
 	if len(suggs) == 0 {
 		lines = append(lines, styleDim.Render("  (nueva tag)"))
 	}
