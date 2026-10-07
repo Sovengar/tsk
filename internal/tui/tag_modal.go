@@ -7,11 +7,11 @@ import (
 	"tsk/internal/model"
 )
 
-// tagMaxSuggestions es la cantidad de sugerencias visibles en el modal.
+// tagMaxSuggestions is the number of suggestions visible in the modal.
 const tagMaxSuggestions = 6
 
-// tagSuggestions devuelve las tags conocidas que sirven como sugerencia,
-// filtradas por el prefijo escrito. Con el input vacío devuelve todas.
+// tagSuggestions returns the known tags that work as suggestions,
+// filtered by the typed prefix. With an empty input it returns all of them.
 func (m Model) tagSuggestions() []string {
 	all := m.uniqueTags()
 	prefix := strings.ToLower(strings.TrimSpace(m.tagInput))
@@ -27,8 +27,8 @@ func (m Model) tagSuggestions() []string {
 	return out
 }
 
-// handleTagModalKey procesa las teclas del modal de tags: escribir filtra las
-// sugerencias, ↑↓ navegan, Tab completa y Enter alterna (agrega/quita) la tag.
+// handleTagModalKey processes the tag modal's keys: typing filters the
+// suggestions, ↑↓ navigate, Tab completes and Enter toggles (adds/removes) the tag.
 func (m Model) handleTagModalKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
@@ -51,9 +51,9 @@ func (m Model) handleTagModalKey(key string) (tea.Model, tea.Cmd) {
 		return m, m.toggleTagCmd(taskID, tag)
 
 	case "up", "down":
-		// La misma aritmética que el resto de navegaciones del programa:
-		// cicloIndex la resuelve para cualquier lista, sin lista no hay a dónde
-		// moverse. Estaba escrita aquí por tercera vez.
+		// The same arithmetic as the rest of the program's navigations:
+		// cycleIndex resolves it for any list; with no list there is nowhere
+		// to move. It was written here for the third time.
 		delta := 1
 		if key == "up" {
 			delta = -1
@@ -62,9 +62,9 @@ func (m Model) handleTagModalKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "tab":
-		// Completa con la sugerencia seleccionada y, si el índice no vale para
-		// esta lista, con la primera. Sin lista, firstOrAt devuelve "" y el
-		// input se queda como estaba.
+		// Completes with the selected suggestion and, if the index does not
+		// apply to this list, with the first one. With no list, firstOrAt
+		// returns "" and the input stays as it was.
 		m.tagInput = firstOrAt(m.tagSuggestions(), m.tagSuggestIdx)
 		m.tagSuggestIdx = -1
 		return m, nil
@@ -78,52 +78,52 @@ func (m Model) handleTagModalKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Texto imprimible: alimenta el input y reinicia la selección.
+	// Printable text: feeds the input and resets the selection.
 	//
-	// La condición es una llamada a esImprimible y no tres comparaciones sueltas,
-	// porque el rango [32, 127) se puede probar por los dos lados y las
-	// comparaciones no: con `key[0] > 31` la mitad baja del rango es un 32 que
-	// Bubbletea nunca entrega -- la barra espaciadora llega como "space", y el
-	// `len(key) == 1` de aquí la descarta -- así que el 32 y el 33 dan lo mismo y
-	// el mutante de uno con el otro sobrevivía.
+	// The condition is a call to isPrintable and not three loose comparisons,
+	// because the range [32, 127) can be tested from both sides and the
+	// comparisons cannot: with `key[0] > 31` the lower half of the range is a 32
+	// that Bubbletea never delivers -- the space bar arrives as "space", and the
+	// `len(key) == 1` here discards it -- so 32 and 33 give the same and the
+	// mutant of one with the other survived.
 	//
-	// esImprimible tiene que ser comprobable por sus dos lados, y para eso el
-	// suelo se pone en el primer carácter que LLEGA, que es el 33. El 32 sigue
-	// documentado en el comentario porque explica por qué no hay 33 "arbitrario".
-	if len(key) == 1 && esImprimible(key[0]) {
+	// isPrintable has to be checkable from both sides, and for that the floor
+	// is set on the first character that ARRIVES, which is 33. The 32 stays
+	// documented in the comment because it explains why there is no "arbitrary" 33.
+	if len(key) == 1 && isPrintable(key[0]) {
 		m.tagInput += key
 		m.tagSuggestIdx = -1
 	}
 	return m, nil
 }
 
-// esImprimible dice si un byte es un carácter imprimible de una tecla.
+// isPrintable tells whether a byte is a printable character of a key.
 //
-// El suelo es el 33 ('!') y no el 32 (espacio) a propósito: Bubbletea entrega la
-// barra espaciadora con nombre ("space"), no como un byte suelto, así que un 32
-// suelto no llega nunca y ponerlo sólo añadía una comparación que ningún test
-// podía distinguir de la siguiente. El 33 es el primer byte que sí llega, así que
-// la comparación tiene los dos lados alcanzables.
+// The floor is 33 ('!') and not 32 (space) on purpose: Bubbletea delivers the
+// space bar as a named key ("space"), not as a lone byte, so a lone 32
+// never arrives, and putting one only added a comparison that no test could
+// distinguish from the next one. 33 is the first byte that does arrive, so
+// the comparison has both sides reachable.
 //
-// El techo es el 127 (DEL), que es el último carácter imprimible de ASCII: el
-// 128 en adelante es no-ASCII, y aunque llegara como varios bytes el `len(key) ==
-// 1` ya lo habría descartado.
-func esImprimible(b byte) bool {
-	return b >= primerByteImprimible && b < ultimoByteImprimible
+// The ceiling is 127 (DEL), the last printable character of ASCII: 128 and
+// above is non-ASCII, and even if it arrived as several bytes the `len(key) ==
+// 1` would already have discarded it.
+func isPrintable(b byte) bool {
+	return b >= firstPrintableByte && b < lastPrintableByte
 }
 
 const (
-	// primerByteImprimible es 33, el signo de exclamación: el primer byte que
-	// Bubbletea entrega como tecla de un solo carácter. El espacio (32) no cuenta
-	// porque llega con nombre ("space") y el `len(key) == 1` lo descarta, así que
-	// un suelo de 32 no tenía ningún byte debajo que lo distinguiera del 33.
-	primerByteImprimible = 33
-	// ultimoByteImprimible es 127, el DEL: el último carácter imprimible de
+	// firstPrintableByte is 33, the exclamation sign: the first byte that
+	// Bubbletea delivers as a single-character key. The space (32) does not
+	// count because it arrives named ("space") and the `len(key) == 1` discards
+	// it, so a floor of 32 had no byte below it to distinguish it from 33.
+	firstPrintableByte = 33
+	// lastPrintableByte is 127, the DEL: the last printable character of
 	// ASCII.
-	ultimoByteImprimible = 127
+	lastPrintableByte = 127
 )
 
-// handleTagPaste agrega el texto pegado al input, sin saltos de línea.
+// handleTagPaste appends the pasted text to the input, without line breaks.
 func (m Model) handleTagPaste(content string) (tea.Model, tea.Cmd) {
 	content = strings.NewReplacer("\n", " ", "\r", " ").Replace(content)
 	m.tagInput += content
@@ -131,7 +131,7 @@ func (m Model) handleTagPaste(content string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderTagModal dibuja el modal de tags superpuesto al detalle.
+// renderTagModal draws the tag modal overlaid on the detail.
 func (m *Model) renderTagModal(content string) string {
 	w := m.width
 	width := modalWidthFor(52, w)
@@ -150,12 +150,12 @@ func (m *Model) renderTagModal(content string) string {
 	lines = append(lines, "")
 	lines = append(lines, "  > "+m.tagInput+styleTitle.Render("▏"))
 
-	// El recorte va con min y sin if: a exactamente el tope, suggs[:6] es el
-	// mismo slice, así que la condición no decidía nada.
+	// The truncation uses min and no if: at exactly the cap, suggs[:6] is the
+	// same slice, so the condition did not decide anything.
 	suggs := m.tagSuggestions()
 	suggs = suggs[:min(len(suggs), tagMaxSuggestions)]
 	if len(suggs) == 0 {
-		lines = append(lines, styleDim.Render("  (nueva tag)"))
+		lines = append(lines, styleDim.Render("  (new tag)"))
 	}
 	for i, tag := range suggs {
 		applied := m.detailTask != nil && model.HasTag(m.detailTask.Tags, tag)

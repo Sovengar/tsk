@@ -6,8 +6,8 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// detailKeybinds devuelve las teclas del modal de detalle de tarea, en orden de
-// prioridad. Fuente única para la KeybindsBar y el modal de ayuda.
+// detailKeybinds returns the keys of the task detail modal, in order of
+// priority. Single source for the KeybindsBar and the help modal.
 func detailKeybinds() []keybind {
 	return []keybind{
 		{"j/k", "select comment"},
@@ -21,8 +21,8 @@ func detailKeybinds() []keybind {
 	}
 }
 
-// helpModalWidth es el ancho interior preferido del modal de ayuda. El conjunto
-// son las teclas de vista más las de detalle, y cabe de sobra en 46 columnas.
+// helpModalWidth is the preferred inner width of the help modal. The set is
+// the view keys plus the detail keys, and it fits comfortably in 46 columns.
 const helpModalWidth = 46
 
 func (m *Model) renderHelpModal(content string) string {
@@ -32,7 +32,7 @@ func (m *Model) renderHelpModal(content string) string {
 
 	sep := styleSep.Render(strings.Repeat("─", 40))
 
-	// View keys (incluyen las comunes: ya no hay sección global)
+	// View keys (include the common ones: there is no global section anymore)
 	var viewLines []string
 	viewLines = append(viewLines, styleColumnHeader.Render("  "+m.currentView.String()))
 	for _, kb := range keybindsForView(m.currentView) {
@@ -64,8 +64,8 @@ func (m *Model) renderHelpModal(content string) string {
 
 	body := strings.Join(viewLines, "\n")
 
-	// modalWidthFor deja siempre dos columnas de margen; si no, el modal se
-	// pegaría al borde de la pantalla.
+	// modalWidthFor always leaves two columns of margin; otherwise the modal
+	// would stick to the edge of the screen.
 	modalWidth := modalWidthFor(helpModalWidth, w)
 
 	modal := lipgloss.JoinVertical(lipgloss.Left,
@@ -82,10 +82,10 @@ func (m *Model) renderHelpModal(content string) string {
 		Border(lipgloss.RoundedBorder(), true).
 		Render(modal)
 
-	// El centrado vertical y horizontal es el de overlayModal, no una segunda
-	// versión: estaba reimplementado aquí línea por línea, con sus propios
-	// suelos, y por eso cada uno de esos números era un sitio donde un mutante
-	// podía colarse sin que ningún test lo notara. El ancho que recibe
-	// overlayModal incluye los bordes.
+	// The vertical and horizontal centering is overlayModal's, not a second
+	// version: it was reimplemented here line by line, with its own
+	// floors, and that is why each of those numbers was a place where a mutant
+	// could slip in without any test noticing. The width
+	// that overlayModal receives includes the borders.
 	return overlayModal(content, modal, modalWidth+2, w)
 }

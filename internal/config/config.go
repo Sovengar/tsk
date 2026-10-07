@@ -10,17 +10,17 @@ import (
 
 const FileName = "config.toml"
 
-// DefaultPageSize es el número de tareas por página por defecto en la vista List.
+// DefaultPageSize is the default number of tasks per page in the List view.
 const DefaultPageSize = 10
 
-// DefaultEstimateDays es la estimación por defecto (en días) para tareas sin
-// estimate, usada por la proyección del Gantt.
+// DefaultEstimateDays is the default estimate (in days) for tasks without
+// an estimate, used by the Gantt projection.
 const DefaultEstimateDays = 1.0
 
-// DefaultGanttWeeks es el horizonte visible por defecto del Gantt, en semanas.
+// DefaultGanttWeeks is the default visible horizon of the Gantt, in weeks.
 const DefaultGanttWeeks = 6
 
-// Config es la configuración global de tsk.
+// Config is the global configuration of tsk.
 type Config struct {
 	Database            DatabaseConfig `toml:"database"`
 	Editor              EditorConfig   `toml:"editor"`
@@ -29,21 +29,21 @@ type Config struct {
 	GanttWeeks          int            `toml:"gantt_weeks"`
 }
 
-// DatabaseConfig configura la base de datos.
+// DatabaseConfig configures the database.
 type DatabaseConfig struct {
 	Path string `toml:"path"`
 }
 
-// EditorConfig configura el editor externo.
+// EditorConfig configures the external editor.
 type EditorConfig struct {
 	Command string `toml:"command"`
 }
 
-// Defaults devuelve la configuración por defecto.
+// Defaults returns the default configuration.
 func Defaults() Config {
 	return Config{
 		Database: DatabaseConfig{
-			Path: "", // se resuelve dinámicamente vía DefaultPath()
+			Path: "", // resolved dynamically via DefaultPath()
 		},
 		Editor: EditorConfig{
 			Command: "nvim",
@@ -54,7 +54,7 @@ func Defaults() Config {
 	}
 }
 
-// Path resuelve la ruta del fichero de configuración.
+// Path resolves the configuration file path.
 func Path() (string, error) {
 	if p := os.Getenv("TSK_CONFIG"); p != "" {
 		return p, nil
@@ -69,7 +69,7 @@ func Path() (string, error) {
 	return filepath.Join(home, ".config", "tsk", FileName), nil
 }
 
-// Load lee el fichero de configuración (si existe) sobre los defaults.
+// Load reads the configuration file (if it exists) over the defaults.
 func Load() Config {
 	cfg := Defaults()
 	path, err := Path()
@@ -78,10 +78,10 @@ func Load() Config {
 		return cfg
 	}
 	if _, err := os.Stat(path); err != nil {
-		return cfg // sin fichero: defaults
+		return cfg // no file: defaults
 	}
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
-		return Defaults() // fichero malformado: defaults
+		return Defaults() // malformed file: defaults
 	}
 	if cfg.ListPageSize <= 0 {
 		cfg.ListPageSize = DefaultPageSize

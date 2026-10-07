@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// TestRenderListRespectsHeight verifica que la lista no exceda el alto
-// disponible y que la ventana mantenga el cursor visible.
+// TestRenderListRespectsHeight verifies that the list does not exceed the
+// available height and that the window keeps the cursor visible.
 func TestRenderListRespectsHeight(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "1")
@@ -20,51 +20,51 @@ func TestRenderListRespectsHeight(t *testing.T) {
 	out := m.renderList(budget)
 
 	if n := lineCount(out); n > budget {
-		t.Errorf("alto = %d, excede el presupuesto %d", n, budget)
+		t.Errorf("height = %d, exceeds the budget %d", n, budget)
 	}
 
 	selected := selectedRow(out)
 	if selected == "" {
-		t.Fatal("no se encontró la fila seleccionada")
+		t.Fatal("the selected row was not found")
 	}
 	if want := m.filteredTasks()[m.cursor].Title; !strings.Contains(selected, want) {
-		t.Errorf("fila seleccionada %q no contiene la tarea %q", selected, want)
+		t.Errorf("the selected row %q does not contain the task %q", selected, want)
 	}
 }
 
-// TestRenderListPageLegend verifica que la leyenda de paginación quede
-// incrustada en el borde inferior, alineada a la derecha.
+// TestRenderListPageLegend verifies that the pagination caption ends up
+// embedded in the bottom border, aligned to the right.
 func TestRenderListPageLegend(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "1")
-	addTasks(t, m, 40) // 44 tareas activas
+	addTasks(t, m, 40) // 44 active tasks
 	m.pageSize = 10
 
 	out := ansi.Strip(m.renderList(40))
 	if !strings.Contains(out, "1-10 of 44 · Page 1/5") {
-		t.Errorf("falta la leyenda de la primera página:\n%s", out)
+		t.Errorf("the first page legend is missing:\n%s", out)
 	}
 
 	m.cursor = 43
 	out = ansi.Strip(m.renderList(40))
 	if !strings.Contains(out, "41-44 of 44 · Page 5/5") {
-		t.Errorf("leyenda de la última página incorrecta:\n%s", out)
+		t.Errorf("wrong last page legend:\n%s", out)
 	}
 
 	lines := strings.Split(out, "\n")
 	bottom := lines[len(lines)-1]
 	if !strings.Contains(bottom, "41-44 of 44 · Page 5/5") {
-		t.Errorf("la leyenda debe ir en la línea del borde inferior: %q", bottom)
+		t.Errorf("the legend must be on the bottom border line: %q", bottom)
 	}
 	if !strings.HasSuffix(bottom, "╯") {
-		t.Errorf("la línea del borde inferior debe cerrar con la esquina: %q", bottom)
+		t.Errorf("the bottom border line must close with the corner: %q", bottom)
 	}
 }
 
 func addTasks(t *testing.T, m *Model, n int) {
 	t.Helper()
 	for i := 0; i < n; i++ {
-		if _, err := m.database.CreateTask("api", fmt.Sprintf("T%02d", i), "", "@juan", 1, "todo"); err != nil {
+		if _, err := m.database.CreateTask("api", fmt.Sprintf("T%02d", i), "", "@john", 1, "todo"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -73,10 +73,10 @@ func addTasks(t *testing.T, m *Model, n int) {
 	m.invalidateFilterCache()
 }
 
-// selectedRow devuelve la fila marcada con "> " de un render.
+// selectedRow returns the row marked with "> " of a render.
 func selectedRow(out string) string {
 	for _, line := range strings.Split(ansi.Strip(out), "\n") {
-		inner := strings.TrimPrefix(line, "│") // quita el borde izquierdo
+		inner := strings.TrimPrefix(line, "│") // strips the left border
 		if strings.HasPrefix(inner, "> ") {
 			return inner
 		}
@@ -84,9 +84,9 @@ func selectedRow(out string) string {
 	return ""
 }
 
-// TestRenderListFitsNarrowWidth verifica que con poco ancho las filas se
-// recorten en vez de wrappear. Si wrappeasen, cada fila ocuparía dos líneas y
-// la caja excedería el alto disponible.
+// TestRenderListFitsNarrowWidth verifies that at small width the rows are
+// truncated instead of wrapped. If they wrapped, each row would take two lines
+// and the box would exceed the available height.
 func TestRenderListFitsNarrowWidth(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "1")
@@ -97,32 +97,32 @@ func TestRenderListFitsNarrowWidth(t *testing.T) {
 	out := m.renderList(budget)
 
 	if n := lineCount(out); n > budget {
-		t.Errorf("alto = %d, excede el presupuesto %d", n, budget)
+		t.Errorf("height = %d, exceeds the budget %d", n, budget)
 	}
 	for i, line := range strings.Split(out, "\n") {
 		if w := ansi.StringWidth(line); w > m.width {
-			t.Errorf("línea %d mide %d, excede el ancho %d", i, w, m.width)
+			t.Errorf("line %d measures %d, exceeds the width %d", i, w, m.width)
 		}
 	}
 }
 
-// TestVisibleListColumns verifica cuántas columnas entran según el ancho
-// disponible: las últimas se descartan primero.
+// TestVisibleListColumns verifies how many columns fit according to the
+// available width: the last ones are dropped first.
 func TestVisibleListColumns(t *testing.T) {
 	tests := []struct {
 		name  string
 		avail int
 		want  int
 	}{
-		{name: "entran todas", avail: 126, want: 6},
-		{name: "borde exacto con Description", avail: 113, want: 6},
-		{name: "se cae Description", avail: 112, want: 5},
-		{name: "borde exacto con Tags", avail: 72, want: 5},
-		{name: "se cae Tags", avail: 71, want: 4},
-		{name: "borde exacto sin Tags", avail: 61, want: 4},
-		{name: "se cae Title", avail: 60, want: 3},
-		{name: "muy angosto", avail: 10, want: 1},
-		{name: "más angosto que la primera", avail: 5, want: 1},
+		{name: "all fit", avail: 126, want: 6},
+		{name: "exact edge with Description", avail: 113, want: 6},
+		{name: "Description drops", avail: 112, want: 5},
+		{name: "exact edge with Tags", avail: 72, want: 5},
+		{name: "Tags drops", avail: 71, want: 4},
+		{name: "exact edge without Tags", avail: 61, want: 4},
+		{name: "Title drops", avail: 60, want: 3},
+		{name: "very narrow", avail: 10, want: 1},
+		{name: "narrower than the first", avail: 5, want: 1},
 	}
 
 	for _, tt := range tests {
@@ -134,35 +134,35 @@ func TestVisibleListColumns(t *testing.T) {
 	}
 }
 
-// TestRenderListHidesDescriptionWhenNarrow verifica que la columna Description
-// se omita entera cuando no entra, en vez de cortarse a la mitad.
+// TestRenderListHidesDescriptionWhenNarrow verifies that the Description column
+// is omitted entirely when it does not fit, instead of being cut in half.
 func TestRenderListHidesDescriptionWhenNarrow(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "1")
 
 	wide := ansi.Strip(m.renderList(m.height))
 	if !strings.Contains(wide, "Description") {
-		t.Fatalf("con ancho %d debería verse Description:\n%s", m.width, wide)
+		t.Fatalf("with width %d Description should be visible:\n%s", m.width, wide)
 	}
 
 	m.width = 80
 	narrow := ansi.Strip(m.renderList(m.height))
 	if strings.Contains(narrow, "Descr") {
-		t.Errorf("con ancho 80 Description debería estar oculta:\n%s", narrow)
+		t.Errorf("with width 80 Description should be hidden:\n%s", narrow)
 	}
 	if !strings.Contains(narrow, "Title") {
-		t.Errorf("con ancho 80 Title debería seguir visible:\n%s", narrow)
+		t.Errorf("with width 80 Title should still be visible:\n%s", narrow)
 	}
 }
 
-// TestRenderListColumnsAligned verifica que el valor de cada fila arranque en la
-// misma columna de pantalla que su header. Acá se sumaban dos bugs: el padding
-// de fmt cuenta bytes (y la celda de prioridad lleva ANSI), y el header no
-// llevaba el prefijo de 2 columnas que sí llevan las filas.
+// TestRenderListColumnsAligned verifies that the value of each row starts at
+// the same screen column as its header. Two bugs added up here: fmt's padding
+// counts bytes (and the priority cell carries ANSI), and the header did not
+// carry the 2-column prefix that the rows do carry.
 func TestRenderListColumnsAligned(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "1")
-	m.width = 130 // entran todas las columnas
+	m.width = 130 // all columns fit
 
 	lines := strings.Split(ansi.Strip(m.renderList(m.height)), "\n")
 
@@ -174,11 +174,11 @@ func TestRenderListColumnsAligned(t *testing.T) {
 		}
 	}
 	if headerIdx < 0 {
-		t.Fatal("no se encontró la cabecera de la tabla")
+		t.Fatal("the table header was not found")
 	}
 	header := lines[headerIdx]
 
-	// Columnas con valor no vacío en todas las tareas del fixture.
+	// Columns with a non-empty value in every task of the fixture.
 	columns := []string{"Priority", "Status", "Assignee", "Title"}
 
 	rows := 0
@@ -187,22 +187,22 @@ func TestRenderListColumnsAligned(t *testing.T) {
 			break
 		}
 		if strings.Contains(l, "─") {
-			continue // separador
+			continue // separator
 		}
 		rows++
 		for _, col := range columns {
 			off := displayColumn(header, col)
 			if cell := ansi.Cut(l, off, off+1); cell == " " || cell == "" {
-				t.Errorf("columna %s desalineada (vacía en la columna %d):\n%s", col, off, l)
+				t.Errorf("column %s misaligned (empty at column %d):\n%s", col, off, l)
 			}
 		}
 	}
 	if rows == 0 {
-		t.Fatal("no se renderizó ninguna fila de tarea")
+		t.Fatal("no task row was rendered")
 	}
 }
 
-// displayColumn devuelve la columna de pantalla donde arranca substr en line.
+// displayColumn returns the screen column where substr starts in line.
 func displayColumn(line, substr string) int {
 	idx := strings.Index(line, substr)
 	if idx < 0 {

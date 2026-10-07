@@ -34,10 +34,10 @@ func TestParseTags(t *testing.T) {
 func TestHasTag(t *testing.T) {
 	tags := []string{"blocked", "bug"}
 	if !HasTag(tags, "BLOCKED") {
-		t.Error("HasTag debería ser case-insensitive")
+		t.Error("HasTag should be case-insensitive")
 	}
 	if HasTag(tags, "urgent") {
-		t.Error("HasTag no debería encontrar un tag ausente")
+		t.Error("HasTag should not find an absent tag")
 	}
 }
 
@@ -60,8 +60,8 @@ func TestTagsJSONRoundtrip(t *testing.T) {
 	}
 }
 
-// TestDefaultWorkflowIncludesDelivered asegura que delivered exista entre
-// doing y reviewing en los defaults.
+// TestDefaultWorkflowIncludesDelivered ensures that delivered exists between
+// doing and reviewing in the defaults.
 func TestDefaultWorkflowIncludesDelivered(t *testing.T) {
 	idx := func(list []string, s string) int {
 		for i, v := range list {
@@ -73,12 +73,12 @@ func TestDefaultWorkflowIncludesDelivered(t *testing.T) {
 	}
 	doing, delivered, reviewing := idx(DefaultWorkflow, "doing"), idx(DefaultWorkflow, "delivered"), idx(DefaultWorkflow, "reviewing")
 	if delivered < 0 {
-		t.Fatalf("DefaultWorkflow no incluye delivered: %v", DefaultWorkflow)
+		t.Fatalf("DefaultWorkflow does not include delivered: %v", DefaultWorkflow)
 	}
 	if doing >= delivered || delivered >= reviewing {
-		t.Errorf("delivered debe ir entre doing y reviewing: %v", DefaultWorkflow)
+		t.Errorf("delivered must go between doing and reviewing: %v", DefaultWorkflow)
 	}
 	if !HasStatus(DefaultListOrder, "delivered") {
-		t.Errorf("DefaultListOrder no incluye delivered: %v", DefaultListOrder)
+		t.Errorf("DefaultListOrder does not include delivered: %v", DefaultListOrder)
 	}
 }

@@ -12,282 +12,282 @@ import (
 	"tsk/internal/model"
 )
 
-// Los dos callbacks del editor externo, ya sacados de sus tea.Cmd, tienen tres
-// desenlaces cada uno. Lo que se comprueba aquí es que el mensaje que sale
-// lleva el id de la tarea, porque sin él la interfaz no sabe a quién pertenece
-// el resultado y el comentario se pierde.
+// The two external editor callbacks, already taken out of their tea.Cmd, have
+// three outcomes each. What is checked here is that the message that comes
+// out carries the task id, because without it the interface does not know who
+// the result belongs to and the comment is lost.
 
 func TestCommentCallback(t *testing.T) {
-	t.Run("el editor falló", func(t *testing.T) {
-		path := escribirTemporal(t, "contenido")
-		msg := commentCallback(7, path)(errAccionFallida)
+	t.Run("the editor failed", func(t *testing.T) {
+		path := writeTemp(t, "content")
+		msg := commentCallback(7, path)(errActionFailed)
 
 		finished, ok := msg.(commentFinishedMsg)
 		if !ok {
-			t.Fatalf("el mensaje es %T, want commentFinishedMsg", msg)
+			t.Fatalf("the message is %T, want commentFinishedMsg", msg)
 		}
 		if finished.err == nil {
-			t.Error("un editor fallido no ha producido error")
+			t.Error("a failed editor did not produce an error")
 		}
 		if finished.taskID != 7 {
 			t.Errorf("taskID = %d, want 7", finished.taskID)
 		}
 		if finished.body != "" {
-			t.Errorf("body = %q, want vacío con el editor fallido", finished.body)
+			t.Errorf("body = %q, want empty when the editor failed", finished.body)
 		}
 	})
 
-	t.Run("el editor escribió", func(t *testing.T) {
-		path := escribirTemporal(t, "  un comentario  \n\n")
+	t.Run("the editor wrote", func(t *testing.T) {
+		path := writeTemp(t, "  a comment  \n\n")
 		msg := commentCallback(7, path)(nil)
 
 		finished, ok := msg.(commentFinishedMsg)
 		if !ok {
-			t.Fatalf("el mensaje es %T, want commentFinishedMsg", msg)
+			t.Fatalf("the message is %T, want commentFinishedMsg", msg)
 		}
 		if finished.err != nil {
-			t.Fatalf("hay error: %v", finished.err)
+			t.Fatalf("there is an error: %v", finished.err)
 		}
-		// Recortado: un comentario no empieza ni acaba en espacio en blanco.
-		if finished.body != "un comentario" {
-			t.Errorf("body = %q, want %q recortado", finished.body, "un comentario")
+		// Truncated: a comment neither starts nor ends with whitespace.
+		if finished.body != "a comment" {
+			t.Errorf("body = %q, want %q trimmed", finished.body, "a comment")
 		}
 		if finished.taskID != 7 {
 			t.Errorf("taskID = %d, want 7", finished.taskID)
 		}
 	})
 
-	t.Run("el temporal ya no está", func(t *testing.T) {
-		msg := commentCallback(7, t.TempDir()+"/nunca-fue")(nil)
+	t.Run("the temp file is gone", func(t *testing.T) {
+		msg := commentCallback(7, t.TempDir()+"/never-was")(nil)
 		if finished := msg.(commentFinishedMsg); finished.err == nil {
-			t.Error("un temporal inexistente no ha producido error")
+			t.Error("a missing temp file did not produce an error")
 		}
 	})
 }
 
 func TestEditorCallback(t *testing.T) {
-	t.Run("el editor falló", func(t *testing.T) {
-		path := escribirTemporal(t, "algo")
-		msg := editorCallback(9, path)(errAccionFallida)
+	t.Run("the editor failed", func(t *testing.T) {
+		path := writeTemp(t, "something")
+		msg := editorCallback(9, path)(errActionFailed)
 
 		finished, ok := msg.(editorFinishedMsg)
 		if !ok {
-			t.Fatalf("el mensaje es %T, want editorFinishedMsg", msg)
+			t.Fatalf("the message is %T, want editorFinishedMsg", msg)
 		}
 		if finished.err == nil {
-			t.Error("un editor fallido no ha producido error")
+			t.Error("a failed editor did not produce an error")
 		}
 		if finished.taskID != 9 {
 			t.Errorf("taskID = %d, want 9", finished.taskID)
 		}
 		if finished.file != "" {
-			t.Errorf("file = %q, want vacío con el editor fallido", finished.file)
+			t.Errorf("file = %q, want empty when the editor failed", finished.file)
 		}
 	})
 
-	t.Run("el editor escribió", func(t *testing.T) {
-		// El editor externo NO recorta: el formato que genera lleva separadores
-		// y saltos de línea que el parser necesita.
-		path := escribirTemporal(t, "Title: nuevo\n---\nStatus: todo\n")
+	t.Run("the editor wrote", func(t *testing.T) {
+		// The external editor does NOT truncate: the format it generates carries
+		// separators and line breaks that the parser needs.
+		path := writeTemp(t, "Title: new\n---\nStatus: todo\n")
 		msg := editorCallback(9, path)(nil)
 
 		finished := msg.(editorFinishedMsg)
 		if finished.err != nil {
-			t.Fatalf("hay error: %v", finished.err)
+			t.Fatalf("there is an error: %v", finished.err)
 		}
-		if !strings.Contains(finished.file, "Title: nuevo") {
-			t.Errorf("file = %q, want el contenido tal cual", finished.file)
+		if !strings.Contains(finished.file, "Title: new") {
+			t.Errorf("file = %q, want the content as it is", finished.file)
 		}
 	})
 
-	t.Run("el temporal ya no está", func(t *testing.T) {
-		msg := editorCallback(9, t.TempDir()+"/nunca-fue")(nil)
+	t.Run("the temp file is gone", func(t *testing.T) {
+		msg := editorCallback(9, t.TempDir()+"/never-was")(nil)
 		if finished := msg.(editorFinishedMsg); finished.err == nil {
-			t.Error("un temporal inexistente no ha producido error")
+			t.Error("a missing temp file did not produce an error")
 		}
 	})
 }
 
-func escribirTemporal(t *testing.T, contenido string) string {
+func writeTemp(t *testing.T, content string) string {
 	t.Helper()
-	path := t.TempDir() + "/editado.md"
-	if err := os.WriteFile(path, []byte(contenido), 0o600); err != nil {
+	path := t.TempDir() + "/edited.md"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return path
 }
 
-// La carga de proyectos tiene dos consultas: la de activos y la de archivados.
-// Si la segunda falla, el programa sigue con la primera: perder el panel de
-// archivados es mucho mejor que no arrancar.
+// The project loading has two queries: the active ones and the archived
+// ones. If the second one fails, the program continues with the first:
+// losing the archived panel is much better than not starting.
 func TestLoadProjectsSurvivesABrokenArchivedQuery(t *testing.T) {
 	m := newTestModel(t)
 
-	sabotearProjects(t, m)
+	sabotageProjects(t, m)
 
 	msg := mustMsg(t, m.loadProjects())
 	loaded, ok := msg.(projectsLoadedMsg)
 	if !ok {
-		t.Fatalf("el mensaje es %T, want projectsLoadedMsg", msg)
+		t.Fatalf("the message is %T, want projectsLoadedMsg", msg)
 	}
 	if loaded.archivedProjects != nil {
-		t.Errorf("con la tabla de proyectos rota hay %d archivados, want nil",
+		t.Errorf("with the projects table broken there are %d archived, want nil",
 			len(loaded.archivedProjects))
 	}
 }
 
-// Poner y quitar una tag son dos escrituras; si la base falla, el comando
-// devuelve nil en vez de un mensaje con datos a medias.
+// Adding and removing a tag are two writes; if the DB fails, the command
+// returns nil instead of a message with half-done data.
 func TestToggleTagWithAClosedDB(t *testing.T) {
 	m := newTestModel(t)
 	if err := m.database.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 
-	for _, tag := range []string{"nueva", ""} {
+	for _, tag := range []string{"new", ""} {
 		if msg := m.toggleTagCmd(m.tasks[0].ID, tag)(); msg != nil {
-			t.Errorf("toggleTag(%q) con la base cerrada ha devuelto %T, want nil", tag, msg)
+			t.Errorf("toggleTag(%q) with the DB closed returned %T, want nil", tag, msg)
 		}
 	}
 }
 
-// Redimensionar con el alta de tarea abierta tiene que reajustar el textarea.
-// Sin eso, el textarea conserva el ancho con el que se construyó y se ve
-// torcido en cuanto la ventana cambia de tamaño.
+// Resizing with the task form open has to readjust the textarea. Without
+// that, the textarea keeps the width it was built with and looks skewed as
+// soon as the window changes size.
 func TestWindowResizeAdjustsTheNewTaskTextarea(t *testing.T) {
 	m := newTestModel(t)
-	abierto, _ := pulsar(t, m, "i")
+	open, _ := pressKeys(t, m, "i")
 
-	abierto.width = 200
-	redimensionado, _ := updateMsg(t, abierto, tea.WindowSizeMsg{Width: 200, Height: 40})
+	open.width = 200
+	resized, _ := updateMsg(t, open, tea.WindowSizeMsg{Width: 200, Height: 40})
 
-	if redimensionado.newTaskTextarea.Width() != redimensionado.newTaskTextareaWidth() {
-		t.Errorf("el textarea mide %d, want el ancho recalculado %d",
-			redimensionado.newTaskTextarea.Width(), redimensionado.newTaskTextareaWidth())
+	if resized.newTaskTextarea.Width() != resized.newTaskTextareaWidth() {
+		t.Errorf("the textarea measures %d, want the recalculated width %d",
+			resized.newTaskTextarea.Width(), resized.newTaskTextareaWidth())
 	}
-	if redimensionado.statusbar.width != 200 {
-		t.Errorf("la barra de estado mide %d, want 200", redimensionado.statusbar.width)
+	if resized.statusbar.width != 200 {
+		t.Errorf("the status bar measures %d, want 200", resized.statusbar.width)
 	}
-	if redimensionado.preview.width != 200 {
-		t.Errorf("la caja de descripción mide %d, want 200", redimensionado.preview.width)
+	if resized.preview.width != 200 {
+		t.Errorf("the description box measures %d, want 200", resized.preview.width)
 	}
 }
 
-// El pegado va primero al editor de descripción, luego al alta, luego al modal
-// de tags. Con dos de ellos abiertos a la vez, el orden decide cuál gana.
+// The paste goes first to the description editor, then to the form, then to
+// the tag modal. With two of them open at once, the order decides which wins.
 func TestPasteGoesToTheDescriptionEditorFirst(t *testing.T) {
 	m := newTestModel(t)
-	// El editor se abre de verdad y encima se abre el alta: con los dos
-	// montados a la vez, el pegado tiene que decidir a cuál va.
-	conEditor, _ := pulsar(t, m, "e")
-	if !conEditor.descEditOpen {
-		t.Fatal("e no ha abierto el editor de descripción")
+	// The editor really opens and on top of it the form opens: with both
+	// mounted at once, the paste has to decide which one it goes to.
+	withEditor, _ := pressKeys(t, m, "e")
+	if !withEditor.descEditOpen {
+		t.Fatal("e did not open the description editor")
 	}
-	conEditor.newTaskOpen = true
+	withEditor.newTaskOpen = true
 
-	siguiente, _ := updateMsg(t, conEditor, tea.PasteMsg{Content: "pegado"})
-	if !strings.Contains(siguiente.descEditTextarea.Value(), "pegado") {
-		t.Errorf("el pegado no ha llegado al editor de descripción: %q", siguiente.descEditTextarea.Value())
+	next, _ := updateMsg(t, withEditor, tea.PasteMsg{Content: "pasted"})
+	if !strings.Contains(next.descEditTextarea.Value(), "pasted") {
+		t.Errorf("the paste did not reach the description editor: %q", next.descEditTextarea.Value())
 	}
-	if strings.Contains(siguiente.newTaskTitle, "pegado") {
-		t.Error("el pegado ha llegado también al alta de tarea")
+	if strings.Contains(next.newTaskTitle, "pasted") {
+		t.Error("the paste also reached the new task form")
 	}
 }
 
-// Cualquier mensaje que no sea de Bubbletea va al editor de descripción si está
-// abierto, o al textarea del alta si el cursor está en el campo de descripción.
-// Es el mecanismo que deja que los textareas hablen por su cuenta.
+// Any message that is not from Bubbletea goes to the description editor if it
+// is open, or to the form's textarea if the cursor is on the description field.
+// It is the mechanism that lets the textareas speak on their own.
 func TestUnknownMessagesReachTheOpenEditor(t *testing.T) {
-	t.Run("el editor de descripción", func(t *testing.T) {
+	t.Run("the description editor", func(t *testing.T) {
 		m := newTestModel(t)
 		m.descEditOpen = true
 
-		siguiente, _ := updateMsg(t, m, msgPrivado{})
-		if !siguiente.descEditOpen {
-			t.Error("un mensaje desconocido ha cerrado el editor de descripción")
+		next, _ := updateMsg(t, m, privateMsg{})
+		if !next.descEditOpen {
+			t.Error("an unknown message closed the description editor")
 		}
 	})
 
-	t.Run("el textarea del alta en el campo de descripción", func(t *testing.T) {
+	t.Run("the form textarea on the description field", func(t *testing.T) {
 		m := newTestModel(t)
 		m.newTaskOpen = true
 		m.newTaskFieldIdx = newTaskFieldDescription
 
-		siguiente, cmd := updateMsg(t, m, msgPrivado{})
+		next, cmd := updateMsg(t, m, privateMsg{})
 		if cmd != nil {
-			t.Error("un mensaje desconocido ha lanzado un comando del textarea")
+			t.Error("an unknown message emitted a textarea command")
 		}
-		if !siguiente.newTaskOpen {
-			t.Error("un mensaje desconocido ha cerrado el alta")
+		if !next.newTaskOpen {
+			t.Error("an unknown message closed the form")
 		}
 	})
 
-	t.Run("nada abierto", func(t *testing.T) {
+	t.Run("nothing open", func(t *testing.T) {
 		m := newTestModel(t)
-		siguiente, cmd := updateMsg(t, m, msgPrivado{})
+		next, cmd := updateMsg(t, m, privateMsg{})
 		if cmd != nil {
-			t.Error("un mensaje desconocido sin nada abierto ha lanzado un comando")
+			t.Error("an unknown message with nothing open emitted a command")
 		}
-		if !strings.Contains(ansi.Strip(siguiente.View().Content), "Fix") {
-			t.Error("un mensaje desconocido ha cambiado el render")
+		if !strings.Contains(ansi.Strip(next.View().Content), "Fix") {
+			t.Error("an unknown message changed the render")
 		}
 	})
 }
 
-// msgPrivado es un tipo que ningún switch de Update conoce: representa los
-// mensajes privados del paquete que emiten los textareas.
-type msgPrivado struct{}
+// privateMsg is a type no Update switch knows: it represents the private
+// package messages the textareas emit.
+type privateMsg struct{}
 
-func (msgPrivado) String() string { return "privado" }
+func (privateMsg) String() string { return "private" }
 
-// Una vista que no existe no debe dejar la TUI sin pintar nada: cae al
-// dashboard.
+// A view that does not exist must not leave the TUI painting nothing: it
+// falls to the dashboard.
 func TestUnknownViewFallsBack(t *testing.T) {
 	m := newTestModel(t)
 	m.currentView = viewKind(42)
 
-	if _, cmd := pulsar(t, m, "j"); cmd != nil {
-		t.Error("una tecla en una vista inexistente ha lanzado un comando")
+	if _, cmd := pressKeys(t, m, "j"); cmd != nil {
+		t.Error("a key in a non-existent view emitted a command")
 	}
 
 	m.width, m.height = 100, 30
 	if out := ansi.Strip(m.View().Content); !strings.Contains(out, "Total") {
-		t.Errorf("una vista inexistente no ha salido por el dashboard:\n%s", out)
+		t.Errorf("a non-existent view did not fall back to the dashboard:\n%s", out)
 	}
 }
 
-// En el kanban, h y l no dan la vuelta: se quedan en el borde. Es lo que
-// distingue shiftIndex de cycleIndex.
+// In the kanban, h and l do not wrap: they stay at the edge. That is what
+// tells shiftIndex from cycleIndex.
 func TestKanbanColumnsDoNotWrap(t *testing.T) {
 	m := newKanbanModel(t, 3)
 	m.currentView = viewKanban
 	cols := len(m.kanbanColumns())
 	if cols < 2 {
-		t.Skip("el fixture necesita dos columnas")
+		t.Skip("the fixture needs two columns")
 	}
 
 	m.kanbanCol = 0
-	izquierda, _ := pulsar(t, m, "h")
-	if izquierda.kanbanCol != 0 {
-		t.Errorf("h en la primera columna ha ido a la %d, want quedarse en 0", izquierda.kanbanCol)
+	left, _ := pressKeys(t, m, "h")
+	if left.kanbanCol != 0 {
+		t.Errorf("h in the first column went to %d, want to stay at 0", left.kanbanCol)
 	}
 
 	m.kanbanCol = cols - 1
-	derecha, _ := pulsar(t, m, "l")
-	if derecha.kanbanCol != cols-1 {
-		t.Errorf("l en la última columna ha ido a la %d, want quedarse en %d",
-			derecha.kanbanCol, cols-1)
+	right, _ := pressKeys(t, m, "l")
+	if right.kanbanCol != cols-1 {
+		t.Errorf("l in the last column went to %d, want to stay at %d",
+			right.kanbanCol, cols-1)
 	}
 }
 
-// S mueve la tarjeta hacia atrás en el workflow de SU proyecto. Es el
-// camino que hoy no se pulsaba y el que más se rompe cuando el workflow del
-// proyecto cambia.
+// S moves the card backwards in ITS project's workflow. It is the path that
+// is not pressed today and the one that breaks the most when the project's
+// workflow changes.
 func TestKanbanMoveLeft(t *testing.T) {
 	m := newKanbanModelWithWorkflow(t, 4, []string{"backlog", "todo", "doing", "done"})
 	m.currentView = viewKanban
 
-	// Sitúa el cursor en una tarjeta que no está en el primer estado.
+	// Put the cursor on a card that is not in the first status.
 	cols := m.kanbanColumns()
 	col := -1
 	for i, c := range cols {
@@ -297,72 +297,72 @@ func TestKanbanMoveLeft(t *testing.T) {
 		}
 	}
 	if col < 0 {
-		t.Skip("el fixture no ha dejado tarjetas")
+		t.Skip("the fixture left no cards")
 	}
 	m.kanbanCol = col
 	m.kanbanRow = 0
 
 	id := cols[col].tasks[0].ID
-	estado := cols[col].tasks[0].Status
+	status := cols[col].tasks[0].Status
 
-	_, cmd := pulsar(t, m, "S")
+	_, cmd := pressKeys(t, m, "S")
 	if cmd == nil {
-		t.Fatal("S no ha lanzado ninguna acción")
+		t.Fatal("S did not emit any action")
 	}
 	mustRun(t, cmd)
 
-	tarea, err := m.database.GetTask(id)
+	task, err := m.database.GetTask(id)
 	if err != nil {
 		t.Fatalf("GetTask(%d): %v", id, err)
 	}
-	if tarea.Status == estado {
-		t.Errorf("la tarea sigue en %q tras moverla a la izquierda", estado)
+	if task.Status == status {
+		t.Errorf("the task is still at %q after moving it left", status)
 	}
-	if prev, _ := model.PrevStatus(m.projects[0].Workflow, estado); tarea.Status != prev {
-		t.Errorf("la tarea ha quedado en %q, want el estado anterior %q", tarea.Status, prev)
+	if prev, _ := model.PrevStatus(m.projects[0].Workflow, status); task.Status != prev {
+		t.Errorf("the task ended at %q, want the previous status %q", task.Status, prev)
 	}
 }
 
-// El comentario desde el detalle abre el editor externo sobre la tarea
-// abierta. Con la tarea abierta y sin comentarios, la tecla tiene que lanzar el
-// comando.
+// The comment from the detail opens the external editor on the open task.
+// With the task open and with no comments, the key has to launch the
+// command.
 func TestDetailOpensTheCommentEditor(t *testing.T) {
 	m := newDetailModel(t, 0)
 
-	if _, cmd := pulsar(t, m, "c"); cmd == nil {
-		t.Error("c no ha lanzado el editor de comentarios")
+	if _, cmd := pressKeys(t, m, "c"); cmd == nil {
+		t.Error("c did not open the comment editor")
 	}
 }
 
-// selectedTask indexa el tablero sin mirar el rango del cursor de columna. Con
-// el filtro puesto, el número de columnas cambia entre un render y el siguiente,
-// así que el índice puede quedar fuera y hay que salir en vez de indexar un
-// slice vacío.
+// selectedTask indexes the board without looking at the column cursor's range.
+// With the filter on, the number of columns changes between one render and
+// the next, so the index may end up out and it has to return instead of
+// indexing an empty slice.
 func TestSelectedTaskWithACursorOutOfRange(t *testing.T) {
 	m := newKanbanModel(t, 3)
 	m.currentView = viewKanban
 
 	if tsk := m.selectedTask(); tsk == nil {
-		t.Fatal("el fixture no ha dejado ninguna tarea enfocada")
+		t.Fatal("the fixture left no focused task")
 	}
 
 	m.kanbanCol = 9999
 	if tsk := m.selectedTask(); tsk != nil {
-		t.Errorf("con la columna fuera de rango hay tarea seleccionada: %q", tsk.Title)
+		t.Errorf("with the column out of range there is a selected task: %q", tsk.Title)
 	}
 
-	// Y lo mismo en la lista, donde el cursor puede quedar pasado tras un filtro.
+	// And the same in the list, where the cursor can end up past it after a filter.
 	m.currentView = viewList
 	m.tasks = nil
 	m.filteredT = nil
 	if tsk := m.selectedTask(); tsk != nil {
-		t.Errorf("con la lista vacía hay tarea seleccionada: %q", tsk.Title)
+		t.Errorf("with an empty list there is a selected task: %q", tsk.Title)
 	}
 }
 
-// El guardado del editor inline de descripción son dos escrituras: la tarea y
-// el refresco del listado. Si cualquiera de las dos falla, no hay recarga, y el
-// modelo se queda con lo que tenía.
+// The save of the inline description editor is two writes: the task and the
+// refresh of the listing. If either of the two fails, there is no reload, and
+// the model keeps what it had.
 func TestSaveDescriptionWithAClosedDB(t *testing.T) {
 	m := newTestModel(t)
 	id := m.tasks[0].ID
@@ -370,13 +370,13 @@ func TestSaveDescriptionWithAClosedDB(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	if msg := m.saveDescriptionCmd(id, "nueva descripción")(); msg != nil {
-		t.Errorf("un guardado fallido ha devuelto %T, want nil", msg)
+	if msg := m.saveDescriptionCmd(id, "new description")(); msg != nil {
+		t.Errorf("a failed save returned %T, want nil", msg)
 	}
 }
 
-// El editor inline necesita una tarea de la que copiar el contenido. Sin ella
-// no hay nada que editar.
+// The inline editor needs a task to copy the content from. Without it there
+// is nothing to edit.
 func TestOpenDescEditorWithoutATask(t *testing.T) {
 	m := newTestModel(t)
 	m.tasks = nil
@@ -384,42 +384,42 @@ func TestOpenDescEditorWithoutATask(t *testing.T) {
 	m.filterActive = false
 
 	if cmd := m.openDescEditor(); cmd != nil {
-		t.Error("sin tarea el editor de descripción ha lanzado un comando")
+		t.Error("without a task the description editor emitted a command")
 	}
 	if m.descEditOpen {
-		t.Error("sin tarea se ha abierto el editor de descripción")
+		t.Error("without a task the description editor opened")
 	}
 }
 
-// El alta de tarea escribe en la base y luego recarga el listado. Con la base
-// cerrada, el primer error es el que ve el usuario y el mensaje lleva el motivo.
+// The task form writes to the database and then reloads the listing. With
+// the DB closed, the first error is the one the user sees and the message carries the reason.
 func TestCreateNewTaskWithAClosedDB(t *testing.T) {
 	m := newTestModel(t)
-	abierto, _ := pulsar(t, m, "i")
-	conTitulo, _ := pulsar(t, abierto, "n", "u", "e", "v", "a")
-	if strings.TrimSpace(conTitulo.newTaskTitle) != "nueva" {
-		t.Fatalf("el título es %q, want nueva", conTitulo.newTaskTitle)
+	open, _ := pressKeys(t, m, "i")
+	withTitle, _ := pressKeys(t, open, "n", "e", "w")
+	if strings.TrimSpace(withTitle.newTaskTitle) != "new" {
+		t.Fatalf("the title is %q, want new", withTitle.newTaskTitle)
 	}
 
-	if err := conTitulo.database.Close(); err != nil {
+	if err := withTitle.database.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 
-	_, cmd := pulsar(t, conTitulo, "enter")
+	_, cmd := pressKeys(t, withTitle, "enter")
 	if cmd == nil {
-		t.Fatal("enter no ha intentado crear la tarea")
+		t.Fatal("enter did not try to create the task")
 	}
 	failed, ok := firstTaskFailure(t, cmd)
 	if !ok {
-		t.Fatal("el alta con la base cerrada no ha emitido taskCreateFailedMsg")
+		t.Fatal("the creation with the DB closed did not emit taskCreateFailedMsg")
 	}
 	if failed.err == nil {
-		t.Error("crear con la base cerrada no ha producido error")
+		t.Error("creating with the DB closed did not produce an error")
 	}
 }
 
-// El campo de tags del alta no lleva textarea: es texto separado por comas, y
-// con el campo enfocado y vacío tiene que enseñar su pista junto al cursor.
+// The form's tag field carries no textarea: it is comma-separated text, and
+// with the field focused and empty it has to show its hint next to the cursor.
 func TestNewTaskTagsFieldShowsItsHint(t *testing.T) {
 	m := newTestModel(t)
 	m.newTaskOpen = true
@@ -427,46 +427,46 @@ func TestNewTaskTagsFieldShowsItsHint(t *testing.T) {
 
 	out := ansi.Strip(m.renderNewTaskTags())
 	if !strings.Contains(out, "type to add") {
-		t.Errorf("el campo de tags vacío no muestra su pista: %q", out)
+		t.Errorf("the empty tags field does not show its hint: %q", out)
 	}
 	if !strings.Contains(out, cursorGlyph) {
-		t.Errorf("la pista del campo de tags no trae el cursor: %q", out)
+		t.Errorf("the tags field hint does not carry the cursor: %q", out)
 	}
 
-	// Sin foco el mismo campo vacío enseña el guion largo de los otros.
+	// Without focus the same empty field shows the long dash of the others.
 	m.newTaskFieldIdx = newTaskFieldTitle
 	if out := ansi.Strip(m.renderNewTaskTags()); !strings.Contains(out, "—") {
-		t.Errorf("sin foco y sin tags el campo sale vacío en vez de \"—\": %q", out)
+		t.Errorf("without focus and without tags the field comes out empty instead of \"—\": %q", out)
 	}
 
-	// Y con algo escrito la pista desaparece: es una pista, no un valor.
+	// And with something typed the hint disappears: it is a hint, not a value.
 	m.newTaskFieldIdx = newTaskFieldTags
-	m.newTaskTagInput = "nue"
+	m.newTaskTagInput = "new"
 	out = ansi.Strip(m.renderNewTaskTags())
 	if strings.Contains(out, "type to add") {
-		t.Errorf("con texto escrito la pista sigue ahí: %q", out)
+		t.Errorf("with typed text the hint is still there: %q", out)
 	}
-	if !strings.Contains(out, "nue") {
-		t.Errorf("lo escrito no se ve: %q", out)
+	if !strings.Contains(out, "new") {
+		t.Errorf("the typed text is not visible: %q", out)
 	}
 
-	// Con tags ya puestos se ven los tags, no el cursor.
+	// With tags already set the tags are shown, not the cursor.
 	m.newTaskTagInput = ""
-	m.newTaskTags = []string{"uno", "dos"}
+	m.newTaskTags = []string{"one", "two"}
 	out = ansi.Strip(m.renderNewTaskTags())
-	for _, want := range []string{"uno", "dos"} {
+	for _, want := range []string{"one", "two"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("con tags puestos no se ve %q: %q", want, out)
+			t.Errorf("with tags set %q is not visible: %q", want, out)
 		}
 	}
 	if strings.Contains(out, "type to add") {
-		t.Errorf("con tags puestos la pista sigue ahí: %q", out)
+		t.Errorf("with tags set the hint is still there: %q", out)
 	}
 }
 
-// Una prioridad fuera del rango conocido se renderiza como "sin prioridad", no
-// como un carácter basura. El rango lo impone la base, pero el render no
-// debería confiar en eso.
+// A priority out of the known range is rendered as "no priority", not as a
+// garbage character. The range is imposed by the database, but the render
+// should not trust that.
 func TestRenderPriorityOutOfRange(t *testing.T) {
 	m := newTestModel(t)
 	m.tasks[0].Priority = 7
@@ -474,42 +474,42 @@ func TestRenderPriorityOutOfRange(t *testing.T) {
 
 	out := ansi.Strip(m.renderList(20))
 	if !strings.Contains(out, "Fix checkout") {
-		t.Fatalf("la tarea no se ve en la lista:\n%s", out)
+		t.Fatalf("the task is not visible in the list:\n%s", out)
 	}
-	// No debe aparecer ningún carácter de prioridad en su fila.
-	for _, linea := range strings.Split(out, "\n") {
-		if strings.Contains(linea, "Fix checkout") && strings.ContainsAny(linea, "HLMN") {
-			t.Errorf("una prioridad 7 se ha renderizado como un carácter conocido: %q", linea)
+	// No priority character should appear in its row.
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "Fix checkout") && strings.ContainsAny(line, "HLMN") {
+			t.Errorf("a priority 7 was rendered as a known character: %q", line)
 		}
 	}
 }
 
-// La barra de keybinds cambia el color del borde según tenga el foco. Es la
-// única señal de "esto es lo que estás leyendo", así que las dos ramas tienen que
-// producir renders distintos de verdad.
+// The keybinds bar changes the border color depending on whether it has focus.
+// It is the only signal of "this is what you are reading", so the two branches
+// have to produce truly different renders.
 func TestKeybindsBarBorderFollowsFocus(t *testing.T) {
 	base := KeybindsBar{width: 60, view: viewList}
 
-	conFoco := base
-	conFoco.focused = true
-	sinFoco := base
+	withFocus := base
+	withFocus.focused = true
+	withoutFocus := base
 
-	if conFoco.View() == sinFoco.View() {
-		t.Error("el borde es idéntico con y sin foco, want dos colores distintos")
+	if withFocus.View() == withoutFocus.View() {
+		t.Error("the border is identical with and without focus, want two different colors")
 	}
 
-	// Y con el foco puesto, el código de color del borde es el azul del que
-	// habla el comentario, no el gris por defecto.
-	if !strings.Contains(conFoco.View(), "\x1b[94m") {
-		t.Errorf("con el foco el borde no es azul (94): %q", conFoco.View())
+	// And with focus on, the border's color code is the blue the comment talks
+	// about, not the default gray.
+	if !strings.Contains(withFocus.View(), "\x1b[94m") {
+		t.Errorf("with focus the border is not blue (94): %q", withFocus.View())
 	}
-	if strings.Contains(sinFoco.View(), "\x1b[94m") {
-		t.Errorf("sin foco el borde sale azul: %q", sinFoco.View())
+	if strings.Contains(withoutFocus.View(), "\x1b[94m") {
+		t.Errorf("without focus the border comes out blue: %q", withoutFocus.View())
 	}
 }
 
-// Una lista sin tareas lo dice, en vez de dejar un hueco vacío que parece un
-// fallo de carga.
+// A list with no tasks says so, instead of leaving an empty gap that looks
+// like a load failure.
 func TestEmptyListSaysSo(t *testing.T) {
 	m := newBareModel(t, func(*config.Config) {})
 	m.width, m.height = 100, 20
@@ -518,28 +518,28 @@ func TestEmptyListSaysSo(t *testing.T) {
 
 	out := ansi.Strip(m.renderList(18))
 	if !strings.Contains(out, "No tasks found") {
-		t.Errorf("una lista vacía no lo dice:\n%s", out)
+		t.Errorf("an empty list does not say so:\n%s", out)
 	}
 }
 
-// Con el filtro de prioridad puesto, el valor legible que se muestra en el
-// modal tiene que ser el mismo con el que se filtró la lista. Si no, el filtro
-// actúa sobre un valor que la interfaz no enseña.
+// With the priority filter on, the readable value shown in the modal has to
+// be the same one the list was filtered by. If not, the filter acts on a
+// value the interface does not show.
 func TestFilterPriorityAndItsLabel(t *testing.T) {
 	m := newTestModel(t)
 
-	for _, valor := range []string{"none", "low", "med", "high"} {
-		m.filterApplySelection(filterFieldPriority, valor)
-		if got := m.filterCurrentValue(filterFieldPriority); got != valor {
-			t.Errorf("puesto %q se muestra %q", valor, got)
+	for _, value := range []string{"none", "low", "med", "high"} {
+		m.filterApplySelection(filterFieldPriority, value)
+		if got := m.filterCurrentValue(filterFieldPriority); got != value {
+			t.Errorf("set %q shows %q", value, got)
 		}
 	}
 }
 
-// sabotearProjects deja la tabla de proyectos con tipos que no se pueden leer,
-// de modo que la consulta de archivados falle sin que la de activos lo haga.
-// Es la forma de probar que una consulta secundaria rota no tira el arranque.
-func sabotearProjects(t *testing.T, m *Model) {
+// sabotageProjects leaves the projects table with types that cannot be read,
+// so that the archived query fails while the active one does not.
+// It is the way to prove that a broken secondary query does not sink the start.
+func sabotageProjects(t *testing.T, m *Model) {
 	t.Helper()
 	if _, err := m.database.Conn().Exec(`DROP TABLE projects`); err != nil {
 		t.Fatalf("DROP TABLE projects: %v", err)
@@ -551,8 +551,8 @@ func sabotearProjects(t *testing.T, m *Model) {
 	}
 }
 
-// firstTaskFailure desenvuelve el lote que devuelve el alta y devuelve el primer
-// taskCreateFailedMsg que encuentre.
+// firstTaskFailure unwraps the batch the form returns and returns the first
+// taskCreateFailedMsg it finds.
 func firstTaskFailure(t *testing.T, cmd tea.Cmd) (taskCreateFailedMsg, bool) {
 	t.Helper()
 	for _, msg := range mustRun(t, cmd) {

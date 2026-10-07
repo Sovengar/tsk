@@ -9,18 +9,18 @@ import (
 	"tsk/internal/tui/bordered"
 )
 
-// detailBorderFg es el color del borde de las cajas del detalle, igual que la
-// barra de keybinds para que las tres cajas se vean como un conjunto.
+// detailBorderFg is the border color of the detail's boxes, same as the
+// keybinds bar, so the three boxes look like a set.
 var detailBorderFg = lipgloss.Color("8")
 
-// renderDetail renderiza el modal de detalle de tarea dentro del alto
-// disponible, como dos cajas con borde redondeado: tarea+descripción arriba y
-// comentarios abajo. La tercera caja (keybinds) la agrega el layout.
+// renderDetail renders the task detail modal within the available
+// height, as two boxes with a rounded border: task+description on top and
+// comments below. The third box (keybinds) is added by the layout.
 func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 	w := m.width
 	h := maxHeight
-	// El ancho interior de las cajas: el mismo que el de un modal, porque es el
-	// mismo descuento por los dos bordes.
+	// The inner width of the boxes: the same as a modal's, because it is the
+	// same discount for the two borders.
 	inner := modalInnerWidth(w)
 
 	// Priority with colored character
@@ -39,8 +39,8 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 		fmt.Sprintf("  Completed:  %s", formatCompleted(t.CompletedAt)),
 	}
 
-	// Description. En modo edición la sección se reemplaza por el textarea
-	// integrado en la misma caja, en lugar de superponer otro modal.
+	// Description. In edit mode the section is replaced by the textarea
+	// embedded in the same box, instead of overlaying another modal.
 	var descLines []string
 	if m.descEditOpen {
 		descLines = m.descEditorLines()
@@ -50,7 +50,7 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 			desc = t.Description
 		}
 		descLines = strings.Split(desc, "\n")
-		// Identar cada línea no vacía, igual que la metadata.
+		// Indent each non-empty line, same as the metadata.
 		for i := range descLines {
 			if strings.TrimSpace(descLines[i]) != "" {
 				descLines[i] = "  " + descLines[i]
@@ -60,28 +60,28 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 
 	commentLines := m.renderCommentLines(w)
 
-	// Reparto de alto entre comentarios y descripción. La aritmética vive en
-	// detailHeightBudget: aquí sólo se aplica.
+	// Height split between comments and description. The arithmetic lives in
+	// detailHeightBudget: here it is only applied.
 	commentBudget, descBudget := detailHeightBudget(h, len(m.detailComments))
 
-	// El recorte va con min y sin if: descLines[:descBudget] es lo mismo cuando
-	// cabe entero, así que la condición sólo decidía lo que el slice ya decidía.
+	// The truncation uses min and no if: descLines[:descBudget] is the same
+	// when it fits whole, so the condition only decided what the slice already decided.
 	descLines = descLines[:min(len(descLines), descBudget)]
 
-	// Ventana de comentarios que sigue a la selección.
+	// Comment window that follows the selection.
 	//
-	// visibleRange ya devuelve la página entera cuando la ventana es mayor que
-	// el total, así que el `if` de fuera era redundante: outside == inside. Se
-	// quita, y con él la condición que sólo se distinguía cuando el recorte era
-	// una identidad.
-	start, end := ventanaDeComentarios(len(commentLines), commentBudget, m.detailCommentSel)
+	// visibleRange already returns the whole page when the window is larger
+	// than the total, so the outer `if` was redundant: outside == inside. It
+	// was removed, and with it the condition that only told apart when the
+	// truncation was an identity.
+	start, end := commentWindow(len(commentLines), commentBudget, m.detailCommentSel)
 	visibleComments := commentLines[start:end]
 
-	// Caja 1: tarea + descripción.
+	// Box 1: task + description.
 	sep := styleSep.Render(strings.Repeat("─", inner))
-	// Sin pista de capacidad: es una aritmética que ningún test puede mirar,
-	// porque una capacidad es un consejo y el resultado es el mismo diga lo que
-	// diga. append calcula el crecimiento por su cuenta.
+	// No capacity hint: it is arithmetic that no test can look at, because a
+	// capacity is advice and the result is the same whatever it says.
+	// append computes the growth on its own.
 	var taskContent []string
 	taskContent = append(taskContent, meta...)
 	taskContent = append(taskContent, sep, "  Description:")
@@ -95,7 +95,7 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 		w,
 	)
 
-	// Caja 2: comentarios.
+	// Box 2: comments.
 	commentsBox := bordered.RenderWithTitleEx(
 		lipgloss.RoundedBorder(),
 		detailBorderFg,
@@ -107,16 +107,16 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 
 	content := taskBox + "\n\n" + commentsBox
 
-	// Center vertically. A igual alto el relleno son cero saltos, que es lo mismo
-	// que no rellenar, así que el if no decidía nada: se deja el recorte a un
-	// max() que dice en una línea lo que el if dizia en tres.
+	// Center vertically. At equal height the fill is zero line breaks, which
+	// is the same as not filling at all, so the if decided nothing: the
+	// truncation is left to a max() that says in one line what the if said in three.
 	content = padVertical(content, h)
 
 	return content
 }
 
-// padVertical centra verticalmente un bloque de alto `target` relleno con saltos
-// de línea por arriba. Si el bloque ya es más alto, no lo toca.
+// padVertical centers vertically a block of height `target` padded with line
+// breaks on top. If the block is already taller, it leaves it alone.
 func padVertical(content string, target int) string {
 	topPad := max(target-lineCount(content), 0) / 2
 	if topPad == 0 {
@@ -125,19 +125,19 @@ func padVertical(content string, target int) string {
 	return strings.Repeat("\n", topPad) + content
 }
 
-// ventanaDeComentarios devuelve el rango [start, end) de las líneas de
-// comentario que se pintan, siguiendo a la selección.
+// commentWindow returns the range [start, end) of the comment lines
+// that are painted, following the selection.
 //
-// Se separa porque su llamada tenía un `if` alrededor que era redundante:
-// visibleRange ya devuelve la ventana entera cuando la ventana es mayor o igual
-// que el total, así que outside == inside y la condición sólo se distinguía en el
-// caso donde las dos ramas dan el mismo resultado.
-func ventanaDeComentarios(total, budget, sel int) (int, int) {
+// It is separated because its call had an `if` around it that was redundant:
+// visibleRange already returns the whole window when the window is larger or
+// equal to the total, so outside == inside and the condition only told apart
+// in the case where both branches give the same result.
+func commentWindow(total, budget, sel int) (int, int) {
 	return visibleRange(max(sel, 0), total, budget)
 }
 
-// renderCommentLines renderiza cada comentario en una línea, marcando el
-// seleccionado. Los comentarios multilínea se colapsan a una sola línea.
+// renderCommentLines renders each comment on one line, marking the
+// selected one. Multi-line comments collapse to a single line.
 func (m *Model) renderCommentLines(width int) []string {
 	if len(m.detailComments) == 0 {
 		return []string{"  (no comments)"}
@@ -150,25 +150,25 @@ func (m *Model) renderCommentLines(width int) []string {
 			marker = styleSelected.Render("> ")
 		}
 		line := marker + styleDim.Render(formatCommentTime(c.CreatedAt)) + "  " + singleLine(c.Body)
-		// Las dos columnas menos son el prefijo de 2 y el hueco entre la fecha y
-		// el cuerpo. Se escriben como constantes con nombre porque el `width - 2`
-		// a pelo no decía qué estaba descontando, y con un nombre la cuenta se
-		// puede comprobar: un comentario con el cuerpo justo en el borde tiene que
-		// perder un carácter más con el margen correcto que con uno más estrecho.
-		lines = append(lines, truncateLines(line, width-prefijoComentario-huecoFecha))
+		// The two columns less are the 2-column prefix and the gap between the
+		// date and the body. They are written as named constants because the raw
+		// `width - 2` did not say what it was discounting, and with a name the
+		// account can be checked: a comment with the body exactly at the edge has
+		// to lose one character more with the right margin than with a narrower one.
+		lines = append(lines, truncateLines(line, width-commentPrefix-dateGap))
 	}
 	return lines
 }
 
 const (
-	// prefijoComentario son las columnas del marcador de selección ("  " o "> ").
-	// Los dos casos miden lo mismo.
-	prefijoComentario = 2
-	// huecoFecha son las columnas entre la fecha y el cuerpo del comentario.
-	huecoFecha = 2
+	// commentPrefix are the columns of the selection marker ("  " or "> ").
+	// Both cases measure the same.
+	commentPrefix = 2
+	// dateGap are the columns between the date and the comment body.
+	dateGap = 2
 )
 
-// formatCommentTime acorta un timestamp RFC3339 a "YYYY-MM-DD HH:MM".
+// formatCommentTime shortens an RFC3339 timestamp to "YYYY-MM-DD HH:MM".
 func formatCommentTime(s string) string {
 	if s == "" {
 		return "—"
@@ -184,9 +184,9 @@ func formatTime(s string) string {
 	return truncateAt(s, 19)
 }
 
-// formatCompleted es formatTime: el caso vacío ya lo cubre. La guarda que tenía
-// aquí devolvía lo mismo que la de formatTime, así que era una rama que ningún
-// test podía distinguir.
+// formatCompleted is formatTime: the empty case already covers it. The guard
+// it had here returned the same as formatTime's, so it was a branch that no
+// test could distinguish.
 func formatCompleted(s string) string {
 	return formatTime(s)
 }

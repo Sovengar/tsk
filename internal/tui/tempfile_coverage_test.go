@@ -10,180 +10,180 @@ import (
 	"tsk/internal/model"
 )
 
-// errFalso es el fallo que inyectan los dobles: uno que ningún disco da.
-var errFalso = errors.New("fallo inyectado")
+// errInjected is the failure the doubles inject: one that no disk produces.
+var errInjected = errors.New("injected failure")
 
-// archivoQueFalla es un temporal falso. Sus dos fallos --escritura y cierre--
-// son los que un tempfile de verdad no produce nunca en una máquina que
-// funciona: harían falta un disco lleno o cerrar dos veces el mismo fichero.
-// El doble existe para eso, y para comprobar que el fichero se borra igual, que
-// es la parte que de verdad importa: un temporal a medias en /tmp no se limpia
-// solo.
-type archivoQueFalla struct {
-	nombre     string
-	escrito    []byte
-	errWrite   error
-	errClose   error
-	cerrado    int
-	escrituras int
+// failingFile is a fake temp file. Its two failures --write and close--
+// are the ones a real tempfile never produces on a
+// working machine: they would need a full disk or closing the same file twice.
+// The double exists for that, and to check that the file is deleted anyway,
+// which is the part that really matters: a half-written temp file in /tmp does
+// not clean itself up.
+type failingFile struct {
+	name     string
+	written  []byte
+	errWrite error
+	errClose error
+	closes   int
+	writes   int
 }
 
-func (a *archivoQueFalla) Write(p []byte) (int, error) {
-	a.escrituras++
+func (a *failingFile) Write(p []byte) (int, error) {
+	a.writes++
 	if a.errWrite != nil {
 		return 0, a.errWrite
 	}
-	a.escrito = append(a.escrito, p...)
+	a.written = append(a.written, p...)
 	return len(p), nil
 }
 
-func (a *archivoQueFalla) Close() error {
-	a.cerrado++
+func (a *failingFile) Close() error {
+	a.closes++
 	return a.errClose
 }
 
-func (a *archivoQueFalla) Name() string { return a.nombre }
+func (a *failingFile) Name() string { return a.name }
 
-// nombreVivo devuelve una ruta real dentro de t.TempDir para que el os.Remove
-// del código tenga algo que borrar de verdad.
-func nombreVivo(t *testing.T) string {
+// livePath returns a real path inside t.TempDir so that the code's
+// os.Remove has something to actually delete.
+func livePath(t *testing.T) string {
 	t.Helper()
-	ruta := filepath.Join(t.TempDir(), "tsk-test.md")
-	if err := os.WriteFile(ruta, []byte("contenido viejo"), 0o600); err != nil {
-		t.Fatalf("preparando el temporal: %v", err)
+	path := filepath.Join(t.TempDir(), "tsk-test.md")
+	if err := os.WriteFile(path, []byte("old content"), 0o600); err != nil {
+		t.Fatalf("preparing the temp file: %v", err)
 	}
-	return ruta
+	return path
 }
 
-func TestEscribirYCerrarDejaElTemporalListo(t *testing.T) {
-	ruta := nombreVivo(t)
-	f := &archivoQueFalla{nombre: ruta}
+func TestWriteAndCloseLeavesTheTempReady(t *testing.T) {
+	path := livePath(t)
+	f := &failingFile{name: path}
 
-	if err := escribirYcerrar(f, "nuevo contenido"); err != nil {
-		t.Fatalf("escribirYcerrar: %v", err)
+	if err := writeAndClose(f, "new content"); err != nil {
+		t.Fatalf("writeAndClose: %v", err)
 	}
-	if string(f.escrito) != "nuevo contenido" {
-		t.Errorf("ha escrito %q, want %q", f.escrito, "nuevo contenido")
+	if string(f.written) != "new content" {
+		t.Errorf("it wrote %q, want %q", f.written, "new content")
 	}
-	if f.cerrado != 1 {
-		t.Errorf("ha cerrado %d veces, want 1", f.cerrado)
+	if f.closes != 1 {
+		t.Errorf("it closed %d times, want 1", f.closes)
 	}
-	if _, err := os.Stat(ruta); err != nil {
-		t.Errorf("un temporal que se escribió bien no debe borrarse: %v", err)
-	}
-}
-
-// El comentario no lleva plantilla: pasa la cadena vacía y aun así escribe, que
-// es lo que lo distingue de "no he escrito nada" cuando el editor lee el fichero.
-func TestEscribirYCerrarAceptaContenidoVacio(t *testing.T) {
-	f := &archivoQueFalla{nombre: nombreVivo(t)}
-
-	if err := escribirYcerrar(f, ""); err != nil {
-		t.Fatalf("escribirYcerrar con contenido vacío: %v", err)
-	}
-	if f.escrituras != 1 {
-		t.Errorf("ha escrito %d veces, want 1: el temporal tiene que existir aunque sea vacío", f.escrituras)
-	}
-	if f.cerrado != 1 {
-		t.Errorf("ha cerrado %d veces, want 1", f.cerrado)
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("a temp file written correctly must not be deleted: %v", err)
 	}
 }
 
-// Los dos fallos. En los dos casos el fichero se borra: es la mitad del motivo
-// por el que existen, porque un temporal a medias se queda en /tmp para siempre.
-func TestEscribirYCerrarBorraElTemporalSiFalla(t *testing.T) {
-	t.Run("falla al escribir", func(t *testing.T) {
-		ruta := nombreVivo(t)
-		f := &archivoQueFalla{nombre: ruta, errWrite: errFalso}
+// The comment carries no template: it passes the empty string and still
+// writes, which is what distinguishes it from "I wrote nothing" when the editor reads the file.
+func TestWriteAndCloseAcceptsEmptyContent(t *testing.T) {
+	f := &failingFile{name: livePath(t)}
 
-		err := escribirYcerrar(f, "nuevo contenido")
-		if !errors.Is(err, errFalso) {
-			t.Fatalf("error = %v, want %v", err, errFalso)
+	if err := writeAndClose(f, ""); err != nil {
+		t.Fatalf("writeAndClose with empty content: %v", err)
+	}
+	if f.writes != 1 {
+		t.Errorf("it wrote %d times, want 1: the temp file must exist even if empty", f.writes)
+	}
+	if f.closes != 1 {
+		t.Errorf("it closed %d times, want 1", f.closes)
+	}
+}
+
+// The two failures. In both cases the file is deleted: that is half the reason
+// they exist, because a half-written temp file stays in /tmp forever.
+func TestWriteAndCloseDeletesTheTempOnFailure(t *testing.T) {
+	t.Run("write fails", func(t *testing.T) {
+		path := livePath(t)
+		f := &failingFile{name: path, errWrite: errInjected}
+
+		err := writeAndClose(f, "new content")
+		if !errors.Is(err, errInjected) {
+			t.Fatalf("error = %v, want %v", err, errInjected)
 		}
-		if f.escrito != nil {
-			t.Errorf("ha escrito algo pese a fallar la escritura: %q", f.escrito)
+		if f.written != nil {
+			t.Errorf("it wrote something despite the write failing: %q", f.written)
 		}
-		if f.cerrado != 1 {
-			t.Errorf("ha cerrado %d veces, want 1: un fichero abierto se cierra aunque la escritura falle", f.cerrado)
+		if f.closes != 1 {
+			t.Errorf("it closed %d times, want 1: an open file is closed even if the write fails", f.closes)
 		}
-		if _, err := os.Stat(ruta); !os.IsNotExist(err) {
-			t.Errorf("el temporal sigue ahí tras fallar la escritura: %v", err)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("the temp file is still there after the write failed: %v", err)
 		}
 	})
 
-	t.Run("falla al cerrar", func(t *testing.T) {
-		ruta := nombreVivo(t)
-		f := &archivoQueFalla{nombre: ruta, errClose: errFalso}
+	t.Run("close fails", func(t *testing.T) {
+		path := livePath(t)
+		f := &failingFile{name: path, errClose: errInjected}
 
-		err := escribirYcerrar(f, "nuevo contenido")
-		if !errors.Is(err, errFalso) {
-			t.Fatalf("error = %v, want %v", err, errFalso)
+		err := writeAndClose(f, "new content")
+		if !errors.Is(err, errInjected) {
+			t.Fatalf("error = %v, want %v", err, errInjected)
 		}
-		// El contenido sí llegó a escribirse: el fallo es posterior, y el editor
-		// no se lanza, así que da igual lo que contenga.
-		if string(f.escrito) != "nuevo contenido" {
-			t.Errorf("ha escrito %q, want %q", f.escrito, "nuevo contenido")
+		// The content did get written: the failure comes later, and the editor
+		// is not launched, so it does not matter what it contains.
+		if string(f.written) != "new content" {
+			t.Errorf("it wrote %q, want %q", f.written, "new content")
 		}
-		if _, err := os.Stat(ruta); !os.IsNotExist(err) {
-			t.Errorf("el temporal sigue ahí tras fallar el cierre: %v", err)
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("the temp file is still there after the close failed: %v", err)
 		}
 	})
 }
 
-// Si el nombre no está en disco, os.Remove falla y se ignora. No es una ruta
-// real de producción -- el temporal lo acaba de crear os.CreateTemp -- pero
-// documenta que un fallo al borrar no tapa el error que sí importa.
-func TestEscribirYCerrarNoTapaElErrorSiNoPuedeBorrar(t *testing.T) {
-	f := &archivoQueFalla{
-		nombre:   filepath.Join(t.TempDir(), "nunca-existio.md"),
-		errWrite: errFalso,
+// If the name is not on disk, os.Remove fails and it is ignored. It is not a
+// real production path -- os.CreateTemp just created the temp file -- but it
+// documents that a delete failure does not cover up the error that does matter.
+func TestWriteAndCloseKeepsTheErrorWhenItCannotDelete(t *testing.T) {
+	f := &failingFile{
+		name:     filepath.Join(t.TempDir(), "never-existed.md"),
+		errWrite: errInjected,
 	}
 
-	if err := escribirYcerrar(f, "x"); !errors.Is(err, errFalso) {
-		t.Errorf("error = %v, want el de escritura y no el del borrado", err)
+	if err := writeAndClose(f, "x"); !errors.Is(err, errInjected) {
+		t.Errorf("error = %v, want the write one and not the delete one", err)
 	}
 }
 
-// Los dos llamadores de escribirYcerrar. Sin la indirección de crearTemporal
-// sus ramas de error no se podrían probar: un temporal de verdad no falla al
-// escribirse en una máquina que funciona, así que nunca se llegaría a ese if.
+// The two callers of writeAndClose. Without the indirection of createTemp
+// their error branches could not be tested: a real temp file does not fail on
+// write on a working machine, so that if would never be reached.
 //
-// Y lo que se comprueba es lo que de verdad importa para la persona que está
-// delante: el error sale con el id de la tarea, para que la TUI sepa a qué tarea
-// pertenece el fallo y no lo pierda.
-func TestLosDosEditoresDanElIdDeLaTareaCuandoElTemporalFalla(t *testing.T) {
-	t.Run("editor de tarea", func(t *testing.T) {
-		restaurar := sustituirTemporal(t, func(string, string) (archivoTemporal, error) {
-			return &archivoQueFalla{nombre: nombreVivo(t), errWrite: errFalso}, nil
+// And what is checked is what really matters to the person who is
+// in front: the error comes out with the task id, so the TUI knows which task
+// the failure belongs to and does not lose it.
+func TestBothEditorsReturnTheTaskIDWhenTheTempFails(t *testing.T) {
+	t.Run("task editor", func(t *testing.T) {
+		restore := replaceTemp(t, func(string, string) (tempFile, error) {
+			return &failingFile{name: livePath(t), errWrite: errInjected}, nil
 		})
-		defer restaurar()
+		defer restore()
 
-		msg := editTaskCmd(model.Task{ID: 42, Title: "con título"}, "vi /tmp/x")()
+		msg := editTaskCmd(model.Task{ID: 42, Title: "with a title"}, "vi /tmp/x")()
 		finished, ok := msg.(editorFinishedMsg)
 		if !ok {
-			t.Fatalf("el mensaje es %T, want editorFinishedMsg", msg)
+			t.Fatalf("the message is %T, want editorFinishedMsg", msg)
 		}
-		if !errors.Is(finished.err, errFalso) {
-			t.Errorf("err = %v, want el inyectado", finished.err)
+		if !errors.Is(finished.err, errInjected) {
+			t.Errorf("err = %v, want the injected one", finished.err)
 		}
 		if finished.taskID != 42 {
-			t.Errorf("taskID = %d, want 42: sin él la TUI no sabe a qué tarea volver", finished.taskID)
+			t.Errorf("taskID = %d, want 42: without it the TUI does not know which task to return to", finished.taskID)
 		}
 	})
 
-	t.Run("editor de comentario", func(t *testing.T) {
-		restaurar := sustituirTemporal(t, func(string, string) (archivoTemporal, error) {
-			return &archivoQueFalla{nombre: nombreVivo(t), errClose: errFalso}, nil
+	t.Run("comment editor", func(t *testing.T) {
+		restore := replaceTemp(t, func(string, string) (tempFile, error) {
+			return &failingFile{name: livePath(t), errClose: errInjected}, nil
 		})
-		defer restaurar()
+		defer restore()
 
 		msg := commentCmd(7, "vi /tmp/x")()
 		finished, ok := msg.(commentFinishedMsg)
 		if !ok {
-			t.Fatalf("el mensaje es %T, want commentFinishedMsg", msg)
+			t.Fatalf("the message is %T, want commentFinishedMsg", msg)
 		}
-		if !errors.Is(finished.err, errFalso) {
-			t.Errorf("err = %v, want el inyectado", finished.err)
+		if !errors.Is(finished.err, errInjected) {
+			t.Errorf("err = %v, want the injected one", finished.err)
 		}
 		if finished.taskID != 7 {
 			t.Errorf("taskID = %d, want 7", finished.taskID)
@@ -191,45 +191,45 @@ func TestLosDosEditoresDanElIdDeLaTareaCuandoElTemporalFalla(t *testing.T) {
 	})
 }
 
-// El fallo de la creación del temporal es el otro camino, y es el único que se
-// probaba antes: TMPDIR apunta a un directorio que no existe.
-func TestLosDosEditoresDanElIdCuandoNoSePuedeCrearElTemporal(t *testing.T) {
+// The temp file creation failure is the other path, and it is the only one that
+// was tested before: TMPDIR points at a directory that does not exist.
+func TestBothEditorsReturnTheIDWhenTheTempCannotBeCreated(t *testing.T) {
 	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "no-existe"))
 
 	for _, tc := range []struct {
-		nombre string
-		llamar func() tea.Msg
+		name   string
+		call   func() tea.Msg
 		taskID func(tea.Msg) (int64, error)
 	}{
-		{"tarea", func() tea.Msg { return editTaskCmd(model.Task{ID: 5}, "vi /tmp/x")() },
+		{"task", func() tea.Msg { return editTaskCmd(model.Task{ID: 5}, "vi /tmp/x")() },
 			func(msg tea.Msg) (int64, error) {
 				finished := msg.(editorFinishedMsg)
 				return finished.taskID, finished.err
 			}},
-		{"comentario", func() tea.Msg { return commentCmd(9, "vi /tmp/x")() },
+		{"comment", func() tea.Msg { return commentCmd(9, "vi /tmp/x")() },
 			func(msg tea.Msg) (int64, error) {
 				finished := msg.(commentFinishedMsg)
 				return finished.taskID, finished.err
 			}},
 	} {
-		t.Run(tc.nombre, func(t *testing.T) {
-			taskID, err := tc.taskID(tc.llamar())
+		t.Run(tc.name, func(t *testing.T) {
+			taskID, err := tc.taskID(tc.call())
 			if err == nil {
-				t.Fatal("want error: TMPDIR no existe")
+				t.Fatal("want error: TMPDIR does not exist")
 			}
 			if taskID == 0 {
-				t.Error("el error ha salido sin id de tarea")
+				t.Error("the error came out without a task id")
 			}
 		})
 	}
 }
 
-// sustituirTemporal cambia crearTemporal durante el test y devuelve la función
-// que lo deja como estaba. Los tests corre en paralelo no podrían usar esto, y
-// por eso ninguno lo hace: es un global.
-func sustituirTemporal(t *testing.T, f func(string, string) (archivoTemporal, error)) func() {
+// replaceTemp swaps createTemp during the test and returns the
+// function that puts it back as it was. Tests running in parallel could not use
+// this, and that is why none of them does: it is a global.
+func replaceTemp(t *testing.T, f func(string, string) (tempFile, error)) func() {
 	t.Helper()
-	anterior := crearTemporal
-	crearTemporal = f
-	return func() { crearTemporal = anterior }
+	previous := createTemp
+	createTemp = f
+	return func() { createTemp = previous }
 }

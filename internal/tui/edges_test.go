@@ -13,208 +13,208 @@ import (
 	"tsk/internal/model"
 )
 
-// inicioGantt es una fecha fija para que el render del Gantt sea reproducible.
-var inicioGantt = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+// ganttStart is a fixed date so that the Gantt render is reproducible.
+var ganttStart = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-// Lote de bordes que quedaban sin comprobar en ficheros donde el resto del
-// render ya estaba cubierto: el punto de selección de las listas del modal de
-// personas, el ancho de la regla del Gantt, los resets de "nada seleccionado" del
-// editor de descripción, y el borrado de tags del alta.
+// Batch of edges that were left unchecked in files where the rest of the
+// render was already covered: the selection point of the people modal's
+// lists, the width of the Gantt ruler, the "nothing selected" resets of the
+// description editor, and the tag deletion of the form.
 
-// La fila seleccionada del roster lleva el prefijo de selección, y el resto no.
-// Con dos personas en el roster y el cursor en la segunda, sólo esa lo lleva.
+// The roster's selected row carries the selection prefix and the rest do not.
+// With two people in the roster and the cursor on the second one, only that one carries it.
 func TestAssigneeRosterSelectionPrefix(t *testing.T) {
 	m := newAssigneeModel(t, 2)
 	m.archivedProjects = nil
 	reloadOffDays(t, m)
 	m.assigneeIdx = 1
 
-	// El prefijo se busca en el texto limpio; la negrita, en el render con sus
-	// códigos, porque al quitar los códigos las dos marcas se vuelven indistinguibles.
-	crudo := m.renderAssigneeModal("")
-	out := ansi.Strip(crudo)
+	// The prefix is searched in the clean text; the bold, in the render with
+	// its codes, because removing the codes makes the two marks indistinguishable.
+	raw := m.renderAssigneeModal("")
+	out := ansi.Strip(raw)
 	if n := strings.Count(out, selectionPrefix(true)); n != 1 {
-		t.Errorf("hay %d filas con el prefijo de selección, want 1:\n%s", n, out)
+		t.Errorf("there are %d rows with the selection prefix, want 1:\n%s", n, out)
 	}
 	if !strings.Contains(out, selectionPrefix(true)+"@user01") {
-		t.Errorf("la marca no está en la segunda persona:\n%s", out)
+		t.Errorf("the mark is not on the second person:\n%s", out)
 	}
-	if n := countBoldLines(crudo); n != 1 {
-		t.Errorf("hay %d filas resaltadas, want 1:\n%s", n, out)
+	if n := countBoldLines(raw); n != 1 {
+		t.Errorf("there are %d highlighted rows, want 1:\n%s", n, out)
 	}
 }
 
-// Lo mismo en la lista de off-days: el cursor va sobre un off-day concreto, no
-// sobre "la lista".
+// The same in the off-days list: the cursor goes over a concrete off-day,
+// not over "the list".
 func TestAssigneeOffdaySelectionPrefix(t *testing.T) {
 	m := newAssigneeModel(t, 1)
 	m.assigneeIdx = 0
 	for i := range 3 {
-		dia := "2026-0" + string(rune('1'+i)) + "-01"
-		mustAddOffDay(t, m.database, "@user00", dia, dia, "")
+		day := "2026-0" + string(rune('1'+i)) + "-01"
+		mustAddOffDay(t, m.database, "@user00", day, day, "")
 	}
 	reloadOffDays(t, m)
 	m.assigneeDetail = true
 	m.assigneeOffdayIdx = 2
 
-	// El prefijo se busca en el texto limpio; la negrita, en el render con sus
-	// códigos, porque al quitar los códigos las dos marcas se vuelven indistinguibles.
-	crudo := m.renderAssigneeModal("")
-	out := ansi.Strip(crudo)
+	// The prefix is searched in the clean text; the bold, in the render with
+	// its codes, because removing the codes makes the two marks indistinguishable.
+	raw := m.renderAssigneeModal("")
+	out := ansi.Strip(raw)
 	if n := strings.Count(out, selectionPrefix(true)); n != 1 {
-		t.Errorf("hay %d filas con el prefijo de selección, want 1:\n%s", n, out)
+		t.Errorf("there are %d rows with the selection prefix, want 1:\n%s", n, out)
 	}
 	if !strings.Contains(out, selectionPrefix(true)+"2026-03-01") {
-		t.Errorf("la marca no está en el tercer off-day:\n%s", out)
+		t.Errorf("the mark is not on the third off-day:\n%s", out)
 	}
-	// El detalle también resalta el nombre de la persona en su cabecera, así que
-	// la cuenta se limita a las filas de off-day: son las que llevan flecha.
-	if n := countBoldLinesWith(crudo, "→"); n != 1 {
-		t.Errorf("hay %d off-days resaltados, want 1:\n%s", n, out)
+	// The detail also highlights the person's name in its header, so
+	// the count is limited to the off-day rows: they are the ones carrying an arrow.
+	if n := countBoldLinesWith(raw, "→"); n != 1 {
+		t.Errorf("there are %d highlighted off-days, want 1:\n%s", n, out)
 	}
 }
 
-// El eje del Gantt tiene el ancho de la etiqueta, un separador y las columnas de
-// día, sin recortar. La regla no sirve para esto: le quita los espacios de la
-// derecha, así que su ancho visible depende de dónde cae el último lunes.
+// The Gantt axis has the label's width, a separator and the day columns,
+// untruncated. The ruler is no use for this: it strips the right-hand
+// spaces, so its visible width depends on where the last Monday falls.
 func TestGanttAxisExactWidth(t *testing.T) {
 	tests := []struct {
 		name    string
 		labelW  int
 		dayCols int
 	}{
-		{"holgada", 30, 40},
-		{"etiqueta al mínimo", 14, 7},
-		{"un solo día", 30, 1},
-		{"con etiqueta y días mínimos", 14, 7},
+		{"roomy", 30, 40},
+		{"label at the minimum", 14, 7},
+		{"a single day", 30, 1},
+		{"with minimum label and days", 14, 7},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+			m := ganttModelWithPeople(t, []string{"@john"}, 1)
 
-			axis := ansi.Strip(m.renderGanttAxis(tt.labelW, tt.dayCols, inicioGantt, 0))
+			axis := ansi.Strip(m.renderGanttAxis(tt.labelW, tt.dayCols, ganttStart, 0))
 			if got := len([]rune(axis)); got != tt.labelW+1+tt.dayCols {
-				t.Errorf("el eje mide %d columnas, want %d (etiqueta %d + 1 + días %d)",
+				t.Errorf("the axis measures %d columns, want %d (label %d + 1 + days %d)",
 					got, tt.labelW+1+tt.dayCols, tt.labelW, tt.dayCols)
 			}
 		})
 	}
 }
 
-// El rótulo de cada lunes cae en su columna: la etiqueta de la izquierda, el
-// separador, y desde ahí el día. El 1 de enero de 2026 es jueves, así que el
-// primer lunes es el día 4, en la columna 35 con una etiqueta de 30.
+// Each Monday's caption falls in its column: the label on the left, the
+// separator, and from there the day. January 1st of 2026 is a Thursday, so
+// the first Monday is day 4, in column 35 with a label of 30.
 func TestGanttRulerLabelLandsOnItsMonday(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 
 	const labelW = 30
-	ruler := []rune(ansi.Strip(m.renderGanttRuler(inicioGantt, 0, labelW, 20)))
-	const primerLunes = 4 // 2026-01-05
+	ruler := []rune(ansi.Strip(m.renderGanttRuler(ganttStart, 0, labelW, 20)))
+	const firstMonday = 4 // 2026-01-05
 
-	want := model.WeekOfMonthLabel(inicioGantt.AddDate(0, 0, primerLunes))
-	at := labelW + 1 + primerLunes
+	want := model.WeekOfMonthLabel(ganttStart.AddDate(0, 0, firstMonday))
+	at := labelW + 1 + firstMonday
 	if at+len([]rune(want)) > len(ruler) {
-		t.Fatalf("el rótulo %q no cabe en la regla de %d columnas", want, len(ruler))
+		t.Fatalf("the caption %q does not fit in the %d-column ruler", want, len(ruler))
 	}
 	if got := string(ruler[at : at+len([]rune(want))]); got != want {
-		t.Errorf("en la columna %d hay %q, want %q (ruler %q)", at, got, want, string(ruler))
+		t.Errorf("column %d has %q, want %q (ruler %q)", at, got, want, string(ruler))
 	}
-	// Y las columnas anteriores al lunes están en blanco: el rótulo no puede
-	// empezar antes.
-	for i := primerLunes; i < at; i++ {
+	// And the columns before the Monday are blank: the caption cannot
+	// start earlier.
+	for i := firstMonday; i < at; i++ {
 		if ruler[i] != ' ' {
-			t.Fatalf("columna %d = %q, want espacio antes del rótulo", i, string(ruler[i]))
+			t.Fatalf("column %d = %q, want a space before the caption", i, string(ruler[i]))
 		}
 	}
 }
 
-// La etiqueta de la izquierda del eje son espacios del ancho exacto de la
-// etiqueta, ni uno más.
+// The label to the left of the axis is spaces of exactly the label's
+// width, not one more.
 func TestGanttAxisLeadingSpaces(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 
-	axis := []rune(ansi.Strip(m.renderGanttAxis(30, 10, inicioGantt, 0)))
+	axis := []rune(ansi.Strip(m.renderGanttAxis(30, 10, ganttStart, 0)))
 	for i, r := range axis {
 		if i < 31 {
 			if r != ' ' {
-				t.Fatalf("columna %d = %q, want espacio (etiqueta + separador)", i, string(r))
+				t.Fatalf("column %d = %q, want a space (label + separator)", i, string(r))
 			}
 			continue
 		}
 		break
 	}
-	// A partir del separador hay un carácter por día, y el primero es el jueves,
-	// que no es lunes, así que es "-".
+	// From the separator on there is one character per day, and the first one
+	// is Thursday, which is not Monday, so it is "-".
 	if axis[31] != '-' {
-		t.Errorf("el primer día es %q, want \"-\"", string(axis[31]))
+		t.Errorf("the first day is %q, want \"-\"", string(axis[31]))
 	}
 }
 
-// Abrir el editor de descripción limpia la selección de comentarios, igual que
-// abrir el detalle: la descripción no tiene comentarios, y dejar la selección
-// apuntando a un índice de comentarios que no se están mostrando haría que la
-// primera tecla saltara de sitio.
+// Opening the description editor clears the comment selection, just like
+// opening the detail: the description has no comments, and leaving the
+// selection pointing at a comment index that is not being shown would make
+// the first key jump somewhere else.
 func TestOpeningDescEditorClearsCommentSelection(t *testing.T) {
 	m := newDetailWithTags(t, "bug")
-	m.detailComments = []model.Comment{{ID: 1, Body: "uno", CreatedAt: "2026-01-01T10:00:00Z"}}
+	m.detailComments = []model.Comment{{ID: 1, Body: "one", CreatedAt: "2026-01-01T10:00:00Z"}}
 	m.detailCommentSel = 1
 
 	next, _ := press(m, "e")
 	got := next
 
 	if !got.descEditOpen {
-		t.Fatal("la tecla e no abrió el editor de descripción")
+		t.Fatal("the key e did not open the description editor")
 	}
 	if got.detailCommentSel != -1 {
 		t.Errorf("detailCommentSel = %d, want -1", got.detailCommentSel)
 	}
 }
 
-// El editor de descripción se abre sobre la tarea del detalle si está abierto, y
-// sobre la seleccionada en la vista si no. Con el detalle abierto, editar es
-// sobre la del detalle aunque el cursor de la lista esté en otra.
+// The description editor opens on the detail's task if the detail is open,
+// and on the selected one in the view otherwise. With the detail open,
+// editing is on the detail's task even if the list cursor is on another one.
 func TestDescEditTargetPrefersOpenDetail(t *testing.T) {
 	m := newTestModel(t)
-	tarea := m.tasks[0]
+	task := m.tasks[0]
 	m.detailOpen = true
-	m.detailTask = &tarea
+	m.detailTask = &task
 	m.filteredT = nil
 
-	if got := m.descEditTarget(); got == nil || got.ID != tarea.ID {
-		t.Errorf("con el detalle abierto el objetivo es %v, want la tarea del detalle", got)
+	if got := m.descEditTarget(); got == nil || got.ID != task.ID {
+		t.Errorf("with the detail open the target is %v, want the detail's task", got)
 	}
 
 	m.detailOpen = false
 	m.cursor = 1
-	seleccionada := m.filteredTasks()[1]
-	if got := m.descEditTarget(); got == nil || got.ID != seleccionada.ID {
-		t.Errorf("sin detalle el objetivo es %v, want la tarea seleccionada", got)
+	selected := m.filteredTasks()[1]
+	if got := m.descEditTarget(); got == nil || got.ID != selected.ID {
+		t.Errorf("without the detail the target is %v, want the selected task", got)
 	}
 
-	// Con el detalle "abierto" pero sin tarea -- un estado que el interfaz no
-	// produce y que sí puede dejar un test -- el objetivo cae a la lista, no a
-	// nil: hay una tarea seleccionada y es tan editable como la otra.
+	// With the detail "open" but with no task -- a state the interface does
+	// not produce but a test can leave -- the target falls to the list, not
+	// to nil: there is a selected task and it is as editable as the other.
 	m.detailOpen = true
 	m.detailTask = nil
 	m.cursor = 1
 	if got := m.descEditTarget(); got == nil {
-		t.Error("con el detalle abierto y sin tarea, el objetivo es nil; want la seleccionada de la vista")
+		t.Error("with the detail open and no task the target is nil; want the view's selected one")
 	} else if got.ID != m.filteredTasks()[1].ID {
-		t.Errorf("el objetivo es la tarea %d, want la seleccionada (%d)", got.ID, m.filteredTasks()[1].ID)
+		t.Errorf("the target is task %d, want the selected one (%d)", got.ID, m.filteredTasks()[1].ID)
 	}
 
-	// Y sin ninguna de las dos, nil.
+	// And with neither of the two, nil.
 	m.detailOpen = false
 	m.filteredT = nil
 	m.cursor = 99
 	if got := m.descEditTarget(); got != nil {
-		t.Errorf("sin tarea seleccionada el objetivo es %v, want nil", got)
+		t.Errorf("with no task selected the target is %v, want nil", got)
 	}
 }
 
-// Borrar tags del campo del alta: con el input vacío, backspace quita la última
-// agregada; con algo escrito, quita un carácter del input. Y编辑 Tags limpia la
-// selección de sugerencias, porque la lista va a cambiar.
+// Deleting tags from the form field: with an empty input, backspace removes
+// the last one added; with something typed, it removes a character from the
+// input. And editing Tags clears the suggestion selection, because the list is going to change.
 func TestNewTaskTagsBackspace(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -223,10 +223,10 @@ func TestNewTaskTagsBackspace(t *testing.T) {
 		wantInput string
 		wantTags  []string
 	}{
-		{"con input escrito quita un carácter", "ab", nil, "a", nil},
-		{"con input vacío quita la última tag", "", []string{"uno", "dos"}, "", []string{"uno"}},
-		{"sin tags ni input no hace nada", "", nil, "", nil},
-		{"con una tag la quita", "", []string{"uno"}, "", nil},
+		{"with typed input it removes a character", "ab", nil, "a", nil},
+		{"with empty input it removes the last tag", "", []string{"one", "two"}, "", []string{"one"}},
+		{"without tags or input it does nothing", "", nil, "", nil},
+		{"with one tag it removes it", "", []string{"one"}, "", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -247,9 +247,9 @@ func TestNewTaskTagsBackspace(t *testing.T) {
 			if strings.Join(gotM.newTaskTags, ",") != strings.Join(tt.wantTags, ",") {
 				t.Errorf("tags = %v, want %v", gotM.newTaskTags, tt.wantTags)
 			}
-			// Editar el input limpia la selección de sugerencias; borrar una tag
-			// agregada no. Es lo que hace el código, y no es un problema: el
-			// índice se acota antes de usarse.
+			// Editing the input clears the suggestion selection; deleting an
+			// added tag does not. That is what the code does, and it is not a
+			// problem: the index is bounded before being used.
 			wantSugg := -1
 			if tt.input == "" && len(tt.tags) > 0 {
 				wantSugg = 2
@@ -261,35 +261,35 @@ func TestNewTaskTagsBackspace(t *testing.T) {
 	}
 }
 
-// "k" en Kanban envuelve: desde la primera tarjeta salta a la última de la
-// columna, y en la última se queda. Es un ciclo, no un desplazamiento, y la
-// diferencia se ve en la primera pulsación.
+// "k" in Kanban wraps: from the first card it jumps to the last of the
+// column, and on the last one it stays. It is a cycle, not a scroll, and
+// the difference shows on the first keypress.
 func TestKanbanUpWrapsWithinColumn(t *testing.T) {
-	m := newKanbanModel(t, 3) // tres tarjetas en "todo", una columna con tareas
+	m := newKanbanModel(t, 3) // three cards in "todo", one column with tasks
 	m.kanbanCol = 0
 	m.kanbanRow = 0
 
-	arriba, _ := press(m, "k")
-	if arriba.kanbanRow == arriba.kanbanCol {
-		t.Fatalf("la fila no cambió")
+	up, _ := press(m, "k")
+	if up.kanbanRow == up.kanbanCol {
+		t.Fatalf("the row did not change")
 	}
-	if arriba.kanbanRow != 2 {
-		t.Errorf("desde la primera, \"k\" deja la fila en %d, want 2 (la última)", arriba.kanbanRow)
+	if up.kanbanRow != 2 {
+		t.Errorf("from the first, \"k\" leaves the row at %d, want 2 (the last)", up.kanbanRow)
 	}
 
-	// Y desde la última retrocede a la anterior: envuelve por arriba, no se queda.
-	arriba2, _ := press(arriba, "k")
-	if arriba2.kanbanRow != 1 {
-		t.Errorf("desde la última, \"k\" deja la fila en %d, want 1", arriba2.kanbanRow)
+	// And from the last one it goes back to the previous: it wraps upwards, it does not stay.
+	up2, _ := press(up, "k")
+	if up2.kanbanRow != 1 {
+		t.Errorf("from the last, \"k\" leaves the row at %d, want 1", up2.kanbanRow)
 	}
 }
 
-// Los paneles del Dashboard están topados por el alto, y el tope es exacto: con
-// una línea más de alto sale una fila más de equipo, y una menos, una menos.
+// The Dashboard's panels are capped by the height, and the cap is exact:
+// with one more line of height one more team row comes out, and one less, one less.
 func TestDashboardTeamPanelRespectsBudget(t *testing.T) {
 	m := newDashModel(t, "")
 	for i := range 8 {
-		mustCreateTask(t, m.database, "api", "tarea de p"+string(rune('a'+i)), "", "@p"+string(rune('a'+i)), 1, "todo")
+		mustCreateTask(t, m.database, "api", "task of p"+string(rune('a'+i)), "", "@p"+string(rune('a'+i)), 1, "todo")
 	}
 	reloadTasks(t, m)
 	m.filteredT = nil
@@ -297,89 +297,89 @@ func TestDashboardTeamPanelRespectsBudget(t *testing.T) {
 	m.currentView = viewDashboard
 	m.width = 140
 
-	cuenta := func(alto int) int {
-		out := ansi.Strip(m.renderDashboard(alto))
+	count := func(height int) int {
+		out := ansi.Strip(m.renderDashboard(height))
 		n := 0
-		for _, linea := range strings.Split(out, "\n") {
-			if strings.Contains(linea, " tasks (") {
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, " tasks (") {
 				n++
 			}
 		}
 		return n
 	}
 
-	// El presupuesto sale del alto menos el cromo, menos lo que ocupa el Overview
-	// y menos la cabecera del panel, así que hace falta un alto pequeño de verdad.
-	// Con diez personas en el equipo el presupuesto se nota: 60 de alto las
-	// enseña todas, 20 enseña seis, 16 enseña dos y 14 ya no cabe ninguna --
-	// el Overview se lleva la columna entera.
-	casos := []struct{ alto, want int }{{60, 10}, {30, 10}, {20, 6}, {16, 2}, {14, 0}}
-	for _, c := range casos {
-		if got := cuenta(c.alto); got != c.want {
-			t.Errorf("con %d de alto salen %d filas de equipo, want %d", c.alto, got, c.want)
+	// The budget comes from the height minus the chrome, minus what the
+	// Overview takes and minus the panel header, so a really small height is
+	// needed. With ten people on the team the budget shows: a height of 60
+	// shows all of them, 20 shows six, 16 shows two and at 14 none fits
+	// anymore -- the Overview takes the whole column.
+	cases := []struct{ height, want int }{{60, 10}, {30, 10}, {20, 6}, {16, 2}, {14, 0}}
+	for _, c := range cases {
+		if got := count(c.height); got != c.want {
+			t.Errorf("at height %d there are %d team rows, want %d", c.height, got, c.want)
 		}
 	}
 }
 
-// El panel Active también, y con una tarea más de alto sale una más.
+// The Active panel too, and with one more task of height one more comes out.
 func TestDashboardActivePanelRespectsBudget(t *testing.T) {
 	m := newDashModel(t, "")
 	m.currentView = viewDashboard
 	m.width = 140
 
-	cuenta := func(alto int) int {
-		out := ansi.Strip(m.renderDashboard(alto))
+	count := func(height int) int {
+		out := ansi.Strip(m.renderDashboard(height))
 		n := 0
-		for _, linea := range strings.Split(out, "\n") {
-			if strings.Contains(linea, "  ● ") || strings.Contains(linea, "  ○ ") {
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, "  ● ") || strings.Contains(line, "  ○ ") {
 				n++
 			}
 		}
 		return n
 	}
 
-	holgado := cuenta(60)
-	corto := cuenta(8)
-	if corto >= holgado {
-		t.Errorf("con 8 de alto salen %d filas activas y con 60 salen %d", corto, holgado)
+	tall := count(60)
+	short := count(8)
+	if short >= tall {
+		t.Errorf("at height 8 there are %d active rows and at 60 there are %d", short, tall)
 	}
-	if corto == 0 {
-		t.Error("con 8 de alto no sale ninguna fila activa")
+	if short == 0 {
+		t.Error("at height 8 no active row comes out")
 	}
 }
 
-// Cerrar el editor de descripción sin detalle detrás deja el detalle cerrado y
-// limpio, incluida la selección de comentarios: si no, el detalle reabierto
-// apuntaría a un comentario que ya no se está mostrando.
+// Closing the description editor with no detail behind leaves the detail
+// closed and clean, comment selection included: otherwise the reopened
+// detail would point at a comment that is no longer being shown.
 func TestClosingDescEditorClearsDetailState(t *testing.T) {
 	m := newDetailWithTags(t, "bug")
 	m.descEditOpen = true
 	m.descEditTaskID = m.detailTask.ID
-	m.descEditHadDetail = false // el detalle no estaba antes de editar
+	m.descEditHadDetail = false // the detail was not open before editing
 	m.detailCommentSel = 2
-	m.detailComments = []model.Comment{{ID: 1, Body: "uno"}}
+	m.detailComments = []model.Comment{{ID: 1, Body: "one"}}
 
 	m.closeDescEditor()
 
 	if m.descEditOpen {
-		t.Error("el editor sigue abierto")
+		t.Error("the editor is still open")
 	}
 	if m.detailOpen {
-		t.Error("el detalle sigue abierto, y no estaba antes de editar")
+		t.Error("the detail is still open, and it was not open before editing")
 	}
 	if m.detailTask != nil {
-		t.Errorf("la tarea del detalle quedó en %v, want nil", m.detailTask)
+		t.Errorf("the detail's task ended up as %v, want nil", m.detailTask)
 	}
 	if m.detailComments != nil {
-		t.Errorf("los comentarios quedaron en %v, want nil", m.detailComments)
+		t.Errorf("the comments ended up as %v, want nil", m.detailComments)
 	}
 	if m.detailCommentSel != -1 {
-		t.Errorf("la selección quedó en %d, want -1", m.detailCommentSel)
+		t.Errorf("the selection ended up as %d, want -1", m.detailCommentSel)
 	}
 }
 
-// Y con detalle detrás, cerrarlo lo deja abierto: se vuelve al detalle, no a la
-// lista.
+// And with a detail behind, closing it leaves it open: you go back to the
+// detail, not to the list.
 func TestClosingDescEditorKeepsExistingDetail(t *testing.T) {
 	m := newDetailWithTags(t, "bug")
 	m.descEditOpen = true
@@ -389,107 +389,108 @@ func TestClosingDescEditorKeepsExistingDetail(t *testing.T) {
 	m.closeDescEditor()
 
 	if m.descEditOpen {
-		t.Error("el editor sigue abierto")
+		t.Error("the editor is still open")
 	}
 	if !m.detailOpen {
-		t.Error("el detalle se cerró, y estaba abierto antes de editar")
+		t.Error("the detail closed, and it was open before editing")
 	}
 	if m.detailTask == nil {
-		t.Error("la tarea del detalle se perdió")
+		t.Error("the detail's task was lost")
 	}
-	// La selección de comentarios se queda: el usuario va a seguir viéndolos.
+	// The comment selection stays: the user is going to keep seeing them.
 	if m.detailCommentSel != 1 {
-		t.Errorf("la selección pasó a %d, want 1 (intacta)", m.detailCommentSel)
+		t.Errorf("the selection changed to %d, want 1 (untouched)", m.detailCommentSel)
 	}
 }
 
-// Al salir del campo de assignee con una sugerencia seleccionada, el input
-// completa con esa sugerencia. Es lo que distingue "elegí una" de "escribí una":
-// sin sugerencia seleccionada el input se queda como estaba.
+// On leaving the assignee field with a selected suggestion, the input
+// completes with that suggestion. That is what tells "I chose one" from
+// "I typed one": with no selected suggestion the input stays as it was.
 func TestNewTaskLeavingAssigneeCompletesSelection(t *testing.T) {
-	t.Run("con sugerencia", func(t *testing.T) {
+	t.Run("with a suggestion", func(t *testing.T) {
 		m := newTestModel(t)
 		next, _ := press(m, "i")
 		m2 := next
 		m2.newTaskFieldIdx = newTaskFieldAssignee
 		m2.newTaskAssignee = "@j"
-		m2.newTaskAssigneeSuggIdx = 0 // "@juan", la primera sugerencia
+		m2.newTaskAssigneeSuggIdx = 0 // "@john", the first suggestion
 
 		got, _ := m2.newTaskMoveField(1)
 		gotM := got.(Model)
 
-		if gotM.newTaskAssignee != "@juan" {
-			t.Errorf("el responsable queda en %q, want @juan (la sugerencia elegida)", gotM.newTaskAssignee)
+		if gotM.newTaskAssignee != "@john" {
+			t.Errorf("the assignee ends at %q, want @john (the chosen suggestion)", gotM.newTaskAssignee)
 		}
 		if gotM.newTaskAssigneeSuggIdx != -1 {
-			t.Errorf("suggIdx = %d, want -1 tras completar", gotM.newTaskAssigneeSuggIdx)
+			t.Errorf("suggIdx = %d, want -1 after completing", gotM.newTaskAssigneeSuggIdx)
 		}
 	})
 
-	t.Run("sin sugerencia", func(t *testing.T) {
+	t.Run("without a suggestion", func(t *testing.T) {
 		m := newTestModel(t)
 		next, _ := press(m, "i")
 		m2 := next
 		m2.newTaskFieldIdx = newTaskFieldAssignee
-		m2.newTaskAssignee = "@libre"
+		m2.newTaskAssignee = "@free"
 		m2.newTaskAssigneeSuggIdx = -1
 
 		got, _ := m2.newTaskMoveField(1)
 		gotM := got.(Model)
 
-		if gotM.newTaskAssignee != "@libre" {
-			t.Errorf("el responsable cambió a %q sin sugerencia seleccionada", gotM.newTaskAssignee)
+		if gotM.newTaskAssignee != "@free" {
+			t.Errorf("the assignee changed to %q with no suggestion selected", gotM.newTaskAssignee)
 		}
 	})
 }
 
-// La fila resaltada es la del cursor, y no "la primera de la ventana": con la
-// ventana desplazada, el índice de la fila dibujada y el del cursor dejan de
-// coincidir, y es la suma de los dos -- no la resta, ni el primero -- lo que
-// señala la correcta.
+// The highlighted row is the cursor's, and not "the first of the window":
+// with the window scrolled, the index of the drawn row and the cursor's
+// stop matching, and it is the sum of the two -- neither the subtraction
+// nor the first -- that points at the right one.
 func TestGanttSelectedRowFollowsScrolledWindow(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan", "@maria"}, 6)
+	m := ganttModelWithPeople(t, []string{"@john", "@margo"}, 6)
 	m.currentView = viewGantt
 	m.width = 120
 
 	rows := m.ganttRows()
-	primera, ultima := -1, -1
+	first, last := -1, -1
 	for i, r := range rows {
 		if r.kind == ganttTaskRow {
-			if primera < 0 {
-				primera = i
+			if first < 0 {
+				first = i
 			}
-			ultima = i
+			last = i
 		}
 	}
-	if ultima <= primera {
-		t.Fatalf("el fixture necesita varias filas de tarea, hay %d..%d", primera, ultima)
+	if last <= first {
+		t.Fatalf("the fixture needs several task rows, there are %d..%d", first, last)
 	}
 
-	// Un alto que no deja ver todas las filas, con el cursor al final: la ventana
-	// se desplaza y el índice dibujado deja de ser cero.
-	m.ganttCursor = ultima
+	// A height that does not show all the rows, with the cursor at the end:
+	// the window scrolls and the drawn index stops being zero.
+	m.ganttCursor = last
 	out := ansi.Strip(m.renderGantt(listFixedRows + ganttRulerRows + 3))
 	if !strings.Contains(out, "> #") {
-		t.Fatalf("no hay ninguna fila resaltada:\n%s", out)
+		t.Fatalf("there is no highlighted row:\n%s", out)
 	}
-	if want := fmt.Sprintf("> #%d", rows[ultima].entry.Task.ID); !strings.Contains(out, want) {
-		t.Errorf("la fila resaltada no es la del cursor (%s):\n%s", want, out)
+	if want := fmt.Sprintf("> #%d", rows[last].entry.Task.ID); !strings.Contains(out, want) {
+		t.Errorf("the highlighted row is not the cursor's (%s):\n%s", want, out)
 	}
-	// La ventana no deja ver más de las tres filas que caben. Se cuenta por el
-	// prefijo de tarea y no por el número de tarea: los ids del fixture van del 1
-	// al 12, así que "#1" también aparece dentro de "#11".
-	dibujadas := 0
-	for _, linea := range strings.Split(out, "\n") {
-		if strings.Contains(linea, "#") && strings.Contains(linea, "tarea") {
-			dibujadas++
+	// The window does not show more than the three rows that fit. It is
+	// counted by the task prefix "#": task rows carry it, person headers do
+	// not, and each drawn row is counted once regardless of its id ("#1" is
+	// also inside "#11").
+	drawn := 0
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "#") {
+			drawn++
 		}
 	}
-	if dibujadas != 3 {
-		t.Errorf("se dibujan %d filas de tarea, want 3 (las que caben)", dibujadas)
+	if drawn != 3 {
+		t.Errorf("%d task rows are drawn, want 3 (the ones that fit)", drawn)
 	}
-	// Y hay exactamente una fila resaltada: la del cursor.
+	// And there is exactly one highlighted row: the cursor's.
 	if n := strings.Count(out, "> #"); n != 1 {
-		t.Errorf("hay %d filas resaltadas, want 1:\n%s", n, out)
+		t.Errorf("there are %d highlighted rows, want 1:\n%s", n, out)
 	}
 }

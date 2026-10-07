@@ -10,131 +10,131 @@ import (
 	"tsk/internal/db"
 )
 
-// El contrato de la CLI para un agente IA es que todo fallo salga como JSON por
-// stderr con código 1. Eso significa que cada `if err != nil` de cada comando es
-// una línea de contrato, no una manejo interno: si uno se cuela, el agente se
-// queda sin diagnóstico.
+// The CLI contract for an AI agent is that every failure comes out as JSON on
+// stderr with code 1. That means every `if err != nil` of every command is
+// a contract line, not internal handling: if one slips through, the agent is
+// left without a diagnosis.
 //
-// Lo que no se probaba era ninguno de ellos. Todos se alcanzan por la misma vía:
-// una base de datos que responde bien al leer y mal al escribir, o que no
-// responde a nada.
+// What was not tested was any of them. They are all reached the same way:
+// a database that reads fine and writes badly, or that does not
+// respond at all.
 
-// conDBRota apunta la config a una ruta que no es una base de datos: la
-// conexión se abre -- sql.Open con modernc nunca falla -- pero cualquier
-// consulta falla. Es el fallo más temprano posible.
-func conDBRota(t *testing.T) {
+// withBrokenDB points the config at a path that is not a database: the
+// connection opens -- sql.Open with modernc never fails -- but any
+// query fails. It is the earliest failure possible.
+func withBrokenDB(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
-	ruta := filepath.Join(dir, "no-es-una-base")
-	if err := os.MkdirAll(ruta, 0o755); err != nil {
+	dbPath := filepath.Join(dir, "no-es-una-base")
+	if err := os.MkdirAll(dbPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	apuntarConfig(t, ruta)
+	setConfigPath(t, dbPath)
 }
 
-// conDBSoloLectura deja una base de datos real y legible pero de la que no se
-// puede escribir. Es la única forma de alcanzar los errores de escritura de los
-// comandos que antes leen.
+// withReadOnlyDB leaves a real, readable database that cannot be
+// written to. It is the only way to reach the write errors of the
+// commands that read first.
 //
-// Se hace con triggers y no con permisos: SQLite escribe en el WAL, que sigue
-// siendo escribible aunque el fichero principal no lo sea, así que chmod no
-// impide la escritura. Un trigger que aborta sí, y además pinpointa la tabla.
-func conDBSoloLectura(t *testing.T) string {
+// It is done with triggers and not with permissions: SQLite writes to the WAL, which
+// stays writable even when the main file is not, so chmod does
+// prevent the write. An aborting trigger does, and it also pinpoints the table.
+func withReadOnlyDB(t *testing.T) string {
 	t.Helper()
-	ruta := conDBReal(t)
+	dbPath := withRealDB(t)
 
-	escritor, err := db.Open(ruta)
+	writer, err := db.Open(dbPath)
 	if err != nil {
-		t.Fatalf("abrir la base para sabotearla: %v", err)
+		t.Fatalf("opening the database to sabotage it: %v", err)
 	}
-	defer func() { _ = escritor.Close() }()
+	defer func() { _ = writer.Close() }()
 
-	for _, tabla := range []string{"tasks", "projects", "comments", "offdays"} {
-		stmt := `CREATE TRIGGER solo_lectura_` + tabla + ` BEFORE INSERT ON ` + tabla +
-			` BEGIN SELECT RAISE(ABORT, 'base de sólo lectura'); END`
-		if _, err := escritor.Conn().Exec(stmt); err != nil {
-			t.Fatalf("trigger de %s: %v", tabla, err)
+	for _, table := range []string{"tasks", "projects", "comments", "offdays"} {
+		stmt := `CREATE TRIGGER read_only_` + table + ` BEFORE INSERT ON ` + table +
+			` BEGIN SELECT RAISE(ABORT, 'read-only database'); END`
+		if _, err := writer.Conn().Exec(stmt); err != nil {
+			t.Fatalf("trigger for %s: %v", table, err)
 		}
-		stmt = `CREATE TRIGGER solo_lectura_upd_` + tabla + ` BEFORE UPDATE ON ` + tabla +
-			` BEGIN SELECT RAISE(ABORT, 'base de sólo lectura'); END`
-		if _, err := escritor.Conn().Exec(stmt); err != nil {
-			t.Fatalf("trigger de %s: %v", tabla, err)
+		stmt = `CREATE TRIGGER read_only_upd_` + table + ` BEFORE UPDATE ON ` + table +
+			` BEGIN SELECT RAISE(ABORT, 'read-only database'); END`
+		if _, err := writer.Conn().Exec(stmt); err != nil {
+			t.Fatalf("trigger for %s: %v", table, err)
 		}
-		stmt = `CREATE TRIGGER solo_lectura_del_` + tabla + ` BEFORE DELETE ON ` + tabla +
-			` BEGIN SELECT RAISE(ABORT, 'base de sólo lectura'); END`
-		if _, err := escritor.Conn().Exec(stmt); err != nil {
-			t.Fatalf("trigger de %s: %v", tabla, err)
+		stmt = `CREATE TRIGGER read_only_del_` + table + ` BEFORE DELETE ON ` + table +
+			` BEGIN SELECT RAISE(ABORT, 'read-only database'); END`
+		if _, err := writer.Conn().Exec(stmt); err != nil {
+			t.Fatalf("trigger for %s: %v", table, err)
 		}
-	}
-
-	// Comprobación de que el sabotaje funciona: una escritura tiene que fallar.
-	if _, err := escritor.Conn().Exec(`UPDATE tasks SET title = 'x'`); err == nil {
-		t.Fatal("el sabotaje no impide escribir")
-	}
-	// Y una lectura sigue funcionando.
-	if _, err := escritor.Conn().Exec(`SELECT 1`); err != nil {
-		t.Fatalf("el sabotaje ha roto la lectura: %v", err)
 	}
 
-	return ruta
+	// Check that the sabotage works: a write has to fail.
+	if _, err := writer.Conn().Exec(`UPDATE tasks SET title = 'x'`); err == nil {
+		t.Fatal("the sabotage does not prevent writes")
+	}
+	// And a read still works.
+	if _, err := writer.Conn().Exec(`SELECT 1`); err != nil {
+		t.Fatalf("the sabotage broke reads: %v", err)
+	}
+
+	return dbPath
 }
 
-// conDBReal crea una base de datos con un proyecto y una tarea, y devuelve la
-// ruta.
-func conDBReal(t *testing.T) string {
+// withRealDB creates a database with a project and a task, and returns the
+// path.
+func withRealDB(t *testing.T) string {
 	t.Helper()
-	ruta := conDBVacia(t)
-	salida, code := run(t, "project", "add", "api", "--workflow", "backlog,done")
+	dbPath := withEmptyDB(t)
+	output, code := run(t, "project", "add", "api", "--workflow", "backlog,done")
 	if code != 0 {
-		t.Fatalf("project add: %s", salida)
+		t.Fatalf("project add: %s", output)
 	}
-	if _, code := run(t, "add", "una tarea", "--project", "api", "--priority", "1"); code != 0 {
-		t.Fatal("add ha fallado")
+	if _, code := run(t, "add", "a task", "--project", "api", "--priority", "1"); code != 0 {
+		t.Fatal("add failed")
 	}
-	return ruta
+	return dbPath
 }
 
-func conDBVacia(t *testing.T) string {
+func withEmptyDB(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	ruta := filepath.Join(dir, "tsk.db")
-	apuntarConfig(t, ruta)
-	return ruta
+	dbPath := filepath.Join(dir, "tsk.db")
+	setConfigPath(t, dbPath)
+	return dbPath
 }
 
-// apuntarConfig escribe un config que apunta a la ruta dada.
-func apuntarConfig(t *testing.T, ruta string) {
+// setConfigPath writes a config that points at the given path.
+func setConfigPath(t *testing.T, dbPath string) {
 	t.Helper()
 	cfg := filepath.Join(t.TempDir(), "config.toml")
-	body := "[database]\npath = \"" + ruta + "\"\n"
+	body := "[database]\npath = \"" + dbPath + "\"\n"
 	if err := os.WriteFile(cfg, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("TSK_CONFIG", cfg)
 }
 
-// Cuando la base de datos no se puede ni abrir, todos los comandos tienen que
-// salir con 1 y un JSON de error. openDB aborta antes de despachar, así que esto
-// no ejercita las ramas de error de cada comando: las ejercitan los sabotajes
-// de más abajo. Lo que comprueba es que ninguna commande se quede con un 0
-// silencioso por no poder abrir la base.
+// When the database cannot even be opened, every command has to
+// exit with 1 and an error JSON. openDB aborts before dispatching, so this
+// does not exercise the error branches of each command: the sabotage below
+// does. What it checks is that no command stays with a silent
+// 0 because it could not open the database.
 func TestEveryCommandFailsWhenTheDatabaseCannotBeOpened(t *testing.T) {
 	for _, args := range [][]string{
 		{"project", "list"},
 		{"project", "list", "--archived"},
 		{"project", "show", "api"},
-		{"project", "update", "api", "--name", "otro"},
+		{"project", "update", "api", "--name", "other"},
 		{"project", "remove", "api"},
 		{"project", "archive", "api"},
 		{"project", "unarchive", "api"},
 		{"list"},
 		{"list", "--project", "api"},
 		{"show", "1"},
-		{"comment", "add", "1", "hola"},
+		{"comment", "add", "1", "hello"},
 		{"comment", "list", "1"},
 		{"comment", "remove", "1"},
 		{"offday", "list"},
-		{"offday", "add", "@juan", "2026-01-01", "2026-01-02"},
+		{"offday", "add", "@john", "2026-01-01", "2026-01-02"},
 		{"offday", "delete", "1"},
 		{"gantt"},
 		{"gantt", "--project", "api"},
@@ -144,69 +144,69 @@ func TestEveryCommandFailsWhenTheDatabaseCannotBeOpened(t *testing.T) {
 		{"stats"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			conDBRota(t)
+			withBrokenDB(t)
 			_, code := run(t, args...)
 			if code != 1 {
-				t.Errorf("el código de salida es %d, want 1", code)
+				t.Errorf("exit code is %d, want 1", code)
 			}
 		})
 	}
 }
 
-// Los errores de escritura de los comandos que primero leen la tarea: update con
-// tags, start, done y cancel. La lectura va bien, la escritura no, y el comando
-// tiene que decirlo.
+// The write errors of the commands that read the task first: update with
+// tags, start, done and cancel. The read works, the write does not, and the command
+// has to say so.
 func TestWriteCommandsFailWhenTheDatabaseIsReadOnly(t *testing.T) {
-	conDBSoloLectura(t)
+	withReadOnlyDB(t)
 
 	for _, args := range [][]string{
 		{"start", "1"},
 		{"done", "1"},
 		{"cancel", "1"},
-		{"update", "1", "--tags", "nueva"},
-		{"update", "1", "--untag", "nueva"},
-		{"update", "1", "--tag", "nueva"},
-		{"update", "1", "--title", "otro"},
-		{"comment", "add", "1", "hola"},
+		{"update", "1", "--tags", "new"},
+		{"update", "1", "--untag", "new"},
+		{"update", "1", "--tag", "new"},
+		{"update", "1", "--title", "other"},
+		{"comment", "add", "1", "hello"},
 		{"comment", "remove", "1"},
-		{"offday", "add", "@juan", "2026-01-01", "2026-01-02"},
+		{"offday", "add", "@john", "2026-01-01", "2026-01-02"},
 		{"offday", "delete", "1"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			_, code := run(t, args...)
 			if code != 1 {
-				t.Errorf("el código de salida es %d, want 1 con la base de sólo lectura", code)
+				t.Errorf("exit code is %d, want 1 with the read-only database", code)
 			}
 		})
 	}
 }
 
-// Los errores de escritura de los comandos de proyecto, que no leen antes de
-// escribir.
+// The write errors of the project commands, which do not read before
+// writing.
 func TestProjectWritesFailOnAReadOnlyDatabase(t *testing.T) {
-	conDBSoloLectura(t)
+	withReadOnlyDB(t)
 
 	for _, args := range [][]string{
-		{"project", "add", "otro"},
-		{"project", "update", "api", "--name", "otro"},
+		{"project", "add", "other"},
+		{"project", "update", "api", "--name", "other"},
 		{"project", "remove", "api"},
 		{"project", "archive", "api"},
 		{"project", "unarchive", "api"},
-		{"add", "una tarea nueva", "--project", "api"},
+		{"add", "a new task", "--project", "api"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			_, code := run(t, args...)
 			if code != 1 {
-				t.Errorf("el código de salida es %d, want 1", code)
+				t.Errorf("exit code is %d, want 1", code)
 			}
 		})
 	}
 }
 
-// La ruta de la base de datos sale de la config; si la config no la trae, sale
-// de XDG. Sin ninguno de los dos -- y sin HOME -- no hay dónde abrir nada.
+// The database path comes from the config; if the config does not bring it, it
+// comes from XDG. With neither -- and without HOME -- there is nowhere to open anything.
 func TestDBPathResolution(t *testing.T) {
-	t.Run("sin HOME ni XDG", func(t *testing.T) {
+	t.Run("without HOME or XDG", func(t *testing.T) {
 		dir := t.TempDir()
 		cfg := filepath.Join(dir, "config.toml")
 		if err := os.WriteFile(cfg, nil, 0o600); err != nil {
@@ -218,24 +218,24 @@ func TestDBPathResolution(t *testing.T) {
 
 		_, code := run(t, "project", "list")
 		if code != 1 {
-			t.Errorf("sin ruta de base de datos el código es %d, want 1", code)
+			t.Errorf("without a database path the code is %d, want 1", code)
 		}
 	})
 
-	t.Run("una ruta que no se puede crear", func(t *testing.T) {
-		bloque := filepath.Join(t.TempDir(), "bloque")
-		if err := os.WriteFile(bloque, []byte("x"), 0o600); err != nil {
+	t.Run("a path that cannot be created", func(t *testing.T) {
+		blocker := filepath.Join(t.TempDir(), "blocker")
+		if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		apuntarConfig(t, filepath.Join(bloque, "sub", "tsk.db"))
+		setConfigPath(t, filepath.Join(blocker, "sub", "tsk.db"))
 
 		_, code := run(t, "project", "list")
 		if code != 1 {
-			t.Errorf("con una ruta imposible el código es %d, want 1", code)
+			t.Errorf("with an impossible path the code is %d, want 1", code)
 		}
 	})
 
-	t.Run("sin ruta en la config se usa la de XDG", func(t *testing.T) {
+	t.Run("with no path in the config the XDG one is used", func(t *testing.T) {
 		dir := t.TempDir()
 		cfg := filepath.Join(dir, "config.toml")
 		if err := os.WriteFile(cfg, nil, 0o600); err != nil {
@@ -244,20 +244,20 @@ func TestDBPathResolution(t *testing.T) {
 		t.Setenv("TSK_CONFIG", cfg)
 		t.Setenv("XDG_DATA_HOME", dir)
 
-		salida, code := run(t, "project", "add", "api")
+		output, code := run(t, "project", "add", "api")
 		if code != 0 {
-			t.Fatalf("project add: %s", salida)
+			t.Fatalf("project add: %s", output)
 		}
 		if _, err := os.Stat(filepath.Join(dir, "tsk", "tsk.db")); err != nil {
-			t.Errorf("no se ha creado la base de datos de XDG: %v", err)
+			t.Errorf("the XDG database was not created: %v", err)
 		}
 	})
 }
 
-// Los mensajes de uso son parte del contrato: un agente que se equivoca de
-// argumentos tiene que leer un texto que le diga cuáles son válidos.
+// Usage messages are part of the contract: an agent that gets the
+// arguments wrong has to read a text that tells it which ones are valid.
 func TestUsageErrors(t *testing.T) {
-	conDBVacia(t)
+	withEmptyDB(t)
 
 	for _, tc := range []struct {
 		args []string
@@ -269,12 +269,12 @@ func TestUsageErrors(t *testing.T) {
 		{[]string{"project", "remove"}, "usage: tsk project remove"},
 		{[]string{"project", "archive"}, "usage: tsk project archive"},
 		{[]string{"project", "unarchive"}, "usage: tsk project unarchive"},
-		{[]string{"project", "lo-que-sea"}, "unknown project subcommand: lo-que-sea"},
+		{[]string{"project", "whatever"}, "unknown project subcommand: whatever"},
 		{[]string{"completion", "tcsh"}, "usage: tsk completion"},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
-			capture(t)
-			errs := &cola{}
+			captureOutput(t)
+			errs := &capture{}
 			origErr := stderr
 			stderr = errs
 			t.Cleanup(func() { stderr = origErr })
@@ -294,66 +294,66 @@ func TestUsageErrors(t *testing.T) {
 			}()
 
 			if code != 1 {
-				t.Errorf("el código de salida es %d, want 1", code)
+				t.Errorf("exit code is %d, want 1", code)
 			}
 			if !strings.Contains(errs.String(), tc.want) {
-				t.Errorf("el error no dice %q: %s", tc.want, errs.String())
+				t.Errorf("the error does not say %q: %s", tc.want, errs.String())
 			}
 		})
 	}
 }
 
-// gantt acepta una fecha de arranque y un número de semanas. Una fecha que no
-// es una fecha tiene que producir un error que la diga, no una gantt con fechas a
-// cero; y un --weeks que no es un número se ignora en vez de tumbar el comando.
+// gantt takes a start date and a number of weeks. A date that is
+// not a date has to produce an error saying so, not a gantt with zero dates;
+// and a --weeks that is not a number is ignored instead of taking down the command.
 func TestGanttRejectsABadDate(t *testing.T) {
-	conDBReal(t)
+	withRealDB(t)
 
-	t.Run("--from inválido", func(t *testing.T) {
-		_, code := run(t, "gantt", "--from", "ayer")
+	t.Run("--from invalid", func(t *testing.T) {
+		_, code := run(t, "gantt", "--from", "yesterday")
 		if code != 1 {
-			t.Errorf("con --from inválido el código es %d, want 1", code)
+			t.Errorf("with an invalid --from the code is %d, want 1", code)
 		}
 	})
 
-	t.Run("--from sin valor", func(t *testing.T) {
-		// El flag sin lo que sigue se ignora en vez de comerse el argumento
-		// siguiente: es el contrato de los flags de la CLI.
+	t.Run("--from without a value", func(t *testing.T) {
+		// A flag without what follows is ignored instead of eating the next
+		// argument: it is the contract of the CLI's flags.
 		if _, code := run(t, "gantt", "--from"); code != 0 {
-			t.Errorf("con --from solo el código es %d, want 0", code)
+			t.Errorf("with only --from the code is %d, want 0", code)
 		}
 	})
 
-	t.Run("sin shell", func(t *testing.T) {
-		// Sin argumento no hay shell y el comando no hace nada, en vez de
-		// imprimir el completado equivocado.
+	t.Run("without a shell", func(t *testing.T) {
+		// Without an argument there is no shell and the command does nothing, instead of
+		// printing the wrong completion.
 		if _, code := run(t, "completion"); code != 0 {
-			t.Errorf("completion sin shell tiene el código %d, want 0", code)
+			t.Errorf("completion without a shell has code %d, want 0", code)
 		}
 	})
 
-	t.Run("--weeks que no es un número", func(t *testing.T) {
-		// Un --weeks inválido no es un error: se ignora y gana el de la config.
-		// Lo que no puede ser es un rango de semanas negativo.
-		if _, code := run(t, "gantt", "--weeks", "muchas"); code != 0 {
-			t.Errorf("con --weeks inválido el código es %d, want 0", code)
+	t.Run("--weeks that is not a number", func(t *testing.T) {
+		// An invalid --weeks is not an error: it is ignored and the config's wins.
+		// What it cannot be is a negative weeks range.
+		if _, code := run(t, "gantt", "--weeks", "many"); code != 0 {
+			t.Errorf("with an invalid --weeks the code is %d, want 0", code)
 		}
 		if _, code := run(t, "gantt", "--weeks", "-3"); code != 0 {
-			t.Errorf("con --weeks negativo el código es %d, want 0", code)
+			t.Errorf("with a negative --weeks the code is %d, want 0", code)
 		}
 	})
 
-	t.Run("--from bueno", func(t *testing.T) {
+	t.Run("a good --from", func(t *testing.T) {
 		if _, code := run(t, "gantt", "--from", "2026-01-01", "--json"); code != 0 {
-			t.Errorf("con una fecha válida el código es %d, want 0", code)
+			t.Errorf("with a valid date the code is %d, want 0", code)
 		}
 	})
 }
 
-// project add con un workflow que no se puede parsear: la lista es sólo de
-// comas, que es el caso que el parser rechaza.
+// project add with a workflow that cannot be parsed: the list is only
+// commas, which is the case the parser rejects.
 func TestProjectAddWithUnparseableLists(t *testing.T) {
-	conDBVacia(t)
+	withEmptyDB(t)
 
 	for _, args := range [][]string{
 		{"project", "add", "api", "--workflow", " , "},
@@ -362,21 +362,21 @@ func TestProjectAddWithUnparseableLists(t *testing.T) {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			_, code := run(t, args...)
 			if code != 1 {
-				t.Errorf("el código de salida es %d, want 1", code)
+				t.Errorf("exit code is %d, want 1", code)
 			}
 		})
 	}
 }
 
-// Las ramas de error por comando necesitan una base de datos que abra y migre
-// bien -- si no, openDB aborta antes de llegar al comando -- pero cuya lectura
-// falle. La forma es la misma que en internal/db: recrear la tabla sin clave
-// primaria y meter una fila con un id que no es un número, para que cualquier
-// Scan sobre ella reviente.
+// The per-command error branches need a database that opens and migrates
+// well -- otherwise openDB aborts before reaching the command -- but whose reads
+// fail. The trick is the same as in internal/db: recreate the table without a primary
+// key and insert a row whose id is not a number, so that any
+// Scan over it blows up.
 //
-// Cada fila lleva todos sus valores porque las columnas se recrean sin DEFAULT:
-// una columna a NULL no cumple un WHERE ni una igualdad, y el veneno se
-// colaría sin disparar el error que se quiere provocar.
+// Every row carries all its values because the columns are recreated without DEFAULT:
+// a NULL column matches neither a WHERE nor an equality, and the poison would
+// slip through without triggering the error we want to provoke.
 
 const (
 	ddlProjects = `CREATE TABLE %s (
@@ -389,133 +389,133 @@ const (
 	ddlComments = `CREATE TABLE %s (id TEXT, task_id INTEGER, body TEXT, created_at TEXT)`
 	ddlOffDays  = `CREATE TABLE %s (id TEXT, assignee TEXT, start_date TEXT, end_date TEXT, note TEXT)`
 
-	// Dos filas de veneno en projects: una activa y una archivada. Con una sola,
-	// la consulta que filtra por el otro valor no la ve y sale sin error.
-	filaProjects = `INSERT INTO projects VALUES
-		('ilegible', 'veneno', '[]', '[]', 0, NULL, '2020-01-01', '2020-01-01'),
-		('ilegible', 'veneno-archivado', '[]', '[]', 1, '2020-01-01', '2020-01-01', '2020-01-01')`
-	filaTasks = `INSERT INTO tasks VALUES
-		('ilegible', 1, 'veneno', '', 'backlog', 0, '', 0, '[]', '2020-01-01', '2020-01-01', NULL)`
-	filaComments = `INSERT INTO comments VALUES
-		('ilegible', 1, 'veneno', '2020-01-01')`
-	filaOffDays = `INSERT INTO offdays VALUES
-		('ilegible', '@juan', '2020-01-01', '2020-01-02', 'veneno')`
+	// Two poison rows in projects: one active and one archived. With a single one,
+	// the query filtering by the other value does not see it and returns without error.
+	rowProjects = `INSERT INTO projects VALUES
+		('unreadable', 'poison', '[]', '[]', 0, NULL, '2020-01-01', '2020-01-01'),
+		('unreadable', 'poison-archived', '[]', '[]', 1, '2020-01-01', '2020-01-01', '2020-01-01')`
+	rowTasks = `INSERT INTO tasks VALUES
+		('unreadable', 1, 'poison', '', 'backlog', 0, '', 0, '[]', '2020-01-01', '2020-01-01', NULL)`
+	rowComments = `INSERT INTO comments VALUES
+		('unreadable', 1, 'poison', '2020-01-01')`
+	rowOffDays = `INSERT INTO offdays VALUES
+		('unreadable', '@john', '2020-01-01', '2020-01-02', 'poison')`
 )
 
-// romperTabla deja la tabla indicada ilegible y devuelve la ruta de la base de
-// datos, ya sembrada.
-func romperTabla(t *testing.T, tabla, ddl, fila string) string {
+// breakTable leaves the given table unreadable and returns the path of the
+// database, already seeded.
+func breakTable(t *testing.T, table, ddl, row string) string {
 	t.Helper()
-	ruta := conDBReal(t)
+	dbPath := withRealDB(t)
 
-	escritor, err := db.Open(ruta)
+	writer, err := db.Open(dbPath)
 	if err != nil {
-		t.Fatalf("abrir la base: %v", err)
+		t.Fatalf("opening the database: %v", err)
 	}
-	defer func() { _ = escritor.Close() }()
+	defer func() { _ = writer.Close() }()
 
-	conn := escritor.Conn()
+	conn := writer.Conn()
 	if _, err := conn.Exec(`PRAGMA foreign_keys(OFF)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(`ALTER TABLE ` + tabla + ` RENAME TO ` + tabla + `_sana`); err != nil {
-		t.Fatalf("renombrar %s: %v", tabla, err)
+	if _, err := conn.Exec(`ALTER TABLE ` + table + ` RENAME TO ` + table + `_healthy`); err != nil {
+		t.Fatalf("renaming %s: %v", table, err)
 	}
-	if _, err := conn.Exec(fmt.Sprintf(ddl, tabla)); err != nil {
-		t.Fatalf("recrear %s: %v", tabla, err)
+	if _, err := conn.Exec(fmt.Sprintf(ddl, table)); err != nil {
+		t.Fatalf("recreating %s: %v", table, err)
 	}
-	if _, err := conn.Exec(fila); err != nil {
-		t.Fatalf("insertar la fila venenosa en %s: %v", tabla, err)
+	if _, err := conn.Exec(row); err != nil {
+		t.Fatalf("inserting the poison row into %s: %v", table, err)
 	}
 	if _, err := conn.Exec(`PRAGMA foreign_keys(ON)`); err != nil {
 		t.Fatal(err)
 	}
 
-	return ruta
+	return dbPath
 }
 
-// Los listados que se ejecutan con la tabla correspondiente rota.
+// The listings that run with the corresponding table broken.
 func TestReadsFailWhenTheirTableIsUnreadable(t *testing.T) {
-	t.Run("proyectos", func(t *testing.T) {
-		apuntarConfig(t, romperTabla(t, "projects", ddlProjects, filaProjects))
-		comprobarFalla(t, "project", "list")
-		comprobarFalla(t, "project", "list", "--archived")
-		comprobarFalla(t, "project", "show", "api")
-		comprobarFalla(t, "project", "update", "api", "--name", "otro")
+	t.Run("projects", func(t *testing.T) {
+		setConfigPath(t, breakTable(t, "projects", ddlProjects, rowProjects))
+		expectFailure(t, "project", "list")
+		expectFailure(t, "project", "list", "--archived")
+		expectFailure(t, "project", "show", "api")
+		expectFailure(t, "project", "update", "api", "--name", "other")
 	})
 
-	t.Run("tareas", func(t *testing.T) {
-		apuntarConfig(t, romperTabla(t, "tasks", ddlTasks, filaTasks))
-		comprobarFalla(t, "list")
-		comprobarFalla(t, "show", "1")
-		comprobarFalla(t, "update", "1", "--tag", "nueva")
-		comprobarFalla(t, "update", "1")
-		comprobarFalla(t, "gantt")
+	t.Run("tasks", func(t *testing.T) {
+		setConfigPath(t, breakTable(t, "tasks", ddlTasks, rowTasks))
+		expectFailure(t, "list")
+		expectFailure(t, "show", "1")
+		expectFailure(t, "update", "1", "--tag", "new")
+		expectFailure(t, "update", "1")
+		expectFailure(t, "gantt")
 	})
 
-	t.Run("comentarios", func(t *testing.T) {
-		apuntarConfig(t, romperTabla(t, "comments", ddlComments, filaComments))
-		comprobarFalla(t, "show", "1")
-		comprobarFalla(t, "comment", "list", "1")
-		comprobarFalla(t, "comment", "delete", "1")
+	t.Run("comments", func(t *testing.T) {
+		setConfigPath(t, breakTable(t, "comments", ddlComments, rowComments))
+		expectFailure(t, "show", "1")
+		expectFailure(t, "comment", "list", "1")
+		expectFailure(t, "comment", "delete", "1")
 	})
 
 	t.Run("off-days", func(t *testing.T) {
-		apuntarConfig(t, romperTabla(t, "offdays", ddlOffDays, filaOffDays))
-		comprobarFalla(t, "offday", "list")
-		comprobarFalla(t, "gantt")
+		setConfigPath(t, breakTable(t, "offdays", ddlOffDays, rowOffDays))
+		expectFailure(t, "offday", "list")
+		expectFailure(t, "gantt")
 	})
 
-	// Una tabla que no existe es el otro modo de fallo: la consulta se prepara
-	// bien pero no encuentra la tabla. Afecta a todo lo que la use en un JOIN,
-	// que es el caso de stats: su COUNT cuenta sólo tareas de proyectos no
-	// archivados, así que sin projects no hay nada que contar y el comando tiene
-	// que decirlo en vez de sacar un total de cero.
-	t.Run("proyectos desaparecido", func(t *testing.T) {
-		apuntarConfig(t, borrarTabla(t, "projects"))
-		comprobarFalla(t, "stats")
+	// A table that does not exist is the other failure mode: the query prepares
+	// fine but does not find the table. It affects everything that uses it in a JOIN,
+	// which is the case of stats: its COUNT only counts tasks of non-archived
+	// projects, so with no projects there is nothing to count and the command has
+	// to say so instead of producing a zero total.
+	t.Run("vanished projects", func(t *testing.T) {
+		setConfigPath(t, dropTable(t, "projects"))
+		expectFailure(t, "stats")
 	})
 }
 
-// borrarTabla elimina la tabla sin dejar nada en su lugar: la consulta se
-// prepara pero falla al ejecutarse.
-func borrarTabla(t *testing.T, tabla string) string {
+// dropTable drops the table leaving nothing in its place: the query
+// prepares but fails when executed.
+func dropTable(t *testing.T, table string) string {
 	t.Helper()
-	ruta := conDBReal(t)
+	dbPath := withRealDB(t)
 
-	escritor, err := db.Open(ruta)
+	writer, err := db.Open(dbPath)
 	if err != nil {
-		t.Fatalf("abrir la base: %v", err)
+		t.Fatalf("opening the database: %v", err)
 	}
-	defer func() { _ = escritor.Close() }()
+	defer func() { _ = writer.Close() }()
 
-	conn := escritor.Conn()
+	conn := writer.Conn()
 	if _, err := conn.Exec(`PRAGMA foreign_keys(OFF)`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := conn.Exec(`DROP TABLE ` + tabla); err != nil {
-		t.Fatalf("DROP TABLE %s: %v", tabla, err)
+	if _, err := conn.Exec(`DROP TABLE ` + table); err != nil {
+		t.Fatalf("DROP TABLE %s: %v", table, err)
 	}
 	if _, err := conn.Exec(`PRAGMA foreign_keys(ON)`); err != nil {
 		t.Fatal(err)
 	}
 
-	return ruta
+	return dbPath
 }
 
-func comprobarFalla(t *testing.T, args ...string) {
+func expectFailure(t *testing.T, args ...string) {
 	t.Helper()
 	t.Run(strings.Join(args, " "), func(t *testing.T) {
 		if _, code := run(t, args...); code != 1 {
-			t.Errorf("el código es %d, want 1", code)
+			t.Errorf("the code is %d, want 1", code)
 		}
 	})
 }
 
-// Editar un proyecto con una lista que no se puede parsear falla antes de
-// tocar la base: el error es del parser, no de la escritura.
+// Editing a project with a list that cannot be parsed fails before
+// touching the database: the error is the parser's, not the write's.
 func TestProjectUpdateRejectsUnparseableLists(t *testing.T) {
-	conDBReal(t)
+	withRealDB(t)
 
 	for _, args := range [][]string{
 		{"project", "update", "api", "--workflow", " , "},
@@ -523,7 +523,7 @@ func TestProjectUpdateRejectsUnparseableLists(t *testing.T) {
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			if _, code := run(t, args...); code != 1 {
-				t.Errorf("el código es %d, want 1", code)
+				t.Errorf("the code is %d, want 1", code)
 			}
 		})
 	}

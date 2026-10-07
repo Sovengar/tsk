@@ -12,12 +12,12 @@ import (
 	"tsk/internal/model"
 )
 
-// El Dashboard junta tres bloques con budgets de filas y un filtro por proyecto.
-// Su aritmética está en el render y comparar "sale la palabra" no la ve: un
-// signo movido en el total cambia el número, y una condición de tope mal puesta
-// cambia cuántas filas caben sin quitar ninguna palabra de la pantalla.
+// The Dashboard puts together three blocks with row budgets and a project filter.
+// Its arithmetic is in the render and comparing "the word shows up" does not
+// see it: a moved sign in the total changes the number, and a badly placed cap
+// condition changes how many rows fit without removing any word from the screen.
 
-// dashRender devuelve el dashboard renderizado, sin colores.
+// dashRender returns the rendered dashboard, without colors.
 func dashRender(t *testing.T, m *Model) string {
 	t.Helper()
 	m.currentView = viewDashboard
@@ -26,14 +26,14 @@ func dashRender(t *testing.T, m *Model) string {
 	return ansi.Strip(m.renderDashboard(40))
 }
 
-// newDashModel parte del modelo de test, con el filtro por proyecto apuntando a
-// project y sin filtro de estado, para que el recorte sea observable.
+// newDashModel starts from the test model, with the project filter pointing
+// at project and no status filter, so that the truncation is observable.
 //
-// El recorte por proyecto del Dashboard NO es el filtro general: sale del
-// selector de proyecto propio, el "[api(3)]" de la línea de arriba. Se elige con
-// dashProjectIdx, y -1 es "todos". Por defecto New lo deja en el primer
-// proyecto, así que sin tocarlo el Overview contaría un solo proyecto siempre y
-// el filtro general no tendría efecto ninguno sobre esta vista.
+// The Dashboard's project truncation is NOT the general filter: it comes out
+// of its own project picker, the "[api(3)]" of the line above. It is chosen
+// with dashProjectIdx, and -1 is "all". By default New leaves it on the first
+// project, so without touching it the Overview would always count a single
+// project and the general filter would have no effect at all on this view.
 func newDashModel(t *testing.T, project string) *Model {
 	t.Helper()
 	m := newTestModel(t)
@@ -49,70 +49,70 @@ func newDashModel(t *testing.T, project string) *Model {
 			return m
 		}
 	}
-	t.Fatalf("el fixture no tiene el proyecto %q", project)
+	t.Fatalf("the fixture does not have the project %q", project)
 	return m
 }
 
-// El total del Overview es la suma de activas, terminadas y canceladas. Las
-// canceladas van con signo más: el total es "todas las tareas", y con sólo
-// activas y hechas una tarea cancelada se contaría por su ausencia.
+// The Overview total is the sum of active, completed and cancelled. The
+// cancelled ones go with a plus sign: the total is "all tasks", and with only
+// active and done ones a cancelled task would be counted by its absence.
 func TestDashTotalCountsEveryTask(t *testing.T) {
 	m := newDashModel(t, "")
-	// Los tres sumandos tienen que estar a la vez: con uno a cero, cambiar un signo
-	// o un operador en la suma deja el mismo número y el test no lo ve.
-	mustCreateTask(t, m.database, "api", "cancelada", "", "@juan", 3, model.CancelledStatus)
-	mustCreateTask(t, m.database, "api", "terminada", "", "@juan", 2, model.DoneStatus)
+	// The three addends have to be there at once: with one at zero, changing a
+	// sign or an operator in the sum leaves the same number and the test does not see it.
+	mustCreateTask(t, m.database, "api", "cancelled", "", "@john", 3, model.CancelledStatus)
+	mustCreateTask(t, m.database, "api", "finished", "", "@john", 2, model.DoneStatus)
 	reloadTasks(t, m)
-	activas, hechas, canceladas, _ := dashStatusCounts(m.tasks, "")
-	todas := activas + hechas + canceladas
-	if activas == 0 || hechas == 0 || canceladas == 0 {
-		t.Fatalf("el fixture necesita los tres sumandos a la vez, tiene %d/%d/%d",
-			activas, hechas, canceladas)
+	active, done, cancelled, _ := dashStatusCounts(m.tasks, "")
+	total := active + done + cancelled
+	if active == 0 || done == 0 || cancelled == 0 {
+		t.Fatalf("the fixture needs all three addends at once, it has %d/%d/%d",
+			active, done, cancelled)
 	}
 
 	out := dashRender(t, m)
-	if want := "  Total         " + strconv.Itoa(todas); !strings.Contains(out, want) {
-		t.Errorf("el total no dice %q:\n%s", want, out)
+	if want := "  Total         " + strconv.Itoa(total); !strings.Contains(out, want) {
+		t.Errorf("the total does not say %q:\n%s", want, out)
 	}
 
-	// La línea de proyectos lista los proyectos con su recuento. Sin esto, una
-	// condición que se disparara siempre -- del tipo "si no hay partes, muestra
-	// (none)"Evaluate mal puesta -- pasaría el test del total.
+	// The projects line lists the projects with their count. Without this, a
+	// condition that always fired -- of the kind "if there are no items, show
+	// (none)" badly placed -- would pass the total test.
 	if !strings.Contains(out, "api(") || !strings.Contains(out, "web(") {
-		t.Errorf("la línea de proyectos no lista los proyectos:\n%s", out)
+		t.Errorf("the projects line does not list the projects:\n%s", out)
 	}
 	if strings.Contains(out, "(none)") {
-		t.Errorf("salió (none) con proyectos en la lista:\n%s", out)
+		t.Errorf("(none) came out with projects in the list:\n%s", out)
 	}
 }
 
-// En la línea de proyectos, el que está seleccionado va entre corchetes y
-// resaltado. Con "todos" seleccionados no hay ninguno entre corchetes, y con un
-// proyecto elegido, exactamente ese.
+// On the projects line, the selected one goes between brackets and
+// highlighted. With "all" selected none is between brackets, and with a
+// project chosen, exactly that one.
 //
-// Los corchetes son lo que distingue la condición de su versión negada: marking
-// todos o ninguno deja los nombres en la pantalla igual, así que un test que
-// buscara "api(" no lo notaría.
+// The brackets are what distinguish the condition from its negated version:
+// marking all or none leaves the names on screen the same, so a test that
+// looked for "api(" would not notice it.
 func TestDashSelectedProjectIsBracketed(t *testing.T) {
-	todos := newDashModel(t, "")
-	if n := countBracketed(dashRender(t, todos)); n != 0 {
-		t.Errorf("con \"todos\" seleccionados hay %d proyectos entre corchetes, want 0", n)
+	allSelected := newDashModel(t, "")
+	if n := countBracketed(dashRender(t, allSelected)); n != 0 {
+		t.Errorf("with \"all\" selected there are %d bracketed projects, want 0", n)
 	}
 
 	m := newDashModel(t, "api")
 	out := dashRender(t, m)
 	if n := countBracketed(out); n != 1 {
-		t.Errorf("con api seleccionado hay %d proyectos entre corchetes, want 1:\n%s", n, out)
+		t.Errorf("with api selected there are %d bracketed projects, want 1:\n%s", n, out)
 	}
 	if !strings.Contains(out, "[api(") {
-		t.Errorf("el proyecto entre corchetes no es el seleccionado:\n%s", out)
+		t.Errorf("the bracketed project is not the selected one:\n%s", out)
 	}
 	if strings.Contains(out, "[web(") {
-		t.Errorf("apareció un proyecto que no estaba seleccionado entre corchetes:\n%s", out)
+		t.Errorf("a project that was not selected appeared bracketed:\n%s", out)
 	}
 }
 
-// countBracketed cuenta los pares de corchetes de la línea de proyectos.
+// countBracketed counts the bracket pairs of the projects line.
 func countBracketed(rendered string) int {
 	n := 0
 	for _, line := range strings.Split(rendered, "\n") {
@@ -125,38 +125,38 @@ func countBracketed(rendered string) int {
 	return n
 }
 
-// Con un proyecto seleccionado en el Dashboard, el total cuenta sólo ese
-// proyecto. El fixture reparte cuatro tareas entre "api" y "web", así que el
-// número filtrado y el global no coinciden y un total que se olvidara del
-// proyecto se vería.
+// With a project selected in the Dashboard, the total counts only that
+// project. The fixture spreads four tasks between "api" and "web", so the
+// filtered number and the global one do not match, and a total that forgot
+// the project would show.
 func TestDashTotalRespectsSelectedProject(t *testing.T) {
 	m := newDashModel(t, "api")
 
 	a, d, c, _ := dashStatusCounts(m.tasks, "api")
 	api := a + d + c
 	a, d, c, _ = dashStatusCounts(m.tasks, "")
-	todas := a + d + c
-	if api == todas {
-		t.Fatalf("el fixture no distingue: api=%d, todas=%d", api, todas)
+	total := a + d + c
+	if api == total {
+		t.Fatalf("the fixture does not distinguish: api=%d, all=%d", api, total)
 	}
 
 	out := dashRender(t, m)
 	if !strings.Contains(out, "  Total         "+strconv.Itoa(api)) {
-		t.Errorf("con api seleccionado el total no es %d:\n%s", api, out)
+		t.Errorf("with api selected the total is not %d:\n%s", api, out)
 	}
-	if strings.Contains(out, "  Total         "+strconv.Itoa(todas)) {
-		t.Errorf("el total es el de todos los proyectos (%d), no el de api (%d):\n%s", todas, api, out)
+	if strings.Contains(out, "  Total         "+strconv.Itoa(total)) {
+		t.Errorf("the total is the one of all projects (%d), not api's (%d):\n%s", total, api, out)
 	}
 }
 
-// Un estado sin tareas no sale: el Overview lista los del workflow con barra, y
-// una barra vacía no dice nada.
+// A status with no tasks does not show: the Overview lists the workflow's
+// ones with a bar, and an empty bar says nothing.
 func TestDashOverviewSkipsEmptyStatuses(t *testing.T) {
 	m := newDashModel(t, "")
 
 	out := dashRender(t, m)
-	for _, linea := range strings.Split(out, "\n") {
-		fields := strings.Fields(linea)
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
 		if len(fields) < 2 {
 			continue
 		}
@@ -164,16 +164,16 @@ func TestDashOverviewSkipsEmptyStatuses(t *testing.T) {
 			continue
 		}
 		if len(fields) >= 2 && fields[1] == "0" {
-			t.Errorf("salió un estado con cero tareas: %q", linea)
+			t.Errorf("a status with zero tasks came out: %q", line)
 		}
 	}
 	if !strings.Contains(out, "backlog") {
-		t.Errorf("el estado con tareas no salió:\n%s", out)
+		t.Errorf("the status with tasks did not come out:\n%s", out)
 	}
 }
 
-// Un nombre de estado más largo que 14 columnas se recorta, y el recuento va
-// detrás en su sitio: sin el recorte la barra descuadraría la tabla.
+// A status name longer than 14 columns is truncated, and the count goes
+// behind in its place: without the truncation the bar would throw the table off.
 func TestDashOverviewClipsLongStatusNames(t *testing.T) {
 	database, err := db.NewTestDB()
 	if err != nil {
@@ -181,9 +181,9 @@ func TestDashOverviewClipsLongStatusNames(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = database.Close() })
 
-	largo := "revision-pendiente"
-	mustCreateProject(t, database, "largo", []string{largo, model.DoneStatus})
-	mustCreateTask(t, database, "largo", "tarea", "", "@juan", 1, largo)
+	longStatus := "awaiting-review"
+	mustCreateProject(t, database, "long", []string{longStatus, model.DoneStatus})
+	mustCreateTask(t, database, "long", "task", "", "@john", 1, longStatus)
 
 	m := New(database, config.Defaults())
 	m.width, m.height = 140, 40
@@ -192,38 +192,38 @@ func TestDashOverviewClipsLongStatusNames(t *testing.T) {
 	m.filterStatus = ""
 
 	out := dashRender(t, &m)
-	// El recorte son 14 bytes del nombre entero: "revision-pendi" de 18.
-	if !strings.Contains(out, "revision-pendi 1") {
-		t.Errorf("no se vio el estado recortado a 14:\n%s", out)
+	// The truncation is 14 bytes of the whole name: "awaiting-revie" out of 15.
+	if !strings.Contains(out, "awaiting-revie 1") {
+		t.Errorf("the status clipped to 14 was not seen:\n%s", out)
 	}
-	if strings.Contains(out, largo) {
-		t.Errorf("el estado de %d caracteres salió sin recortar:\n%s", len(largo), out)
+	if strings.Contains(out, longStatus) {
+		t.Errorf("the %d-character status came out unclipped:\n%s", len(longStatus), out)
 	}
 }
 
-// El panel Active sale ordenado y con la cabecera; con el filtro puesto, sólo
-// las tareas del proyecto.
+// The Active panel comes out sorted and with the header; with the filter on,
+// only the project's tasks.
 func TestDashActiveRespectsSelectedProject(t *testing.T) {
 	m := newDashModel(t, "api")
 
 	out := dashRender(t, m)
 	if !strings.Contains(out, "Active") {
-		t.Fatalf("no se ve el panel Active:\n%s", out)
+		t.Fatalf("the Active panel is not visible:\n%s", out)
 	}
 	if strings.Contains(out, "Fix checkout") {
-		t.Errorf("salió una tarea del proyecto filtrado fuera:\n%s", out)
+		t.Errorf("a task of the filtered-out project came out:\n%s", out)
 	}
 	if !strings.Contains(out, "N+1") {
-		t.Errorf("no salió ninguna tarea del proyecto del filtro:\n%s", out)
+		t.Errorf("no task of the filtered project came out:\n%s", out)
 	}
 }
 
-// El panel Active está acotado por el alto disponible: con muchas tareas y poco
-// alto, corta por abajo en vez de desbordar la caja.
+// The Active panel is bounded by the available height: with many tasks and
+// little height it cuts at the bottom instead of overflowing the box.
 func TestDashActiveTruncatesToBudget(t *testing.T) {
 	m := newTestModel(t)
 	for range 20 {
-		mustCreateTask(t, m.database, "api", "tarea extra", "", "@juan", 1, "todo")
+		mustCreateTask(t, m.database, "api", "extra task", "", "@john", 1, "todo")
 	}
 	reloadTasks(t, m)
 	m.filterProject = "api"
@@ -231,35 +231,35 @@ func TestDashActiveTruncatesToBudget(t *testing.T) {
 	m.currentView = viewDashboard
 	m.width, m.height = 140, 40
 
-	holgado := strings.Count(ansi.Strip(m.renderDashboard(40)), "\n")
-	estrecho := strings.Count(ansi.Strip(m.renderDashboard(14)), "\n")
-	if estrecho >= holgado {
-		t.Errorf("con 14 de alto salen %d líneas y con 40 salen %d: el alto no acota",
-			estrecho, holgado)
+	wide := strings.Count(ansi.Strip(m.renderDashboard(40)), "\n")
+	narrow := strings.Count(ansi.Strip(m.renderDashboard(14)), "\n")
+	if narrow >= wide {
+		t.Errorf("at height 14 there are %d lines and at 40 there are %d: the height does not bound",
+			narrow, wide)
 	}
-	if estrecho == 0 {
-		t.Error("con 14 de alto no sale nada")
+	if narrow == 0 {
+		t.Error("at height 14 nothing comes out")
 	}
 }
 
-// El equipo sale ordenado alfabéticamente, que es lo que hace que dos renders
-// seguidos se vean iguales.
+// The team comes out sorted alphabetically, which is what makes two renders
+// in a row look the same.
 func TestDashTeamIsSorted(t *testing.T) {
 	m := newTestModel(t)
-	for _, name := range []string{"@zeta", "@alfa"} {
-		mustCreateTask(t, m.database, "api", "tarea de "+name, "", name, 1, "todo")
+	for _, name := range []string{"@zeta", "@alpha"} {
+		mustCreateTask(t, m.database, "api", "task of "+name, "", name, 1, "todo")
 	}
 	reloadTasks(t, m)
 	m.filterProject = "api"
 	m.filterStatus = ""
 
 	out := dashRender(t, m)
-	iAlfa := strings.Index(out, "@alfa")
+	iAlpha := strings.Index(out, "@alpha")
 	iZeta := strings.Index(out, "@zeta")
-	if iAlfa < 0 || iZeta < 0 {
-		t.Fatalf("faltan personas en el panel de equipo:\n%s", out)
+	if iAlpha < 0 || iZeta < 0 {
+		t.Fatalf("people are missing from the team panel:\n%s", out)
 	}
-	if iAlfa > iZeta {
-		t.Errorf("@zeta sale antes que @alfa: el equipo no va ordenado\n%s", out)
+	if iAlpha > iZeta {
+		t.Errorf("@zeta comes before @alpha: the team is not sorted\n%s", out)
 	}
 }

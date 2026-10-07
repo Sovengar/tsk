@@ -12,11 +12,11 @@ import (
 	"tsk/internal/tui/bordered"
 )
 
-// ganttRulerRows son las filas fijas del Gantt que no son de datos: la regla de
-// semanas y su eje.
+// ganttRulerRows are the fixed rows of the Gantt that are not data: the
+// weeks' ruler and its axis.
 const ganttRulerRows = 2
 
-// ganttRowKind distingue una cabecera de persona de una fila de tarea.
+// ganttRowKind tells a person header from a task row.
 type ganttRowKind int
 
 const (
@@ -24,36 +24,36 @@ const (
 	ganttTaskRow
 )
 
-// ganttRow es una fila navegable del Gantt.
+// ganttRow is a navigable row of the Gantt.
 type ganttRow struct {
 	kind     ganttRowKind
 	assignee string
 	entry    *model.ScheduleEntry
 }
 
-// ganttSchedule proyecta la cola de cada persona a partir de TODAS las tareas
-// y off-days cargados. El punto de partida es hoy. La cola es global: la
-// capacidad de una persona se reparte entre todos sus proyectos, así que las
-// fechas no dependen de qué proyecto estés mirando.
+// ganttSchedule projects each person's queue from ALL the loaded tasks and
+// off-days. The starting point is today. The queue is global: the
+// capacity of a person is spread across all their projects, so the
+// dates do not depend on which project you are looking at.
 func (m *Model) ganttSchedule() *model.Schedule {
 	now := time.Now()
 	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	// El saneo del estimate (0 o negativo -> 1 día) lo hace BuildSchedule. Aquí
-	// había un guard idéntico que sólo podía producir el mismo valor: su mutant
-	// era equivalente por construcción, no una laguna de cobertura.
+	// The estimate sanitizing (0 or negative -> 1 day) is done by BuildSchedule.
+	// There was an identical guard that could only produce the same value: its
+	// mutant was equivalent by construction, not a coverage gap.
 	return model.BuildSchedule(m.tasks, m.offdays, start, m.config.DefaultEstimateDays)
 }
 
-// ganttDisplay aplica los filtros activos como filtro de VISTA sobre la
-// proyección global: sólo decide qué filas se ven, sin recalcular fechas.
+// ganttDisplay applies the active filters as a VIEW filter over the global
+// projection: it only decides which rows are seen, without recalculating dates.
 func (m *Model) ganttDisplay() *model.Schedule {
 	return model.FilterSchedule(m.ganttSchedule(), func(t model.Task) bool {
 		return m.taskMatchesFilter(t)
 	})
 }
 
-// ganttRows aplana un schedule en filas navegables: cabecera por persona y una
-// fila por tarea, en el orden de la cola.
+// ganttRows flattens a schedule into navigable rows: a header per person and
+// one row per task, in the queue's order.
 func ganttRows(s *model.Schedule) []ganttRow {
 	var rows []ganttRow
 	for _, a := range s.Assignees {
@@ -65,18 +65,18 @@ func ganttRows(s *model.Schedule) []ganttRow {
 	return rows
 }
 
-// ganttRows devuelve las filas del schedule actual, ya filtradas para la vista.
+// ganttRows returns the rows of the current schedule, already filtered for the view.
 func (m *Model) ganttRows() []ganttRow {
 	return ganttRows(m.ganttDisplay())
 }
 
-// snapGanttCursor reencuadra el cursor dentro de las filas actuales y lo apoya
-// siempre sobre una fila de tarea: las cabeceras de persona no son navegables.
+// snapGanttCursor reframes the cursor within the current rows and always
+// rests it on a task row: person headers are not navigable.
 //
-// Que "siempre" sea cierto es estructural: ganttRows sólo emite la cabecera de
-// una persona que tiene entradas, así que la fila siguiente a una cabecera es
-// siempre una tarea, y la búsqueda hacia delante la encuentra. Los llamantes no
-// necesitan comprobar el tipo de la fila.
+// That "always" being true is structural: ganttRows only emits the header of
+// a person that has entries, so the row after a header is always a task, and
+// the forward search finds it. The callers do not need to check the type of
+// the row.
 func (m *Model) snapGanttCursor() {
 	rows := m.ganttRows()
 	if len(rows) == 0 {
@@ -90,51 +90,51 @@ func (m *Model) snapGanttCursor() {
 	if rows[m.ganttCursor].kind == ganttTaskRow {
 		return
 	}
-	// Cabecera: saltar a la primera tarea posterior. No hay caso "si no hay, a la
-	// anterior": ganttRows sólo emite la cabecera de una persona que tiene
-	// entradas, así que la fila siguiente a una cabecera es siempre una tarea y
-	// esta búsqueda termina siempre. La búsqueda hacia atrás que había aquí no
-	// era una red de seguridad: era código muerto con su propio comentario
-	// diciendo que no podía llegar a ejecutarse.
+	// Header: jump to the first task after it. There is no "if there is none, to
+	// the previous one" case: ganttRows only emits the header of a person that
+	// has entries, so the row after a header is always a task and this search
+	// always terminates. The backward search that was here was not a safety net:
+	// it was dead code, with its own comment saying that it could never
+	// be reached.
 	//
-	// Se recorre con range sobre sub-rebanadas en vez de con un for de índice
-	// manual: un `i++` invertido deja el bucle colgado y el mutant se reporta
-	// como TIMED OUT, no como muerto.
-	// El salto se hace con un índice que cuenta desde el cursor, y no con el
-	// desplazamiento dentro de la sub-rebanada: `1 + i` con i siendo el índice
-	// de la sub-rebanada era una suma de dos números que describen lo mismo, y
-	// su mutante (`+ 2 * i`, `+ i - i`) no se distinguía porque i siempre era 0
-	// -- la fila siguiente a una cabecera es siempre una tarea.
+	// It is walked with range over subslices instead of a for with a manual
+	// index: an inverted `i++` leaves the loop hanging and the mutant is
+	// reported as TIMED OUT, not as dead.
+	// The jump is made with an index counted from the cursor, and not with the
+	// offset inside the subslice: `1 + i` with i being the subslice's index was
+	// a sum of two numbers describing the same thing, and its mutant (`+ 2 * i`,
+	// `+ i - i`) did not tell itself apart because i was always 0 -- the row
+	// after a header is always a task.
 	//
-	// Con nextGanttTaskRow el salto es una operación con nombre y el índice es
-	// el absoluto desde el principio, que es lo que se guarda. Menos aritmética
-	// que pueda mutar sin que nadie lo note.
+	// With nextGanttTaskRow the jump is a named operation and the index is the
+	// absolute one from the start, which is what is kept. Less arithmetic that
+	// can mutate without anyone noticing.
 	m.ganttCursor = nextGanttTaskRow(rows, m.ganttCursor)
 }
 
-// filaEsTarea dice si el índice cae sobre una fila de tarea del gantt, es decir,
-// si hay una tarea seleccionada.
+// rowIsTask says whether the index falls on a gantt task row, that is,
+// whether there is a selected task.
 //
-// El rango va con inRange, el mismo helper que usa el Kanban para su cursor. La
-// condición suelta -- `>= 0 && < len(rows)` -- tenía un `>= 0` cuyo mutante
-// (`> 0`) sólo se distinguía en la fila 0, y la fila 0 de un gantt con filas es
-// siempre una cabecera de persona: ganttRows emite la cabecera antes que las
-// entradas de esa persona. Así que el mutante era indistinguible no por falta de
-// test sino porque el valor que lo separaba no existía.
+// The range uses inRange, the same helper the Kanban uses for its cursor. The
+// loose condition -- `>= 0 && < len(rows)` -- had a `>= 0` whose mutant
+// (`> 0`) only told itself apart in row 0, and row 0 of a gantt with rows is
+// always a person header: ganttRows emits the header before that person's
+// entries. So the mutant was indistinguishable not for lack of a test but
+// because the value separating it did not exist.
 //
-// inRange no tiene ese borde: comprobar que el índice está en la lista y que la
-// fila de ese índice es una tarea son dos preguntas y las dos se contestan.
-func filaEsTarea(rows []ganttRow, i int) bool {
+// inRange has no such edge: checking that the index is in the list and that
+// the row at that index is a task are two questions and both are answered.
+func rowIsTask(rows []ganttRow, i int) bool {
 	return inRange(i, len(rows)) && rows[i].kind == ganttTaskRow
 }
 
-// nextGanttTaskRow devuelve el índice de la primera fila de tarea en o después de
-// `from`, o -1 si no hay ninguna.
+// nextGanttTaskRow returns the index of the first task row at or after
+// `from`, or -1 if there is none.
 //
-// La búsqueda empieza en `from` y no en `from+1` a propósito: quien llama ya sabe
-// que la fila actual no es una tarea, así que empezar en ella no cambia el
-// resultado, y empezar en `from` hace que el caso "no hay ninguna fila" sea un
-// -1 de verdad y no un acierto con i == 0.
+// The search starts at `from` and not at `from+1` on purpose: the caller
+// already knows the current row is not a task, so starting at it does not
+// change the result, and starting at `from` makes the "there is no row" case
+// a real -1 and not a hit with i == 0.
 func nextGanttTaskRow(rows []ganttRow, from int) int {
 	for i := max(from, 0); i < len(rows); i++ {
 		if rows[i].kind == ganttTaskRow {
@@ -144,13 +144,13 @@ func nextGanttTaskRow(rows []ganttRow, from int) int {
 	return -1
 }
 
-// ganttNoTasks es el centinela que devuelve ganttTaskRange cuando la vista no
-// tiene ninguna fila de tarea. Es -1 y no 0 porque la fila 0 siempre es una
-// cabecera de persona cuando hay tareas.
+// ganttNoTasks is the sentinel ganttTaskRange returns when the view has no
+// task row at all. It is -1 and not 0 because row 0 is always a person
+// header when there are tasks.
 const ganttNoTasks = -1
 
-// ganttTaskRange devuelve el índice de la primera y última fila de tarea del
-// Gantt, o ganttNoTasks si no hay ninguna.
+// ganttTaskRange returns the index of the first and last task row of the
+// Gantt, or ganttNoTasks if there is none.
 func ganttTaskRange(rows []ganttRow) (first, last int) {
 	first, last = ganttNoTasks, ganttNoTasks
 	for i, r := range rows {
@@ -164,52 +164,52 @@ func ganttTaskRange(rows []ganttRow) (first, last int) {
 	return first, last
 }
 
-// moveGanttCursor salta a la siguiente/anterior fila de tarea en la dirección
-// dir (+1 baja, -1 sube), ignorando las cabeceras de persona.
+// moveGanttCursor jumps to the next/previous task row in the direction dir
+// (+1 down, -1 up), skipping the person headers.
 //
-// El recorrido va con slices.IndexFunc sobre la fila,y la condición del rango
-// desaparece con él. Antes era `for i := cursor + dir; i >= 0 && i < len(rows)`
-// y su `i >= 0` sólo se distinguía de `i > 0` si la fila 0 fuese una tarea, cosa
-// que no ocurre nunca porque la fila 0 es siempre la cabecera de la primera
-// persona. Con IndexFunc la búsqueda no tiene un límite inferior que comparar --
-// es "desde aquí hasta el final" o "hasta aquí desde el principio", y las dos
-// direcciones las dice el paso.
+// The walk uses slices.IndexFunc on the row, and the range condition
+// disappears with it. Before it was `for i := cursor + dir; i >= 0 && i < len(rows)`
+// and its `i >= 0` only told itself apart from `i > 0` if row 0 were a task,
+// which never happens because row 0 is always the first person's header. With
+// IndexFunc the search has no lower bound to compare -- it is "from here to
+// the end" or "from the start to here", and the two directions are told by
+// the step.
 func moveGanttCursor(m *Model, rows []ganttRow, dir int) {
-	// El salto devuelve un ok en vez de un centinela porque cualquier comparación
-	// contra un -1 tiene el problema del borde: "distinto de -1" y "mayor que -1"
-	// son la misma condición sobre enteros, así que su mutante no lo mata ningún
-	// test; y "< -1" es siempre falsa, que rompe los saltos al índice 0.
+	// The jump returns an ok instead of a sentinel because any comparison
+	// against a -1 has the edge problem: "not -1" and "greater than -1" are the
+	// same condition over integers, so no test kills its mutant; and "< -1" is
+	// always false, which breaks the jumps to index 0.
 	//
-	// Con el ok, el "no hay salto" es un hecho y no un número, y la única pregunta
-	// que hace el llamante es si hay salto. Su mutante -- negar el ok -- sí se ve:
-	// el cursor se iría al centinela.
-	if destino, ok := stepGanttCursor(rows, m.ganttCursor, dir); ok {
-		m.ganttCursor = destino
+	// With the ok, "there is no jump" is a fact and not a number, and the only
+	// question the caller asks is whether there is a jump. Its mutant --
+	// negating the ok -- does show: the cursor would go to the sentinel.
+	if target, ok := stepGanttCursor(rows, m.ganttCursor, dir); ok {
+		m.ganttCursor = target
 	}
 }
 
-// stepGanttCursor devuelve el índice de la fila de tarea a la que salta el cursor
-// desde `from` en la dirección `dir`, y un false si no hay ninguna.
+// stepGanttCursor returns the index of the task row the cursor jumps to from
+// `from` in the direction `dir`, and a false if there is none.
 //
-// El segundo valor es un booleano y no un centinela por lo que dice el llamante:
-// comparar un índice contra -1 tiene un borde que ningún test alcanza.
+// The second value is a boolean and not a sentinel because of what the
+// caller says: comparing an index against -1 has an edge no test reaches.
 //
-// Toda la aritmética vive aquí y no en el llamador, y es a propósito. Con el
-// recorrido repartido entre moveGanttCursor y sus dos ramas, cada línea llevaba su
-// propio `max(min(...))`: el suelo en 0 no se distinguía del suelo en 1, y el `+ 1`
-// del offset no se distinguía de `+ 2`, porque los dos valores que los separan --
-// un cursor negativo y un cursor más allá del final -- sólo se dan en estados que
-// el recorrido anterior no producía. Aquí, en cambio, `from` es un parámetro: un
-// test puede pasar el que quiera y comprobar cada rama por sus dos lados.
+// All the arithmetic lives here and not in the caller, and on purpose. With
+// the walk spread across moveGanttCursor and its two branches, each line
+// carried its own `max(min(...))`: the floor at 0 did not tell itself apart
+// from the floor at 1, and the `+ 1` of the offset did not tell itself apart
+// from `+ 2`, because the two values separating them -- a negative cursor and
+// a cursor beyond the end -- only happen in states the previous walk did not
+// produce. Here, on the other hand, `from` is a parameter: a test can pass whatever it wants and check each branch from both sides.
 //
-// Las dos direcciones se resuelven con el mismo bucle, sobre una sub-rebanada que
-// va desde la posición de destino hasta el final o hasta el principio. La
-// sub-rebanada se acota con un clamp porque un cursor fuera de rango no debe hacer
-// que el slice se corte al revés.
+// The two directions are solved with the same loop, over a subslice that
+// goes from the target position to the end or to the start. The subslice is
+// bounded with a clamp because an out-of-range cursor must not make the
+// slice be cut the other way around.
 func stepGanttCursor(rows []ganttRow, from, dir int) (int, bool) {
 	if dir < 0 {
-		hasta := clamp(from, 0, len(rows))
-		for i, r := range slices.Backward(rows[:hasta]) {
+		until := clamp(from, 0, len(rows))
+		for i, r := range slices.Backward(rows[:until]) {
 			if r.kind == ganttTaskRow {
 				return i, true
 			}
@@ -217,24 +217,24 @@ func stepGanttCursor(rows []ganttRow, from, dir int) (int, bool) {
 		return 0, false
 	}
 
-	desde := clamp(from+1, 0, len(rows))
-	for i, r := range rows[desde:] {
+	start := clamp(from+1, 0, len(rows))
+	for i, r := range rows[start:] {
 		if r.kind == ganttTaskRow {
-			return desde + i, true
+			return start + i, true
 		}
 	}
 	return 0, false
 }
 
-// clamp acota v al rango [lo, hi]. Con lo <= hi -- que es el caso de todos los
-// usos aquí: el 0 es el suelo y el hi es la longitud de una lista -- el rango
-// siempre tiene un valor dentro, así que no hay que decidir qué pasa si no.
+// clamp bounds v to the range [lo, hi]. With lo <= hi -- which is the case of
+// all the uses here: 0 is the floor and hi is the length of a list -- the
+// range always has a value inside, so there is no need to decide what happens if not.
 func clamp(v, lo, hi int) int {
 	return min(max(v, lo), hi)
 }
 
-// handleGanttKey navega el Gantt: j/k sobre filas, h/l desplaza la ventana de
-// días, g/G va al inicio/fin, Enter abre el detalle de la tarea.
+// handleGanttKey navigates the Gantt: j/k over rows, h/l scrolls the day
+// window, g/G goes to the start/end, Enter opens the task's detail.
 func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 	m.snapGanttCursor()
 	rows := m.ganttRows()
@@ -243,7 +243,7 @@ func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 	case "/":
 		return m, m.openFilterModal()
 	case "tab":
-		// Cambiar de proyecto ciclando el filtro Project, como en el Dashboard.
+		// Switch project by cycling the Project filter, as in the Dashboard.
 		m.cycleProjectFilter(1)
 		m.ganttCursor = 0
 		m.snapGanttCursor()
@@ -258,9 +258,9 @@ func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 	case "l", "right":
 		m.ganttOffsetDays++
 	case "g":
-		// -1 es el centinela de "no hay tareas". Comparar contra él en vez de
-		// contra 0 deja el `>=` como lo que es: el BOUNDARY de `>= 0` es
-		// equivalente porque toda cabecera ocupa la fila 0.
+		// -1 is the "there are no tasks" sentinel. Comparing against it instead
+		// of against 0 leaves the `>=` as what it is: the BOUNDARY of `>= 0` is
+		// equivalent because every header occupies row 0.
 		if first, _ := ganttTaskRange(rows); first != ganttNoTasks {
 			m.ganttCursor = first
 		}
@@ -269,9 +269,9 @@ func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 			m.ganttCursor = last
 		}
 	case "enter":
-		// El snap de entrada deja el cursor sobre una fila de tarea siempre, así
-		// que la comprobación de `kind` que había aquí no podía ser falsa. Lo que
-		// sí hace falta es el rango: sin filas no hay nada que abrir.
+		// The entry snap always leaves the cursor on a task row, so the `kind`
+		// check that was here could not be false. What does need bounding is the
+		// range: with no rows there is nothing to open.
 		if inRange(m.ganttCursor, len(rows)) {
 			t := rows[m.ganttCursor].entry.Task
 			m.detailOpen = true
@@ -284,10 +284,10 @@ func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderGantt dibuja el Gantt dentro del alto disponible: una fila por tarea,
-// una columna por día, agrupadas por persona.
+// renderGantt draws the Gantt within the available height: one row per task,
+// one column per day, grouped by person.
 func (m *Model) renderGantt(maxHeight int) string {
-	// Los filtros pueden haber dejado menos filas: reencuadrar el cursor.
+	// The filters may have left fewer rows: reframe the cursor.
 	m.snapGanttCursor()
 
 	w := m.width
@@ -296,19 +296,19 @@ func (m *Model) renderGantt(maxHeight int) string {
 	s := m.ganttDisplay()
 	rows := ganttRows(s)
 
-	// Reparto de ancho: etiqueta a la izquierda, días a la derecha.
+	// Width split: label on the left, days on the right.
 	labelW, dayCols := ganttLabelAndDays(innerW)
 
 	start, _ := model.ParseDate(s.Start)
 	offset := m.ganttOffsetDays
 	offset = max(offset, 0)
 
-	// Ventana vertical que sigue al cursor.
+	// Vertical window that follows the cursor.
 	visible := maxHeight - listFixedRows - ganttRulerRows
 	visible = max(visible, 1)
-	// visibleRange ya devuelve la ventana completa cuando todo cabe, así que el
-	// `if len(rows) > visible` de antes sólo tenía dos ramas con el mismo
-	// resultado: su BOUNDARY era un mutant equivalente.
+	// visibleRange already returns the whole window when everything fits, so the
+	// previous `if len(rows) > visible` only had two branches with the same
+	// result: its BOUNDARY was an equivalent mutant.
 	vStart, vEnd := visibleRange(m.ganttCursor, len(rows), visible)
 
 	lines := []string{
@@ -342,8 +342,8 @@ func (m *Model) renderGantt(maxHeight int) string {
 	)
 }
 
-// renderGanttRuler es la línea superior con la etiqueta de cada semana
-// ("1SEP") alineada a cada lunes visible.
+// renderGanttRuler is the top line with each week's label ("1SEP") aligned
+// to each visible Monday.
 func (m *Model) renderGanttRuler(start time.Time, offset, labelW, dayCols int) string {
 	ruler := make([]rune, labelW+1+dayCols)
 	for i := range ruler {
@@ -365,7 +365,7 @@ func (m *Model) renderGanttRuler(start time.Time, offset, labelW, dayCols int) s
 	return styleDim.Render(strings.TrimRight(string(ruler), " "))
 }
 
-// renderGanttAxis dibuja un "|" en cada lunes y "-" en el resto de días.
+// renderGanttAxis draws a "|" on each Monday and "-" on the rest of the days.
 func (m *Model) renderGanttAxis(labelW, dayCols int, start time.Time, offset int) string {
 	var b strings.Builder
 	b.WriteString(strings.Repeat(" ", labelW+1))
@@ -379,7 +379,7 @@ func (m *Model) renderGanttAxis(labelW, dayCols int, start time.Time, offset int
 	return styleSep.Render(b.String())
 }
 
-// renderGanttRow dibuja una fila: cabecera de persona o barra de tarea.
+// renderGanttRow draws a row: a person header or a task bar.
 func (m *Model) renderGanttRow(row ganttRow, start time.Time, offset, dayCols, labelW int, selected bool) string {
 	if row.kind == ganttAssigneeRow {
 		return styleColumnHeader.Render(cellWidth(row.assignee, labelW+1+dayCols))
@@ -419,21 +419,21 @@ func (m *Model) renderGanttRow(row ganttRow, start time.Time, offset, dayCols, l
 	return line
 }
 
-// ganttLegend describe el rango visible y el horizonte total.
+// ganttLegend describes the visible range and the total horizon.
 func (m *Model) ganttLegend(offset, dayCols int) string {
 	s := m.ganttSchedule()
-	// El error de ParseDate no se comprueba: s.Start lo pone ganttSchedule
-	// formateando un time.Time con el mismo layout que ParseDate lee, así que el
-	// parseo no puede fallar. Antes había un return "Gantt" de reserva que era
-	// inalcanzable y que, si alguna vez hubiera podido dispararse, habría
-	// escondido un fallo real detrás de una etiqueta sin fechas.
+	// The ParseDate error is not checked: s.Start is set by ganttSchedule
+	// formatting a time.Time with the same layout ParseDate reads, so the
+	// parsing cannot fail. Before there was a backup return "Gantt" that was
+	// unreachable and that, if it could ever have fired, would have hidden a
+	// real failure behind a label with no dates.
 	start, _ := model.ParseDate(s.Start)
 	from := start.AddDate(0, 0, offset).Format("2006-01-02")
 	to := start.AddDate(0, 0, offset+dayCols-1).Format("2006-01-02")
 	return fmt.Sprintf("%s → %s ", from, to)
 }
 
-// daysBetween cuenta los días de calendario entre dos fechas YYYY-MM-DD.
+// daysBetween counts the calendar days between two YYYY-MM-DD dates.
 func daysBetween(start time.Time, date string) int {
 	d, err := model.ParseDate(date)
 	if err != nil {

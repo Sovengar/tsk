@@ -7,73 +7,73 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// El modal de ayuda se centra sobre el contenido. La posición y el ancho
-// importan: un anchoPreferred distinto, o un total con bordes mal contado,
-// desplaza la caja varias columnas y no se nota en una captura rápida.
+// The help modal is centered over the content. The position and the width
+// matter: a different preferred width, or a total with the borders miscounted,
+// shifts the box several columns and it does not show in a quick screenshot.
 //
-// Los números esperados son literales, no derivados de helpModalWidth. Derivar
-// la expectativa de la constante la convierte en una tautología: si la constante
-// cambia, el test la sigue y pasa.
+// The expected numbers are literals, not derived from helpModalWidth. Deriving
+// the expectation from the constant turns it into a tautology: if the constant
+// changes, the test follows it and passes.
 
-// helpBox devuelve el borde superior de la caja del modal de ayuda recortado a
-// su ancho, y la columna en la que empieza.
+// helpBox returns the top border of the help modal's box trimmed to its
+// width, and the column where it starts.
 //
-// El fondo se hace de líneas tan anchas como la pantalla porque OverlayLine
-// pega el modal justo donde acaba el fondo cuando éste es más corto: con un
-// fondo estrecho la caja se pegaría al texto y la posición medida no diría nada
-// del centrado.
+// The background is made of lines as wide as the screen because OverlayLine
+// pastes the modal right where the background ends when it is shorter: with a
+// narrow background the box would stick to the text and the measured position
+// would say nothing about the centering.
 func helpBox(t *testing.T, m *Model) (box string, col int) {
 	t.Helper()
-	fondo := make([]string, 40)
-	for i := range fondo {
-		fondo[i] = strings.Repeat("·", m.width)
+	background := make([]string, 40)
+	for i := range background {
+		background[i] = strings.Repeat("·", m.width)
 	}
 
-	out := ansi.Strip(m.renderHelpModal(strings.Join(fondo, "\n")))
+	out := ansi.Strip(m.renderHelpModal(strings.Join(background, "\n")))
 	for _, line := range strings.Split(out, "\n") {
-		// Runes, no bytes: tanto el punto del fondo como la esquina del recuadro
-		// son multibyte, y strings.Index daría la posición en bytes. Con puntos
-		// de dos bytes, la caja parecía estar al doble de su columna.
+		// Runes, not bytes: both the background dot and the box corner are
+		// multibyte, and strings.Index would give the position in bytes. With
+		// two-byte dots, the box looked like it was at double its column.
 		runes := []rune(line)
 		for i, r := range runes {
 			if r != '╭' {
 				continue
 			}
-			ancho := 48 // el ancho interior preferido más los dos bordes
-			if m.width < ancho {
-				ancho = m.width
+			width := 48 // the preferred inner width plus the two borders
+			if m.width < width {
+				width = m.width
 			}
-			if i+ancho > len(runes) {
-				t.Fatalf("la caja se sale de la línea en la columna %d: %q", i, line)
+			if i+width > len(runes) {
+				t.Fatalf("the box goes out of the line at column %d: %q", i, line)
 			}
-			return string(runes[i : i+ancho]), i
+			return string(runes[i : i+width]), i
 		}
 	}
-	t.Fatalf("el modal de ayuda no dibujó ninguna caja:\n%s", out)
+	t.Fatalf("the help modal did not draw any box:\n%s", out)
 	return "", 0
 }
 
-// En pantallas anchas la caja va centrada: 46 de interior más 2 de bordes son 48,
-// y sobre 120 columnas sobra (120-48)/2 = 36 a cada lado.
+// On wide screens the box is centered: 46 inside plus 2 borders are 48,
+// and on 120 columns there is (120-48)/2 = 36 to spare on each side.
 func TestHelpModalCentred(t *testing.T) {
 	tests := []struct {
-		name          string
-		width         int
-		wantCol       int
-		wantBoxWidth  int
-		skipIfRecorta bool
+		name            string
+		width           int
+		wantCol         int
+		wantBoxWidth    int
+		skipIfTruncates bool
 	}{
-		// Ancho sobrado: caja de 48 centrada.
-		{"muy ancha", 120, 36, 48, false},
-		{"ancha", 60, 6, 48, false},
-		// Paridad impar: con 49 columnas, un total de 47 daría startX 1 y uno de
-		// 48 daría 0. Esta fila es la que distingue el +2 del +1.
-		{"impar justa", 49, 0, 48, false},
-		// Ya no cabe el ancho preferido: modalWidthFor deja w-2 y los bordes se
-		// los gastan, así que la caja llega al borde sin margen.
-		{"justa", 48, 0, 48, false},
-		{"una menos", 47, 0, 47, false},
-		{"estrecha", 30, 0, 30, false},
+		// Plenty of room: a box of 48, centered.
+		{"very wide", 120, 36, 48, false},
+		{"wide", 60, 6, 48, false},
+		// Odd parity: with 49 columns, a total of 47 would give startX 1 and one
+		// of 48 would give 0. This row is what distinguishes the +2 from the +1.
+		{"odd exact", 49, 0, 48, false},
+		// The preferred width no longer fits: modalWidthFor leaves w-2 and the
+		// borders spend them, so the box reaches the edge with no margin.
+		{"exact", 48, 0, 48, false},
+		{"one less", 47, 0, 47, false},
+		{"narrow", 30, 0, 30, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -82,43 +82,43 @@ func TestHelpModalCentred(t *testing.T) {
 
 			box, col := helpBox(t, m)
 			if got := len([]rune(box)); got != tt.wantBoxWidth {
-				t.Errorf("en %d columnas la caja mide %d, want %d", tt.width, got, tt.wantBoxWidth)
+				t.Errorf("at %d columns the box measures %d, want %d", tt.width, got, tt.wantBoxWidth)
 			}
 			if col != tt.wantCol {
-				t.Errorf("la caja empieza en la columna %d, want %d", col, tt.wantCol)
+				t.Errorf("the box starts at column %d, want %d", col, tt.wantCol)
 			}
 		})
 	}
 }
 
-// El fondo se ve a los dos lados de la caja: el modal se superpone, no borra.
+// The background shows on both sides of the box: the modal overlays it, it does not erase it.
 func TestHelpModalKeepsBackgroundOnBothSides(t *testing.T) {
 	m := newTestModel(t)
 	m.width = 120
-	fondo := make([]string, 40)
-	for i := range fondo {
-		fondo[i] = strings.Repeat("·", m.width)
+	background := make([]string, 40)
+	for i := range background {
+		background[i] = strings.Repeat("·", m.width)
 	}
 
-	out := ansi.Strip(m.renderHelpModal(strings.Join(fondo, "\n")))
+	out := ansi.Strip(m.renderHelpModal(strings.Join(background, "\n")))
 	for _, line := range strings.Split(out, "\n") {
 		runes := []rune(line)
 		for i, r := range runes {
 			if r != '╭' {
 				continue
 			}
-			izquierda := runes[:i]
-			derecha := runes[i+48:]
-			if n := countDot(izquierda); n != 36 {
-				t.Errorf("a la izquierda de la caja hay %d puntos, want 36", n)
+			left := runes[:i]
+			right := runes[i+48:]
+			if n := countDot(left); n != 36 {
+				t.Errorf("to the left of the box there are %d dots, want 36", n)
 			}
-			if n := countDot(derecha); n != 36 {
-				t.Errorf("a la derecha de la caja hay %d puntos, want 36", n)
+			if n := countDot(right); n != 36 {
+				t.Errorf("to the right of the box there are %d dots, want 36", n)
 			}
 			return
 		}
 	}
-	t.Fatal("el modal de ayuda no dibujó ninguna caja")
+	t.Fatal("the help modal did not draw any box")
 }
 
 func countDot(runes []rune) int {

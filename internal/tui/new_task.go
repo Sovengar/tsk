@@ -8,8 +8,8 @@ import (
 	"tsk/internal/model"
 )
 
-// newTaskFieldIdx identifica el campo activo del alta de tarea, en el orden en
-// que el usuario los recorre con Tab.
+// newTaskFieldIdx identifies the active field of the task form, in the order
+// in which the user walks them with Tab.
 const (
 	newTaskFieldPriority = iota
 	newTaskFieldTitle
@@ -20,20 +20,20 @@ const (
 )
 
 const (
-	// newTaskModalWidth es el ancho preferido del modal (se recorta en
-	// terminales angostas).
+	// newTaskModalWidth is the modal's preferred width (it is truncated in
+	// narrow terminals).
 	newTaskModalWidth = 64
-	// newTaskDescHeight es el alto del textarea de descripción embebido.
+	// newTaskDescHeight is the height of the embedded description textarea.
 	newTaskDescHeight = 4
-	// newTaskMaxSuggestions acota el dropdown de assignees.
+	// newTaskMaxSuggestions bounds the assignees dropdown.
 	newTaskMaxSuggestions = 5
 )
 
-// cursorGlyph es el cursor de texto de los campos simples.
+// cursorGlyph is the text cursor of the simple fields.
 const cursorGlyph = "▏"
 
-// newTaskKeybinds lista las teclas del alta de tarea. Es la fuente única para la
-// barra de keybinds y el modal de ayuda.
+// newTaskKeybinds lists the task form's keys. It is the single source for
+// the keybinds bar and the help modal.
 func newTaskKeybinds() []keybind {
 	return []keybind{
 		{"Ctrl+S", "create"},
@@ -46,11 +46,11 @@ func newTaskKeybinds() []keybind {
 	}
 }
 
-// assigneeSuggestions devuelve los assignees conocidos que matchean (fuzzy) con
-// lo escrito, priorizando coincidencias tempranas. Con el input vacío lista
-// todos. Excluye el match exacto: si ya escribiste el nombre completo no hay
-// nada que completar, así no se muestra duplicado ni se selecciona una fila
-// fantasma con ↑↓.
+// assigneeSuggestions returns the known assignees that match (fuzzy) what is
+// typed, prioritizing early matches. With an empty input it lists all.
+// It excludes the exact match: if you already typed the full name there is
+// nothing to complete, so no duplicate is shown and no phantom row is
+// selected with ↑↓.
 func (m Model) assigneeSuggestions() []string {
 	typed := strings.TrimSpace(m.newTaskAssignee)
 	if typed == "" {
@@ -69,9 +69,9 @@ func (m Model) assigneeSuggestions() []string {
 	return out
 }
 
-// tagFieldSuggestions devuelve las tags conocidas que matchean (fuzzy) con lo
-// escrito, excluyendo las ya agregadas y el match exacto. Con el input vacío
-// lista todas.
+// tagFieldSuggestions returns the known tags that match (fuzzy) what is typed,
+// excluding the already added ones and the exact match. With an empty input
+// it lists all.
 func (m Model) tagFieldSuggestions() []string {
 	typed := strings.TrimSpace(m.newTaskTagInput)
 	var out []string
@@ -90,8 +90,8 @@ func (m Model) tagFieldSuggestions() []string {
 	return out
 }
 
-// newTaskCommitTag agrega la tag pendiente (lo tipeado, ya sea una sugerencia o
-// un valor nuevo), normalizada y sin duplicar, y limpia el input.
+// newTaskCommitTag adds the pending tag (what was typed, whether a suggestion
+// or a new value), normalized and without duplicates, and clears the input.
 func (m *Model) newTaskCommitTag() {
 	for _, t := range model.ParseTags(m.newTaskTagInput) {
 		if !containsFold(m.newTaskTags, t) {
@@ -102,21 +102,21 @@ func (m *Model) newTaskCommitTag() {
 	m.newTaskTagSuggIdx = -1
 }
 
-// newTaskTextareaWidth es el ancho del textarea embebido: ancho interior del
-// modal menos los bordes y la indentación de 4 columnas de las filas.
+// newTaskTextareaWidth is the width of the embedded textarea: the modal's
+// inner width minus the borders and the 4-column indentation of the rows.
 func (m Model) newTaskTextareaWidth() int {
 	w := modalWidthFor(newTaskModalWidth, m.width) - 6
 	w = max(w, 10)
 	return w
 }
 
-// buildNewTaskTextarea crea el editor de descripción del alta, reutilizando el
-// mismo textarea que el detalle de tarea.
+// buildNewTaskTextarea creates the form's description editor, reusing the
+// same textarea as the task detail.
 func (m Model) buildNewTaskTextarea(value string) textarea.Model {
 	return newDescTextarea(value, m.newTaskTextareaWidth(), newTaskDescHeight)
 }
 
-// newTaskSyncFocus enfoca o desenfoca el textarea según el campo activo.
+// newTaskSyncFocus focuses or unfocuses the textarea according to the active field.
 func (m *Model) newTaskSyncFocus() tea.Cmd {
 	if m.newTaskFieldIdx == newTaskFieldDescription {
 		return m.newTaskTextarea.Focus()
@@ -125,8 +125,8 @@ func (m *Model) newTaskSyncFocus() tea.Cmd {
 	return nil
 }
 
-// newTaskMoveField completa la sugerencia activa (si estamos en Assignee) y
-// avanza/retrocede el foco entre campos, respetando el foco del textarea.
+// newTaskMoveField completes the active suggestion (if we are on Assignee) and
+// moves the focus forward/backward between fields, respecting the textarea's focus.
 func (m Model) newTaskMoveField(delta int) (tea.Model, tea.Cmd) {
 	if m.newTaskFieldIdx == newTaskFieldAssignee && m.newTaskAssigneeSuggIdx >= 0 {
 		suggs := m.assigneeSuggestions()
@@ -135,7 +135,7 @@ func (m Model) newTaskMoveField(delta int) (tea.Model, tea.Cmd) {
 		}
 		m.newTaskAssigneeSuggIdx = -1
 	}
-	// Al salir de Tags, la tag a medio tipear no se pierde.
+	// On leaving Tags, the half-typed tag is not lost.
 	if m.newTaskFieldIdx == newTaskFieldTags {
 		m.newTaskCommitTag()
 	}
@@ -144,8 +144,8 @@ func (m Model) newTaskMoveField(delta int) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// newTaskSubmit valida y crea la tarea. Si falta el título, deja el error inline
-// y devuelve el foco a Title sin cerrar el modal.
+// newTaskSubmit validates and creates the task. If the title is missing, it
+// leaves the inline error and gives focus back to Title without closing the modal.
 func (m Model) newTaskSubmit() (tea.Model, tea.Cmd) {
 	title := strings.TrimSpace(m.newTaskTitle)
 	if title == "" {
@@ -178,7 +178,7 @@ func (m Model) newTaskSubmit() (tea.Model, tea.Cmd) {
 	)
 }
 
-// newTaskClose cierra el modal y limpia el estado transitorio.
+// newTaskClose closes the modal and clears the transient state.
 func (m *Model) newTaskClose() {
 	m.newTaskOpen = false
 	m.newTaskErr = ""
@@ -188,7 +188,7 @@ func (m *Model) newTaskClose() {
 	m.newTaskTextarea.Blur()
 }
 
-// createTaskCmd persiste la tarea y recarga el listado.
+// createTaskCmd persists the task and reloads the listing.
 func (m Model) createTaskCmd(project, title, description, assignee string, priority int, tags []string) tea.Cmd {
 	return func() tea.Msg {
 		if _, err := m.database.CreateTaskFull(project, title, description, assignee, priority, "", 0, tags); err != nil {
@@ -202,7 +202,7 @@ func (m Model) createTaskCmd(project, title, description, assignee string, prior
 	}
 }
 
-// handleNewTaskPaste inserta texto pegado en el campo activo.
+// handleNewTaskPaste inserts pasted text into the active field.
 func (m Model) handleNewTaskPaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 	if m.newTaskFieldIdx == newTaskFieldDescription {
 		var cmd tea.Cmd
@@ -224,11 +224,11 @@ func (m Model) handleNewTaskPaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleNewTaskKey procesa las teclas del alta de tarea.
+// handleNewTaskKey processes the task form's keys.
 //
-// Navegación: Tab/Shift+Tab mueven el foco. Ctrl+S crea desde cualquier campo.
-// Enter avanza en Priority, crea en Title, inserta salto en Description y
-// completa-o-crea en Assignee; en Assignee, ↑↓ recorren las sugerencias.
+// Navigation: Tab/Shift+Tab move the focus. Ctrl+S creates from any field.
+// Enter advances on Priority, creates on Title, inserts a break in Description
+// and complete-or-create on Assignee; on Assignee, ↑↓ walk the suggestions.
 func (m Model) handleNewTaskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
@@ -260,7 +260,7 @@ func (m Model) handleNewTaskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "enter":
 			return m.newTaskMoveField(1)
 		default:
-			// Tipear una letra sobre el selector salta al título y la inserta.
+			// Typing a letter over the selector jumps to the title and inserts it.
 			if len(key) == 1 && key[0] >= 33 {
 				m.newTaskFieldIdx = newTaskFieldTitle
 				editTextInput(&m.newTaskTitle, key)
@@ -321,7 +321,7 @@ func (m Model) handleNewTaskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.newTaskCommitTag()
 			return m, nil
 		case "backspace":
-			// Con el input vacío, backspace borra la última tag agregada.
+			// With an empty input, backspace deletes the last added tag.
 			if m.newTaskTagInput == "" && len(m.newTaskTags) > 0 {
 				m.newTaskTags = m.newTaskTags[:len(m.newTaskTags)-1]
 				return m, nil
@@ -337,8 +337,8 @@ func (m Model) handleNewTaskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// newTaskRow dibuja una fila etiqueta/valor con el foco resaltado. El prefijo
-// mide lo mismo con o sin foco para que las filas queden alineadas.
+// newTaskRow draws a label/value row with the focus highlighted. The prefix
+// measures the same with or without focus so that the rows stay aligned.
 func newTaskRow(label, value string, focused bool) string {
 	lbl := cellWidth(label, 11)
 	if focused {
@@ -347,7 +347,7 @@ func newTaskRow(label, value string, focused bool) string {
 	return "    " + styleStatusDesc.Render(lbl) + " " + value
 }
 
-// newTaskSection dibuja una etiqueta de sección multilínea (Description).
+// newTaskSection draws a multi-line section label (Description).
 func newTaskSection(label string, focused bool) string {
 	if focused {
 		return "  ▸ " + styleTitle.Render(label)
@@ -355,8 +355,8 @@ func newTaskSection(label string, focused bool) string {
 	return "    " + styleStatusDesc.Render(label)
 }
 
-// newTaskOptionalRow dibuja un campo opcional: etiqueta en color de tags y un
-// badge "optional" que lo distingue visualmente de los campos obligatorios.
+// newTaskOptionalRow draws an optional field: label in tag color and an
+// "optional" badge that tells it apart visually from the required fields.
 func newTaskOptionalRow(label, value string, focused bool) string {
 	lbl := cellWidth(label, 11)
 	badge := styleWarn.Render("optional")
@@ -367,7 +367,7 @@ func newTaskOptionalRow(label, value string, focused bool) string {
 	return prefix + styleProjectTag.Render(lbl) + " " + badge + "  " + value
 }
 
-// renderNewTaskTags dibuja las tags elegidas como chips más el input pendiente.
+// renderNewTaskTags draws the chosen tags as chips plus the pending input.
 func (m Model) renderNewTaskTags() string {
 	parts := make([]string, 0, len(m.newTaskTags))
 	for _, t := range m.newTaskTags {
@@ -379,9 +379,9 @@ func (m Model) renderNewTaskTags() string {
 		input += styleTitle.Render(cursorGlyph)
 	}
 
-	// El hint se decide sobre lo escrito, no sobre input: input lleva ya el
-	// cursor cuando el campo está enfocado, así que compararlo con "" era
-	// siempre falso y el "type to add…" no se veía nunca.
+	// The hint is decided on what was typed, not on input: input already carries
+	// the cursor when the field is focused, so comparing it to "" was always
+	// false and the "type to add…" was never seen.
 	if len(parts) == 0 && strings.TrimSpace(m.newTaskTagInput) == "" {
 		if m.newTaskFieldIdx == newTaskFieldTags {
 			return styleDim.Render("type to add…") + input
@@ -394,8 +394,8 @@ func (m Model) renderNewTaskTags() string {
 	return strings.Join(parts, " ")
 }
 
-// renderTagFieldSuggestions lista el dropdown de tags disponibles y, si lo
-// escrito no existe todavía, insinúa que se creará una nueva.
+// renderTagFieldSuggestions lists the available tags dropdown and, if what is
+// typed does not exist yet, hints that a new one will be created.
 func (m Model) renderTagFieldSuggestions() []string {
 	var lines []string
 	for i, s := range m.tagFieldSuggestions() {
@@ -412,7 +412,7 @@ func (m Model) renderTagFieldSuggestions() []string {
 	return lines
 }
 
-// renderNewTaskPriority muestra la prioridad como radios: la elegida sólida.
+// renderNewTaskPriority shows the priority as radios: the chosen one solid.
 func (m Model) renderNewTaskPriority() string {
 	labels := []string{"none", "low", "med", "high"}
 	parts := make([]string, len(labels))
@@ -426,8 +426,8 @@ func (m Model) renderNewTaskPriority() string {
 	return strings.Join(parts, "  ")
 }
 
-// renderNewTaskAssigneeSuggestions lista el dropdown de assignees y, si el texto
-// escrito no existe todavía, insinúa que se creará uno nuevo.
+// renderNewTaskAssigneeSuggestions lists the assignees dropdown and, if the
+// typed text does not exist yet, hints that a new one will be created.
 func (m Model) renderNewTaskAssigneeSuggestions() []string {
 	var lines []string
 	for i, s := range m.assigneeSuggestions() {
@@ -444,8 +444,8 @@ func (m Model) renderNewTaskAssigneeSuggestions() []string {
 	return lines
 }
 
-// renderNewTaskModal renderiza el modal de creación: prioridad, título,
-// descripción (textarea reutilizado del detalle) y assignee con autocompletado.
+// renderNewTaskModal renders the creation modal: priority, title,
+// description (textarea reused from the detail) and assignee with autocomplete.
 func (m *Model) renderNewTaskModal(content string) string {
 	w := m.width
 	lines := []string{""}

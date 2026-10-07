@@ -11,7 +11,7 @@ import (
 	"tsk/internal/model"
 )
 
-// Model es el modelo principal de la TUI.
+// Model is the TUI's main model.
 type Model struct {
 	width, height int
 
@@ -23,11 +23,11 @@ type Model struct {
 
 	currentView viewKind
 	cursor      int
-	pageSize    int // tareas por página en la vista List
+	pageSize    int // tasks per page in the List view
 
 	// Filters
 	filterProject  string
-	filterStatus   string // "" = all; statusFilterAllActive = activos; otro = estado exacto
+	filterStatus   string // "" = all; statusFilterAllActive = active; other = exact status
 	filterAssignee string
 	filterTag      string
 	filterPriority int // -1 = all
@@ -47,37 +47,37 @@ type Model struct {
 	dashProjectIdx    int // selected project index in dashboard
 	showArchived      bool
 	archivedProjects  []model.Project
-	pendingSelectName string // proyecto a seleccionar tras recargar
+	pendingSelectName string // project to select after reloading
 
-	// Project modal (crear/editar proyecto)
+	// Project modal (create/edit project)
 	projectModalOpen      bool
 	projectModalEdit      bool
 	projectModalField     int // 0=name, 1=workflow, 2=list_order
 	projectNameInput      string
 	projectWorkflowInput  string
 	projectListOrderInput string
-	projectEditingName    string // nombre original al editar
+	projectEditingName    string // original name when editing
 
-	// Confirmación (archivar/restaurar proyecto, borrar off-day)
+	// Confirmation (archive/restore project, delete off-day)
 	confirmOpen    bool
 	confirmAction  string // "archive" | "unarchive" | "delete-offday"
 	confirmProject string
 	confirmOffday  model.OffDay
 
-	// Assignee / off-day modal (se abre con "m" desde el Dashboard)
+	// Assignee / off-day modal (opened with "m" from the Dashboard)
 	assigneeModalOpen bool
-	assigneeDetail    bool // false = lista de personas, true = detalle
+	assigneeDetail    bool // false = people list, true = detail
 	assigneeIdx       int
 	assigneeOffdayIdx int
 
-	// Alta de off-day
+	// Off-day form
 	offdayFormOpen   bool
 	offdayFormField  int // 0=start, 1=end, 2=note
 	offdayStartInput string
 	offdayEndInput   string
 	offdayNoteInput  string
 
-	// Toast de feedback transitorio
+	// Transient feedback toast
 	toast     string
 	toastKind string // "info" | "error"
 	toastSeq  int
@@ -86,17 +86,17 @@ type Model struct {
 	detailOpen       bool
 	detailTask       *model.Task
 	detailComments   []model.Comment
-	detailCommentSel int // -1 = ninguno seleccionado
+	detailCommentSel int // -1 = none selected
 
-	// Tag modal (se abre con "t" desde el Detail)
+	// Tag modal (opened with "t" from the Detail)
 	tagOpen       bool
 	tagInput      string
-	tagSuggestIdx int // -1 = ninguna sugerencia seleccionada
+	tagSuggestIdx int // -1 = no suggestion selected
 
-	// Editor inline de descripción (integrado en la caja del detalle)
+	// Inline description editor (embedded in the detail's box)
 	descEditOpen      bool
 	descEditTaskID    int64
-	descEditHadDetail bool // el detalle ya estaba abierto antes de editar
+	descEditHadDetail bool // the detail was already open before editing
 	descEditTextarea  textarea.Model
 
 	// Help modal
@@ -105,8 +105,8 @@ type Model struct {
 	// Filter modal
 	filterOpen      bool
 	filterFieldIdx  int    // 0=project, 1=status, 2=assignee, 3=priority, 4=tag
-	filterSearch    string // búsqueda fuzzy del campo activo
-	filterOptionIdx int    // cursor de opciones del campo activo
+	filterSearch    string // fuzzy search of the active field
+	filterOptionIdx int    // option cursor of the active field
 
 	// New task modal
 	newTaskOpen            bool
@@ -119,17 +119,17 @@ type Model struct {
 	newTaskTagInput        string
 	newTaskTagSuggIdx      int // -1 = none selected
 	newTaskProject         string
-	newTaskErr             string // validación inline (ej. título requerido)
+	newTaskErr             string // inline validation (e.g. title required)
 	newTaskTextarea        textarea.Model
 
 	// KeybindsBar
 	statusbar KeybindsBar
 
-	// Preview de la tarea seleccionada
+	// Preview of the selected task
 	preview PreviewBar
 }
 
-// New construye el modelo con la base de datos.
+// New builds the model with the database.
 func New(database *db.DB, cfg config.Config) Model {
 	pageSize := resolvePageSize(cfg.ListPageSize)
 	return Model{
@@ -148,7 +148,7 @@ func New(database *db.DB, cfg config.Config) Model {
 	}
 }
 
-// ---- Mensajes ----
+// ---- Messages ----
 
 type tasksLoadedMsg struct {
 	tasks []model.Task
@@ -163,18 +163,18 @@ type offdaysLoadedMsg struct {
 	offdays []model.OffDay
 }
 
-// taskCreateFailedMsg resulta de fallar la creación de una tarea desde el modal.
+// taskCreateFailedMsg results from a failed task creation from the modal.
 type taskCreateFailedMsg struct{ err error }
 
-// offdaySavedMsg resulta de un alta o baja de off-day. err != nil indica fallo.
+// offdaySavedMsg results from an off-day create or delete. err != nil indicates failure.
 type offdaySavedMsg struct {
 	err    error
 	action string // "add" | "delete"
 	name   string
 }
 
-// tagToggledMsg resulta de alternar una tag: trae la tarea actualizada (para el
-// Detail) y el listado recargado (para List/Kanban).
+// tagToggledMsg results from toggling a tag: it brings the updated task (for
+// the Detail) and the reloaded listing (for List/Kanban).
 type tagToggledMsg struct {
 	taskID int64
 	task   *model.Task
@@ -207,7 +207,7 @@ func (m *Model) loadTasks() tea.Cmd {
 	}
 }
 
-// loadOffDays trae todos los off-days para la proyección del Gantt.
+// loadOffDays brings all the off-days for the Gantt's projection.
 func (m *Model) loadOffDays() tea.Cmd {
 	return func() tea.Msg {
 		offdays, err := m.database.ListOffDays("")
@@ -218,7 +218,7 @@ func (m *Model) loadOffDays() tea.Cmd {
 	}
 }
 
-// taskActionCmd ejecuta una acción sobre una tarea y recarga el listado.
+// taskActionCmd runs an action on a task and reloads the listing.
 func (m Model) taskActionCmd(id int64, action func(int64) (*model.Task, error)) tea.Cmd {
 	return func() tea.Msg {
 		if _, err := action(id); err != nil {
@@ -229,8 +229,8 @@ func (m Model) taskActionCmd(id int64, action func(int64) (*model.Task, error)) 
 	}
 }
 
-// toggleTagCmd agrega la tag si la tarea no la tiene, o la quita si la tiene.
-// Recarga el listado para que List/Kanban reflejen el cambio.
+// toggleTagCmd adds the tag if the task does not have it, or removes it if it does.
+// It reloads the listing so List/Kanban reflect the change.
 func (m *Model) toggleTagCmd(taskID int64, tag string) tea.Cmd {
 	return func() tea.Msg {
 		t, err := m.database.GetTask(taskID)
@@ -251,7 +251,7 @@ func (m *Model) toggleTagCmd(taskID int64, tag string) tea.Cmd {
 	}
 }
 
-// mergedWorkflow combina los workflows de todos los proyectos en uno solo.
+// mergedWorkflow combines all projects' workflows into a single one.
 func (m *Model) mergedWorkflow() []string {
 	seen := make(map[string]bool)
 	var result []string
@@ -269,8 +269,8 @@ func (m *Model) mergedWorkflow() []string {
 	return result
 }
 
-// kanbanWorkflow devuelve las columnas del Kanban: el workflow del proyecto en
-// contexto si hay uno seleccionado, o la unión de todos en "all projects".
+// kanbanWorkflow returns the Kanban's columns: the workflow of the project in
+// context if one is selected, or the union of all of them in "all projects".
 func (m *Model) kanbanWorkflow() []string {
 	if m.filterProject != "" {
 		if p := m.projectByName(m.filterProject); p != nil {
@@ -280,7 +280,7 @@ func (m *Model) kanbanWorkflow() []string {
 	return m.mergedWorkflow()
 }
 
-// projectByName busca un proyecto activo por nombre.
+// projectByName looks up an active project by name.
 func (m *Model) projectByName(name string) *model.Project {
 	for i := range m.projects {
 		if m.projects[i].Name == name {
@@ -290,10 +290,10 @@ func (m *Model) projectByName(name string) *model.Project {
 	return nil
 }
 
-// commonWorkflow devuelve los estados presentes en TODOS los proyectos, en el
-// orden del primero. Es el conjunto válido para filtrar por estado cuando no
-// hay proyecto seleccionado: un estado que no exista en todos no puede filtrar
-// tareas de todos. Sin proyectos cae al workflow por defecto.
+// commonWorkflow returns the statuses present in ALL projects, in the order
+// of the first one. It is the valid set for filtering by status when no
+// project is selected: a status that does not exist in all of them cannot
+// filter tasks of all of them. With no projects it falls back to the default workflow.
 func (m *Model) commonWorkflow() []string {
 	if len(m.projects) == 0 {
 		return model.DefaultWorkflow
@@ -317,11 +317,11 @@ func (m *Model) commonWorkflow() []string {
 	return result
 }
 
-// taskMatchesFilter indica si una tarea pasa los filtros activos. El estado se
-// resuelve en un único lugar: statusFilterAllActive (default) deja fuera los
-// terminales, "" (all) no restringe, y cualquier otro valor exige coincidencia
-// exacta. Lo comparten List, Kanban y Gantt para que la cabecera de filtros sea
-// consistente en todas las vistas.
+// taskMatchesFilter tells whether a task passes the active filters. The
+// status is solved in a single place: statusFilterAllActive (default) leaves
+// out the terminal ones, "" (all) does not restrict, and any other value
+// demands an exact match. It is shared by List, Kanban and Gantt so that the
+// filter header is consistent across all views.
 func (m *Model) taskMatchesFilter(t model.Task) bool {
 	if !matchesStatus(m.filterStatus, t.Status, t.IsActive()) {
 		return false
@@ -338,7 +338,7 @@ func (m *Model) taskMatchesFilter(t model.Task) bool {
 	return matchesPriority(m.filterPriority, t.Priority)
 }
 
-// filteredTasks devuelve las tareas filtradas.
+// filteredTasks returns the filtered tasks.
 func (m *Model) filteredTasks() []model.Task {
 	if m.filteredT != nil {
 		return m.filteredT
@@ -360,7 +360,7 @@ func (m *Model) invalidateFilterCache() {
 	m.clampListCursor()
 }
 
-// listPageSize devuelve el tamaño de página efectivo de la vista List.
+// listPageSize returns the effective page size of the List view.
 func (m *Model) listPageSize() int {
 	if m.pageSize <= 0 {
 		return config.DefaultPageSize
@@ -368,31 +368,31 @@ func (m *Model) listPageSize() int {
 	return m.pageSize
 }
 
-// listWindow es la paginación de la vista List resuelta en un único sitio.
+// listWindow is the List view's pagination solved in a single place.
 //
-// Existía porque el cálculo estaba repartido: la página se derivaba del cursor
-// multiplicando por el tamaño, y cinco llamantes repetían esa aritmética, cada
-// uno con su propio borde. Repartido, cada copia es un sitio donde un mutante puede
-// colgar el bucle (un `cursor++` dentro de un `if` invertido no termina nunca)
-// o morir sin que ningún test lo note. Aquí no hay ningún avance manual: todo
-// sale de min/max sobre enteros, y cada consumidor lee la misma ventana.
+// It existed because the calculation was spread: the page was derived from the
+// cursor multiplied by the size, and five callers repeated that arithmetic,
+// each with its own edge. Spread out, each copy is a place where a mutant can
+// hang the loop (a `cursor++` inside an inverted `if` never terminates) or die
+// without any test noticing. Here there is no manual advancement at all:
+// everything comes out of min/max over integers, and every consumer reads the same window.
 type listWindow struct {
-	total int // tareas tras filtrar
-	size  int // filas por página
-	page  int // página actual, base 0
-	pages int // páginas totales, siempre >= 1
-	start int // primer índice visible
-	end   int // índice justo tras el último visible
+	total int // tasks after filtering
+	size  int // rows per page
+	page  int // current page, base 0
+	pages int // total pages, always >= 1
+	start int // first visible index
+	end   int // index right after the last visible
 }
 
 func (m *Model) listWindow() listWindow {
 	size := m.listPageSize()
 	total := len(m.filteredTasks())
 	pages := max(1, (total+size-1)/size)
-	// La página se acota a [0, pages-1]. Antes no se acotaba y un cursor fuera
-	// de rango daba una ventana vacía con una leyenda del tipo "Page 20/2";
-	// es inalcanzable desde la UI porque clampListCursor corre antes, pero una
-	// vista que se auto-conserva no debería depender de ese orden.
+	// The page is bounded to [0, pages-1]. Before it was not bounded and an
+	// out-of-range cursor gave an empty window with a caption like "Page 20/2";
+	// it is unreachable from the UI because clampListCursor runs first, but a
+	// view that preserves itself should not depend on that order.
 	page := min(max(m.cursor/size, 0), pages-1)
 	start := page * size
 	return listWindow{
@@ -405,11 +405,11 @@ func (m *Model) listWindow() listWindow {
 	}
 }
 
-// clampCursor mete un cursor dentro de la ventana visible. Con lista vacía el
-// cursor es 0; si no, se acota al rango mostrado. Se expresa con min/max en vez
-// de con una cadena de if: la cadena tiene ramas que sólo se distinguen si el
-// test llega a cada una, y su versión negada deja un cursor en -1 del que el
-// resto de la vista no se recupera.
+// clampCursor puts a cursor inside the visible window. With an empty list
+// the cursor is 0; otherwise it is bounded to the shown range. It is
+// expressed with min/max instead of a chain of if: the chain has branches
+// that only tell themselves apart if the test reaches each one, and its
+// negated version leaves a cursor at -1 that the rest of the view does not recover from.
 func (w listWindow) clampCursor(cursor int) int {
 	if w.total == 0 {
 		return 0
@@ -417,8 +417,8 @@ func (w listWindow) clampCursor(cursor int) int {
 	return min(max(cursor, w.start), w.end-1)
 }
 
-// nextPageStart devuelve el cursor al primer elemento de la página siguiente, y
-// false si la actual es la última.
+// nextPageStart returns the cursor to the first element of the next page, and
+// false if the current one is the last.
 func (w listWindow) nextPageStart() (int, bool) {
 	if w.page >= w.pages-1 {
 		return 0, false
@@ -426,8 +426,8 @@ func (w listWindow) nextPageStart() (int, bool) {
 	return w.start + w.size, true
 }
 
-// prevPageStart devuelve el cursor al primer elemento de la página anterior, y
-// false si ya está en la primera.
+// prevPageStart returns the cursor to the first element of the previous page,
+// and false if it is already on the first.
 func (w listWindow) prevPageStart() (int, bool) {
 	if w.page == 0 {
 		return 0, false
@@ -435,16 +435,16 @@ func (w listWindow) prevPageStart() (int, bool) {
 	return w.start - w.size, true
 }
 
-// pageBounds devuelve el rango [start, end) de tareas que forman la página
-// actual. Es el único acceso que queda a la ventana: totalPages y currentPage
-// desapareceron porque cada llamante repetía su propia aritmética y las dos
-// cosas ya salen de listWindow.
+// pageBounds returns the range [start, end) of tasks that make up the current
+// page. It is the only access left to the window: totalPages and currentPage
+// disappeared because each caller repeated its own arithmetic and both things
+// now come out of listWindow.
 func (m *Model) pageBounds() (int, int) {
 	w := m.listWindow()
 	return w.start, w.end
 }
 
-// pageLegend describe el rango de la página: "1-10 of 306 · Page 1/31".
+// pageLegend describes the page's range: "1-10 of 306 · Page 1/31".
 func (m *Model) pageLegend() string {
 	w := m.listWindow()
 	first := 0
@@ -455,7 +455,7 @@ func (m *Model) pageLegend() string {
 		first, w.end, w.total, w.page+1, w.pages)
 }
 
-// clampListCursor mantiene el cursor dentro de las tareas filtradas.
+// clampListCursor keeps the cursor inside the filtered tasks.
 func (m *Model) clampListCursor() {
 	m.cursor = m.listWindow().clampCursor(m.cursor)
 }
@@ -552,7 +552,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.addCommentCmd(msg.taskID, msg.body)
 
 	case tea.PasteMsg:
-		// Los textarea del editor inline y del alta de tarea manejan el pegado.
+		// The inline editor's and the task form's textareas handle the paste.
 		if m.descEditOpen {
 			return m.handleDescEditKey(msg)
 		}
@@ -568,13 +568,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	default:
-		// El textarea del editor inline emite mensajes privados del paquete
-		// (pasteMsg/copyMsg) como resultado de sus comandos asíncronos. No son
-		// tea.KeyMsg ni tea.PasteMsg, así que hay que reenviarlos a su Update.
+		// The inline editor's textarea emits private package messages
+		// (pasteMsg/copyMsg) as a result of its async commands. They are
+		// neither tea.KeyMsg nor tea.PasteMsg, so they have to be forwarded to its Update.
 		if m.descEditOpen {
 			return m.handleDescEditKey(msg)
 		}
-		if vaAlTextareaDelAlta(m.newTaskOpen, m.newTaskFieldIdx) {
+		if goesToNewTaskTextarea(m.newTaskOpen, m.newTaskFieldIdx) {
 			var cmd tea.Cmd
 			m.newTaskTextarea, cmd = m.newTaskTextarea.Update(msg)
 			return m, cmd
@@ -584,27 +584,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// vaAlTextareaDelAlta dice si un mensaje que no es ni tecla ni pegado tiene que
-// reenviarse al textarea de la descripción del alta.
+// goesToNewTaskTextarea says whether a message that is neither key nor paste
+// has to be forwarded to the form's description textarea.
 //
-// La decisión estaba escrita dentro del default de Update, y ahí no se podía
-// comprobar: los mensajes que llegan por esa rama son privados del paquete
-// textarea (pasteMsg, copyMsg), que no se exportan, así que un test no puede
-// construir uno y ver a dónde acaba. Con la condición sacada a una función pura,
-// el enrutado se puede comprobar entero: qué combinaciones van al textarea y
-// cuáles no, sin necesitar el mensaje que lo dispara.
+// The decision was written inside Update's default, and there it could not
+// be checked: the messages arriving through that branch are private to the
+// textarea package (pasteMsg, copyMsg), which are not exported, so a test
+// cannot build one and see where it ends up. With the condition extracted to
+// a pure function, the routing can be checked whole: which combinations go
+// to the textarea and which do not, without needing the message that triggers it.
 //
-// Nota sobre el borde: el campo de descripción es el ÚNICO que lleva textarea
-// embebido, porque es el único multilínea. Los demás campos son de una línea y
-// se escriben a mano.
-func vaAlTextareaDelAlta(newTaskOpen bool, fieldIdx int) bool {
+// Note on the edge: the description field is the ONLY one carrying an
+// embedded textarea, because it is the only multiline one. The other fields
+// are one-line and are typed by hand.
+func goesToNewTaskTextarea(newTaskOpen bool, fieldIdx int) bool {
 	return newTaskOpen && fieldIdx == newTaskFieldDescription
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 
-	// Confirmación de acción destructiva (overlay estricto)
+	// Destructive action confirmation (strict overlay)
 	if m.confirmOpen {
 		return m.handleConfirmKey(key)
 	}
@@ -619,12 +619,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleNewTaskKey(msg)
 	}
 
-	// Editor inline de descripción (puede superponerse al detalle)
+	// Inline description editor (can overlay the detail)
 	if m.descEditOpen {
 		return m.handleDescEditKey(msg)
 	}
 
-	// Tag modal (se superpone al detalle)
+	// Tag modal (overlays the detail)
 	if m.tagOpen {
 		return m.handleTagModalKey(key)
 	}
@@ -639,7 +639,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFilterModalKey(key)
 	}
 
-	// Assignee / off-day modal (formulario encima de la lista)
+	// Assignee / off-day modal (form above the list)
 	if m.offdayFormOpen {
 		return m.handleOffdayFormKey(key)
 	}
@@ -675,7 +675,7 @@ func (m Model) handleDashboardKey(key string) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		m.dashProjectIdx = cycleIndex(m.dashProjectIdx, len(m.dashProjectList()), -1)
 	case "i":
-		// Nuevo proyecto: el Dashboard concentra la config global
+		// New project: the Dashboard holds the global config
 		return m, m.openProjectModal(false)
 	case "e":
 		if p := m.selectedDashProject(); p != nil {
@@ -697,7 +697,7 @@ func (m Model) handleDashboardKey(key string) (tea.Model, tea.Cmd) {
 		m.showArchived = !m.showArchived
 		m.dashProjectIdx = 0
 	case "m":
-		// Gestionar off-days por persona.
+		// Manage off-days per person.
 		m.openAssigneeModal()
 		return m, m.loadOffDays()
 	}
@@ -710,41 +710,41 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 
 	switch key {
 	case "tab":
-		// Cambiar de proyecto ciclando el filtro Project, como en el Dashboard.
+		// Switch project by cycling the Project filter, as in the Dashboard.
 		m.cycleProjectFilter(1)
 		m.cursor = 0
 		return m, nil
 	case "j", "down":
-		// Bajar hasta el final de la página; acota en vez de incrementar dentro
-		// de un if, que es la forma que cuelga cuando el incremento se invierte.
+		// Go down to the end of the page; it bounds instead of incrementing
+		// inside an if, which is the shape that hangs when the increment is inverted.
 		w := m.listWindow()
 		m.cursor = w.clampCursor(m.cursor + 1)
 	case "k", "up":
 		w := m.listWindow()
 		m.cursor = w.clampCursor(m.cursor - 1)
 	case "n":
-		// Página siguiente: saltar al primer elemento de la próxima página.
+		// Next page: jump to the first element of the next page.
 		if next, ok := m.listWindow().nextPageStart(); ok {
 			m.cursor = next
 		}
 	case "p":
-		// Página anterior: saltar al primer elemento de la página previa.
+		// Previous page: jump to the first element of the previous page.
 		if prev, ok := m.listWindow().prevPageStart(); ok {
 			m.cursor = prev
 		}
 	case "N":
-		// Ir a la última página: cursor al último elemento.
+		// Go to the last page: cursor to the last element.
 		if w := m.listWindow(); w.total > 0 {
 			m.cursor = w.total - 1
 		}
 	case "P":
-		// Ir a la primera página: cursor al primer elemento.
+		// Go to the first page: cursor to the first element.
 		m.cursor = 0
 	case "e":
-		// Editar la descripción inline, desde la propia TUI.
+		// Edit the description inline, from the TUI itself.
 		return m, m.openDescEditor()
 	case "E":
-		// Editor externo completo (write in nvim).
+		// Full external editor (write in nvim).
 		return m, m.editSelectedTask()
 	case "i":
 		// New task
@@ -792,14 +792,14 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 	m.clampKanbanCursor()
 
-	// Abrir filtros antes del corte por columnas vacías, para que funcione
-	// aunque el board no tenga nada.
+	// Open the filters before the empty-columns cut, so that it works even if
+	// the board has nothing.
 	if key == "/" {
 		return m, m.openFilterModal()
 	}
 
-	// Tab cambia de proyecto ciclando el filtro Project (como el Dashboard).
-	// Las columnas se navegan con h/l o ←/→, que ya hacían lo mismo.
+	// Tab changes project by cycling the Project filter (like the Dashboard).
+	// The columns are navigated with h/l or ←/→, which already did the same.
 	if key == "tab" {
 		m.cycleProjectFilter(1)
 		m.clampKanbanCursor()
@@ -814,9 +814,9 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 
 	switch key {
 	case "h", "left":
-		// Cambiar de columna reinicia la fila: el índice de fila es por
-		// columna, así que dejarlo apuntando donde ya no está sería un
-		// "selectedTask" de otra columna.
+		// Changing column resets the row: the row index is per column, so
+		// leaving it pointing where it no longer is would be a "selectedTask"
+		// of another column.
 		if prev := shiftIndex(m.kanbanCol, len(cols), -1); prev != m.kanbanCol {
 			m.kanbanCol = prev
 			m.kanbanRow = 0
@@ -831,9 +831,9 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		m.kanbanRow = cycleIndex(m.kanbanRow, len(colTasks), -1)
 	case "s":
-		// Move task right (advance status) según el workflow de SU proyecto:
-		// el orden del merge puede no existir en el proyecto y el move sería
-		// rechazado en silencio por MoveTask.
+		// Move task right (advance status) according to ITS project's workflow:
+		// the merge's order may not exist in the project and the move would be
+		// silently rejected by MoveTask.
 		if inRange(m.kanbanRow, len(colTasks)) {
 			t := colTasks[m.kanbanRow]
 			if p := m.projectByName(t.ProjectName); p != nil {
@@ -845,7 +845,7 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "S":
-		// Move task left (retreat status) según el workflow de su proyecto.
+		// Move task left (retreat status) according to its project's workflow.
 		if inRange(m.kanbanRow, len(colTasks)) {
 			t := colTasks[m.kanbanRow]
 			if p := m.projectByName(t.ProjectName); p != nil {
@@ -867,10 +867,10 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 			return m, m.taskActionCmd(colTasks[m.kanbanRow].ID, m.database.CancelTask)
 		}
 	case "e":
-		// Editar la descripción inline, desde la propia TUI.
+		// Edit the description inline, from the TUI itself.
 		return m, m.openDescEditor()
 	case "E":
-		// Editor externo completo (write in nvim).
+		// Full external editor (write in nvim).
 		return m, m.editSelectedTask()
 	case "i":
 		// New task
@@ -914,7 +914,7 @@ func (m Model) tasksInColumn(status string) []model.Task {
 func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
-		// Primero deselecciona el comentario; si no hay, cierra el modal.
+		// First deselect the comment; if there is none, close the modal.
 		if m.detailCommentSel >= 0 {
 			m.detailCommentSel = -1
 			return m, nil
@@ -933,25 +933,25 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		m.detailCommentSel = prevCommentSel(m.detailCommentSel)
 		return m, nil
 	case "c":
-		// Nuevo comentario en el editor externo.
+		// New comment in the external editor.
 		if m.detailTask != nil {
 			editorCmd := editorCommand(m.config.Editor.Command)
 			return m, commentCmd(m.detailTask.ID, editorCmd)
 		}
 	case "t":
-		// Abrir el modal de tags de la tarea abierta.
+		// Open the opened task's tag modal.
 		if m.detailTask != nil {
 			m.tagOpen = true
 			m.tagInput = ""
 			m.tagSuggestIdx = -1
 		}
 	case "e":
-		// Editar la descripción inline; el detalle queda abierto detrás.
+		// Edit the description inline; the detail stays open behind.
 		if m.detailTask != nil {
 			return m, m.openDescEditor()
 		}
 	case "E":
-		// Editor externo completo (write in nvim).
+		// Full external editor (write in nvim).
 		if m.detailTask != nil {
 			editorCmd := editorCommand(m.config.Editor.Command)
 			cmd := editTaskCmd(*m.detailTask, editorCmd)
@@ -970,12 +970,12 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		if m.detailTask == nil {
 			return m, nil
 		}
-		// Con un comentario seleccionado, borra el comentario.
+		// With a comment selected, delete the comment.
 		if inRange(m.detailCommentSel, len(m.detailComments)) {
 			comment := m.detailComments[m.detailCommentSel]
 			return m, m.deleteCommentCmd(m.detailTask.ID, comment.ID, m.detailCommentSel)
 		}
-		// Sin selección, marca la tarea como done.
+		// With no selection, mark the task as done.
 		id := m.detailTask.ID
 		m.detailOpen = false
 		m.detailTask = nil
@@ -995,7 +995,7 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 
 func (m Model) uniqueAssignees() []string {
 	seen := make(map[string]bool)
-	result := []string{"Me"} // siempre presente, es el usuario
+	result := []string{"Me"} // always present, it is the user
 	seen["Me"] = true
 	for _, t := range m.tasks {
 		if !seen[t.Assignee] && t.Assignee != "" {
@@ -1006,8 +1006,8 @@ func (m Model) uniqueAssignees() []string {
 	return result
 }
 
-// uniqueTags devuelve las tags en uso en todas las tareas, sin repetir y
-// ordenadas alfabéticamente. Es la fuente de opciones del filtro por tag.
+// uniqueTags returns the tags in use across all tasks, without repeats and
+// sorted alphabetically. It is the option source of the tag filter.
 func (m Model) uniqueTags() []string {
 	seen := make(map[string]bool)
 	var result []string
@@ -1023,7 +1023,7 @@ func (m Model) uniqueTags() []string {
 	return result
 }
 
-// selectedTask devuelve la tarea seleccionada en la vista actual, o nil si no hay.
+// selectedTask returns the task selected in the current view, or nil if there is none.
 func (m *Model) selectedTask() *model.Task {
 	switch m.currentView {
 	case viewList:
@@ -1042,22 +1042,22 @@ func (m *Model) selectedTask() *model.Task {
 		}
 	case viewGantt:
 		rows := m.ganttRows()
-		if filaEsTarea(rows, m.ganttCursor) {
+		if rowIsTask(rows, m.ganttCursor) {
 			return &rows[m.ganttCursor].entry.Task
 		}
 	}
 	return nil
 }
 
-// previewBudget calcula cuántas líneas de descripción puede mostrar el preview
-// sin empujar el contenido ni los keybinds fuera de la pantalla.
+// previewBudget calculates how many description lines the preview can show
+// without pushing the content nor the keybinds off the screen.
 func (m Model) previewBudget(keybindsHeight int) int {
 	return previewBudgetFor(m.height, keybindsHeight)
 }
 
-// overlayKind devuelve el modal activo, en el mismo orden de prioridad que
-// handleKey: confirmación, proyecto, nueva tarea, editor de descripción, tags,
-// detalle, filtros.
+// overlayKind returns the active modal, in the same priority order as
+// handleKey: confirmation, project, new task, description editor, tags,
+// detail, filters.
 func (m Model) overlayKind() overlayKind {
 	switch {
 	case m.confirmOpen:
@@ -1085,23 +1085,23 @@ func (m Model) overlayKind() overlayKind {
 }
 
 func (m Model) View() tea.View {
-	// KeybindsBar siempre al fondo.
+	// KeybindsBar always at the bottom.
 	m.statusbar.SetView(m.currentView)
 	m.statusbar.SetOverlay(m.overlayKind())
 	keybinds := m.statusbar.View()
 	keybindsHeight := lineCount(keybinds)
 
-	// El preview se ajusta al alto sobrante para no empujar los keybinds.
+	// The preview adjusts to the leftover height so as not to push the keybinds.
 	m.preview.SetTask(m.selectedTask())
 	m.preview.SetMaxLines(m.previewBudget(keybindsHeight))
 	preview := m.preview.View()
 
-	// El detalle y el editor inline ya muestran la descripción: sin preview.
+	// The detail and the inline editor already show the description: no preview.
 	if m.detailOpen || m.descEditOpen {
 		preview = ""
 	}
 
-	// Toast de feedback: ocupa una línea por encima del preview.
+	// Feedback toast: it takes one line above the preview.
 	toastView := m.renderToast()
 
 	budget := contentBudget(m.height, lineCount(preview)+lineCount(toastView), keybindsHeight)

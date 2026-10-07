@@ -9,10 +9,10 @@ import (
 	"tsk/internal/model"
 )
 
-// El modo edición del modal de proyecto no tenía ni un test: el camino entero --
-// precargar los campos, parsear el workflow, actualizar y avisar -- estaba sin
-// ejecutar. Es el camino que se usa al renombrar un proyecto, así que no es un
-// hueco menor.
+// The edit mode of the project modal did not have a single test: the whole
+// path -- preloading the fields, parsing the workflow, updating and
+// notifying -- was never run. It is the path used when renaming a project, so
+// it is not a minor gap.
 
 func TestProjectModalEditRoundTrip(t *testing.T) {
 	m := newDashModel(t, "api")
@@ -20,394 +20,394 @@ func TestProjectModalEditRoundTrip(t *testing.T) {
 
 	p := m.selectedDashProject()
 	if p == nil {
-		t.Fatal("el fixture no ha dejado ningún proyecto seleccionado")
+		t.Fatal("the fixture left no project selected")
 	}
 	original := p.Name
 
-	abierto, _ := pulsar(t, m, "e")
-	if !abierto.projectModalEdit || abierto.projectEditingName != original {
-		t.Fatalf("el modal no se ha abierto en edición: edit=%v original=%q",
-			abierto.projectModalEdit, abierto.projectEditingName)
+	opened, _ := pressKeys(t, m, "e")
+	if !opened.projectModalEdit || opened.projectEditingName != original {
+		t.Fatalf("the modal did not open in edit mode: edit=%v original=%q",
+			opened.projectModalEdit, opened.projectEditingName)
 	}
-	if abierto.projectNameInput != original {
-		t.Errorf("el nombre no se ha precargado: %q", abierto.projectNameInput)
+	if opened.projectNameInput != original {
+		t.Errorf("the name was not preloaded: %q", opened.projectNameInput)
 	}
-	if abierto.projectWorkflowInput != strings.Join(p.Workflow, ",") {
-		t.Errorf("el workflow no se ha precargado: %q", abierto.projectWorkflowInput)
+	if opened.projectWorkflowInput != strings.Join(p.Workflow, ",") {
+		t.Errorf("the workflow was not preloaded: %q", opened.projectWorkflowInput)
 	}
-	if abierto.projectListOrderInput != strings.Join(p.ListOrder, ",") {
-		t.Errorf("el orden de la lista no se ha precargado: %q", abierto.projectListOrderInput)
+	if opened.projectListOrderInput != strings.Join(p.ListOrder, ",") {
+		t.Errorf("the list order was not preloaded: %q", opened.projectListOrderInput)
 	}
 
-	// Borrar el nombre entero y escribir otro, que es lo que hace el usuario.
-	// Cuatro backspaces borran el nombre entero (5 letras del fixture), que es
-	// el camino real para renombrar.
-	renombrado := abierto
-	renombrado.projectNameInput = ""
-	renombrado, _ = pulsar(t, abierto, "backspace", "backspace", "backspace",
+	// Erase the whole name and write another one, which is what the user does.
+	// Four backspaces erase the whole name (5 letters of the fixture), which is
+	// the real path for renaming.
+	renamed := opened
+	renamed.projectNameInput = ""
+	renamed, _ = pressKeys(t, opened, "backspace", "backspace", "backspace",
 		"backspace", "backspace", "backspace")
 	for _, k := range []string{"z", "e", "t", "a"} {
-		renombrado, _ = pulsar(t, renombrado, k)
+		renamed, _ = pressKeys(t, renamed, k)
 	}
-	if renombrado.projectNameInput != "zeta" {
-		t.Fatalf("la escritura a mano ha dejado %q, want zeta", renombrado.projectNameInput)
+	if renamed.projectNameInput != "zeta" {
+		t.Fatalf("typing by hand left %q, want zeta", renamed.projectNameInput)
 	}
 
-	guardado, cmd := pulsar(t, renombrado, "enter")
-	if guardado.projectModalOpen {
-		t.Error("enter no ha cerrado el modal")
+	saved, cmd := pressKeys(t, renamed, "enter")
+	if saved.projectModalOpen {
+		t.Error("enter did not close the modal")
 	}
 	if cmd == nil {
-		t.Fatal("enter no ha lanzado el guardado")
+		t.Fatal("enter did not launch the save")
 	}
 
 	msg := mustMsg(t, cmd)
-	guardadoMsg, ok := msg.(projectSavedMsg)
+	savedMsg, ok := msg.(projectSavedMsg)
 	if !ok {
-		t.Fatalf("el mensaje es %T, want projectSavedMsg", msg)
+		t.Fatalf("the message is %T, want projectSavedMsg", msg)
 	}
-	if guardadoMsg.err != nil {
-		t.Fatalf("el guardado ha fallado: %v", guardadoMsg.err)
+	if savedMsg.err != nil {
+		t.Fatalf("the save failed: %v", savedMsg.err)
 	}
-	if guardadoMsg.action != "edit" {
-		t.Errorf("la acción es %q, want edit", guardadoMsg.action)
+	if savedMsg.action != "edit" {
+		t.Errorf("the action is %q, want edit", savedMsg.action)
 	}
-	if guardadoMsg.name != "zeta" {
-		t.Errorf("el nombre guardado es %q, want zeta", guardadoMsg.name)
+	if savedMsg.name != "zeta" {
+		t.Errorf("the saved name is %q, want zeta", savedMsg.name)
 	}
 
-	// Y el proyecto existe con el nombre nuevo y con el workflow intacto, que es
-	// lo que significa "vacío = mantener el actual".
-	revisado, err := m.database.GetProject("zeta")
+	// And the project exists with the new name and the intact workflow, which is
+	// what "empty = keep the current one" means.
+	fetched, err := m.database.GetProject("zeta")
 	if err != nil {
 		t.Fatalf("GetProject(zeta): %v", err)
 	}
-	if len(revisado.Workflow) != len(p.Workflow) {
-		t.Errorf("el workflow ha pasado de %v a %v", p.Workflow, revisado.Workflow)
+	if len(fetched.Workflow) != len(p.Workflow) {
+		t.Errorf("the workflow went from %v to %v", p.Workflow, fetched.Workflow)
 	}
 
-	aplicado, _ := updateMsg(t, guardado, msg)
-	if !strings.Contains(ansi.Strip(aplicado.View().Content), "updated") {
-		t.Errorf("no se avisa de la actualización:\n%s", ansi.Strip(aplicado.View().Content))
+	applied, _ := updateMsg(t, saved, msg)
+	if !strings.Contains(ansi.Strip(applied.View().Content), "updated") {
+		t.Errorf("the update is not announced:\n%s", ansi.Strip(applied.View().Content))
 	}
-	if aplicado.pendingSelectName != "zeta" {
-		t.Errorf("pendingSelectName = %q, want zeta para que el dashboard lo seleccione", aplicado.pendingSelectName)
+	if applied.pendingSelectName != "zeta" {
+		t.Errorf("pendingSelectName = %q, want zeta so the dashboard selects it", applied.pendingSelectName)
 	}
 }
 
-// Renombrar a un nombre que ya existe es el error más probable al editar, y el
-// modal se reabre para no perder lo escrito.
+// Renaming to a name that already exists is the most likely error when editing,
+// and the modal reopens so the written text is not lost.
 func TestProjectModalEditRejectsADuplicateName(t *testing.T) {
 	m := newDashModel(t, "api")
 	m.currentView = viewDashboard
 
-	otro := ""
+	other := ""
 	for _, p := range m.projects {
 		if p.Name != "api" {
-			otro = p.Name
+			other = p.Name
 			break
 		}
 	}
-	if otro == "" {
-		t.Skip("el fixture necesita un segundo proyecto")
+	if other == "" {
+		t.Skip("the fixture needs a second project")
 	}
 
-	msg := mustMsg(t, m.saveProjectCmd(true, "api", otro, "", ""))
+	msg := mustMsg(t, m.saveProjectCmd(true, "api", other, "", ""))
 	saved, ok := msg.(projectSavedMsg)
 	if !ok {
-		t.Fatalf("el mensaje es %T, want projectSavedMsg", msg)
+		t.Fatalf("the message is %T, want projectSavedMsg", msg)
 	}
 	if saved.err == nil {
-		t.Fatal("renombrar a un nombre duplicado no ha fallado")
+		t.Fatal("renaming to a duplicate name did not fail")
 	}
 	if saved.action != "edit" {
-		t.Errorf("la acción es %q, want edit", saved.action)
+		t.Errorf("the action is %q, want edit", saved.action)
 	}
 
-	reabierto, _ := updateMsg(t, m, msg)
-	if !reabierto.projectModalOpen {
-		t.Error("el modal no se ha reabierto tras el error, want reopen para no perder lo escrito")
+	reopened, _ := updateMsg(t, m, msg)
+	if !reopened.projectModalOpen {
+		t.Error("the modal did not reopen after the error, want reopen so the typed text is not lost")
 	}
 }
 
-// El workflow del modal es texto libre separado por comas, así que una lista de
-// comas es un error de parseo, no un workflow vacío.
+// The modal's workflow is free text separated by commas, so a comma-separated
+// list is a parse error, not an empty workflow.
 func TestProjectModalWorkflowParseErrors(t *testing.T) {
 	m := newDashModel(t, "api")
 
 	for _, tc := range []struct {
-		nombre    string
+		name      string
 		workflow  string
 		listOrder string
 	}{
-		{"workflow vacío", ", ,", ""},
-		{"orden de lista vacío", "backlog,done", " , "},
+		{"empty workflow", ", ,", ""},
+		{"empty list order", "backlog,done", " , "},
 	} {
-		t.Run(tc.nombre, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			msg := mustMsg(t, m.saveProjectCmd(true, "api", "api", tc.workflow, tc.listOrder))
 			saved, ok := msg.(projectSavedMsg)
 			if !ok {
-				t.Fatalf("el mensaje es %T, want projectSavedMsg", msg)
+				t.Fatalf("the message is %T, want projectSavedMsg", msg)
 			}
 			if saved.err == nil {
-				t.Fatalf("%q no ha producido error", tc.nombre)
+				t.Fatalf("%q did not produce an error", tc.name)
 			}
 			if saved.action != "edit" {
-				t.Errorf("la acción es %q, want edit", saved.action)
+				t.Errorf("the action is %q, want edit", saved.action)
 			}
 		})
 	}
 
-	t.Run("crear", func(t *testing.T) {
+	t.Run("create", func(t *testing.T) {
 		for _, tc := range []struct{ workflow, listOrder string }{
 			{", ,", ""},
 			{"", ", ,"},
 		} {
-			msg := mustMsg(t, m.saveProjectCmd(false, "", "nuevo", tc.workflow, tc.listOrder))
+			msg := mustMsg(t, m.saveProjectCmd(false, "", "new", tc.workflow, tc.listOrder))
 			saved := msg.(projectSavedMsg)
 			if saved.err == nil {
-				t.Errorf("crear con workflow=%q listOrder=%q no ha fallado", tc.workflow, tc.listOrder)
+				t.Errorf("create with workflow=%q listOrder=%q did not fail", tc.workflow, tc.listOrder)
 			}
 			if saved.action != "create" {
-				t.Errorf("la acción es %q, want create", saved.action)
+				t.Errorf("the action is %q, want create", saved.action)
 			}
 		}
 	})
 
-	t.Run("crear con workflow y orden válidos", func(t *testing.T) {
-		msg := mustMsg(t, m.saveProjectCmd(false, "", "nuevo", "backlog,done", "done,backlog"))
+	t.Run("create with valid workflow and order", func(t *testing.T) {
+		msg := mustMsg(t, m.saveProjectCmd(false, "", "new", "backlog,done", "done,backlog"))
 		saved := msg.(projectSavedMsg)
 		if saved.err != nil {
-			t.Fatalf("crear con valores válidos ha fallado: %v", saved.err)
+			t.Fatalf("create with valid values failed: %v", saved.err)
 		}
 
-		creado, err := m.database.GetProject("nuevo")
+		created, err := m.database.GetProject("new")
 		if err != nil {
 			t.Fatalf("GetProjectByName: %v", err)
 		}
-		if len(creado.Workflow) != 2 || len(creado.ListOrder) != 2 {
-			t.Errorf("el proyecto creado tiene workflow=%v listOrder=%v",
-				creado.Workflow, creado.ListOrder)
+		if len(created.Workflow) != 2 || len(created.ListOrder) != 2 {
+			t.Errorf("the created project has workflow=%v listOrder=%v",
+				created.Workflow, created.ListOrder)
 		}
 	})
 }
 
-// Los cinco campos de texto del modal comparten el mismo editor de una sola
-// línea. Los bordes: buffer vacío, el espacio que no debe entrar en los campos
-// de lista, y el puntero nil que la interfaz nunca produce pero la función sí
-// tiene que tolerar.
+// The modal's five text fields share the same one-line editor. The edges:
+// empty buffer, the space that must not enter the list fields, and the nil
+// pointer that the interface never produces but the function does
+// have to tolerate.
 func TestEditTextInput(t *testing.T) {
-	t.Run("backspace sobre un buffer vacío no hace nada", func(t *testing.T) {
+	t.Run("backspace on an empty buffer does nothing", func(t *testing.T) {
 		s := ""
 		editTextInput(&s, "backspace")
 		if s != "" {
-			t.Errorf("el buffer es %q, want vacío", s)
+			t.Errorf("the buffer is %q, want empty", s)
 		}
 	})
 
-	t.Run("backspace quita un carácter", func(t *testing.T) {
+	t.Run("backspace removes a character", func(t *testing.T) {
 		s := "abc"
 		editTextInput(&s, "backspace")
 		if s != "ab" {
-			t.Errorf("el buffer es %q, want ab", s)
+			t.Errorf("the buffer is %q, want ab", s)
 		}
 	})
 
-	t.Run("el espacio entra con su nombre", func(t *testing.T) {
+	t.Run("the space enters with its name", func(t *testing.T) {
 		s := ""
 		editTextInput(&s, "space")
 		if s != " " {
-			t.Errorf("el buffer es %q, want un espacio", s)
+			t.Errorf("the buffer is %q, want a space", s)
 		}
 	})
 
-	// Bubbletea entrega el espacio con nombre, así que la rama del carácter
-	// suelto no se ejercita desde la interfaz. Se prueba aquí porque es código
-	// vivo y su comportamiento (meter un espacio) es parte del contrato.
-	t.Run("el espacio suelto también entra", func(t *testing.T) {
+	// Bubbletea delivers the space as a named key, so the lone character
+	// branch is never exercised from the interface. It is tested here because it
+	// is live code and its behavior (inserting a space) is part of the contract.
+	t.Run("a lone space also enters", func(t *testing.T) {
 		s := ""
 		editTextInput(&s, " ")
 		if s != " " {
-			t.Errorf("el buffer es %q, want un espacio", s)
+			t.Errorf("the buffer is %q, want a space", s)
 		}
 	})
 
-	t.Run("un puntero nil no revienta", func(t *testing.T) {
+	t.Run("a nil pointer does not crash", func(t *testing.T) {
 		editTextInput(nil, "a")
 		editTextInput(nil, "backspace")
 	})
 
-	t.Run("el modal con un índice de campo imposible no revienta", func(t *testing.T) {
+	t.Run("the modal with an impossible field index does not crash", func(t *testing.T) {
 		m := newProjectModel(t, 3)
 		m.projectModalField = 7
 
-		siguiente, _ := press(m, "a")
-		if siguiente.projectNameInput != m.projectNameInput {
-			t.Error("una tecla ha escrito en un campo con índice fuera de rango")
+		next, _ := press(m, "a")
+		if next.projectNameInput != m.projectNameInput {
+			t.Error("a key wrote into a field with an out-of-range index")
 		}
 	})
 }
 
-// El modal de confirmación es un switch sobre la acción pendiente, y cada rama
-// tiene su propio caso degenerado: borrar un off-day que no existe, archivar
-// sin proyecto, y una acción que no es ninguna de las conocidas.
+// The confirmation modal is a switch over the pending action, and each branch
+// has its own degenerate case: deleting an off-day that does not exist,
+// archiving with no project, and an action that is none of the known ones.
 func TestConfirmModalEdges(t *testing.T) {
-	t.Run("un off-day que no existe", func(t *testing.T) {
+	t.Run("an off-day that does not exist", func(t *testing.T) {
 		m := newTestModel(t)
 		m.confirmOpen = true
 		m.confirmAction = "delete-offday"
 		m.confirmOffday = model.OffDay{}
 
-		siguiente, cmd := pulsar(t, m, "y")
+		next, cmd := pressKeys(t, m, "y")
 		if cmd != nil {
-			t.Error("borrar un off-day inexistente ha lanzado un comando")
+			t.Error("deleting a non-existent off-day launched a command")
 		}
-		if siguiente.confirmOpen {
-			t.Error("el modal sigue abierto")
+		if next.confirmOpen {
+			t.Error("the modal is still open")
 		}
 	})
 
-	t.Run("una acción de proyecto sin nombre", func(t *testing.T) {
-		for _, accion := range []string{"archive", "unarchive"} {
+	t.Run("a project action without a name", func(t *testing.T) {
+		for _, action := range []string{"archive", "unarchive"} {
 			m := newTestModel(t)
 			m.confirmOpen = true
-			m.confirmAction = accion
+			m.confirmAction = action
 			m.confirmProject = ""
 
-			if siguiente, cmd := pulsar(t, m, "y"); cmd != nil {
-				t.Errorf("%s sin nombre de proyecto ha lanzado un comando", accion)
-			} else if siguiente.confirmOpen {
-				t.Errorf("%s sin nombre de proyecto ha dejado el modal abierto", accion)
+			if next, cmd := pressKeys(t, m, "y"); cmd != nil {
+				t.Errorf("%s without a project name launched a command", action)
+			} else if next.confirmOpen {
+				t.Errorf("%s without a project name left the modal open", action)
 			}
 		}
 	})
 
-	t.Run("una acción desconocida", func(t *testing.T) {
+	t.Run("an unknown action", func(t *testing.T) {
 		m := newTestModel(t)
 		m.confirmOpen = true
-		m.confirmAction = "lo-que-sea"
+		m.confirmAction = "anything"
 
-		siguiente, cmd := pulsar(t, m, "y")
+		next, cmd := pressKeys(t, m, "y")
 		if cmd != nil {
-			t.Error("una acción desconocida ha lanzado un comando")
+			t.Error("an unknown action launched a command")
 		}
-		if siguiente.confirmOpen {
-			t.Error("una acción desconocida ha dejado el modal abierto")
+		if next.confirmOpen {
+			t.Error("an unknown action left the modal open")
 		}
 	})
 
-	t.Run("cada forma de decir no limpia el estado", func(t *testing.T) {
+	t.Run("every way of saying no clears the state", func(t *testing.T) {
 		for _, k := range []string{"n", "N", "esc", "q"} {
 			m := newTestModel(t)
 			m.confirmOpen = true
 			m.confirmAction = "archive"
 			m.confirmProject = "api"
-			m.confirmOffday = model.OffDay{ID: 7, Assignee: "@juan"}
+			m.confirmOffday = model.OffDay{ID: 7, Assignee: "@john"}
 
-			siguiente, cmd := pulsar(t, m, k)
+			next, cmd := pressKeys(t, m, k)
 			if cmd != nil {
-				t.Errorf("%q ha lanzado un comando de acción", k)
+				t.Errorf("%q launched an action command", k)
 			}
-			if siguiente.confirmOpen || siguiente.confirmAction != "" || siguiente.confirmProject != "" {
-				t.Errorf("%q no ha limpiado el estado de confirmación", k)
+			if next.confirmOpen || next.confirmAction != "" || next.confirmProject != "" {
+				t.Errorf("%q did not clear the confirmation state", k)
 			}
-			if siguiente.confirmOffday.ID != 0 {
-				t.Errorf("%q no ha limpiado el off-day pendiente", k)
+			if next.confirmOffday.ID != 0 {
+				t.Errorf("%q did not clear the pending off-day", k)
 			}
 		}
 	})
 
-	t.Run("y también acepta enter", func(t *testing.T) {
+	t.Run("and it also accepts enter", func(t *testing.T) {
 		m := newDashModel(t, "api")
 		m.currentView = viewDashboard
 		m.confirmOpen = true
 		m.confirmAction = "archive"
 		m.confirmProject = "api"
 
-		_, cmd := pulsar(t, m, "enter")
+		_, cmd := pressKeys(t, m, "enter")
 		if cmd == nil {
-			t.Fatal("enter no ha confirmado la acción")
+			t.Fatal("enter did not confirm the action")
 		}
 		msg := mustMsg(t, cmd)
 		saved, ok := msg.(projectSavedMsg)
 		if !ok {
-			t.Fatalf("el mensaje es %T, want projectSavedMsg", msg)
+			t.Fatalf("the message is %T, want projectSavedMsg", msg)
 		}
 		if saved.err != nil {
-			t.Fatalf("archivar ha fallado: %v", saved.err)
+			t.Fatalf("archiving failed: %v", saved.err)
 		}
-		// GetProject no filtra por archivado: hay que mirar la lista de activos.
-		activos, err := m.database.ListProjects()
+		// GetProject does not filter by archived: you have to look at the active list.
+		active, err := m.database.ListProjects()
 		if err != nil {
 			t.Fatalf("ListProjects: %v", err)
 		}
-		for _, p := range activos {
+		for _, p := range active {
 			if p.Name == "api" {
-				t.Error("el proyecto sigue en la lista de activos tras archivarlo")
+				t.Error("the project is still in the active list after archiving")
 			}
 		}
 	})
 }
 
-// El resultado de una operación de proyecto decide el texto del aviso y si el
-// modal se reabre. Los cuatro textos y el "Done" por defecto son ramas
-// distintas del mismo switch.
+// The result of a project operation decides the notice text and whether the
+// modal reopens. The four texts and the default "Done" are different branches
+// of the same switch.
 func TestProjectSavedMessages(t *testing.T) {
 	for _, tc := range []struct {
-		accion    string
-		nombre    string
-		want      string
-		seleccion bool
+		action   string
+		name     string
+		want     string
+		selected bool
 	}{
-		{"create", "nuevo", `Project "nuevo" created`, true},
-		{"edit", "nuevo", `Project "nuevo" updated`, true},
+		{"create", "new", `Project "new" created`, true},
+		{"edit", "new", `Project "new" updated`, true},
 		{"archive", "api", `Project "api" archived`, false},
 		{"unarchive", "api", `Project "api" restored`, true},
-		{"cualquier-otra", "sin-relevancia", "Done", false},
+		{"any-other", "not-relevant", "Done", false},
 	} {
-		t.Run(tc.accion, func(t *testing.T) {
+		t.Run(tc.action, func(t *testing.T) {
 			m := newDashModel(t, "api")
 			m.width, m.height = 100, 30
 
-			siguiente, _ := updateMsg(t, m, projectSavedMsg{name: tc.nombre, action: tc.accion})
-			out := ansi.Strip(siguiente.View().Content)
+			next, _ := updateMsg(t, m, projectSavedMsg{name: tc.name, action: tc.action})
+			out := ansi.Strip(next.View().Content)
 			if !strings.Contains(out, tc.want) {
-				t.Errorf("el aviso no dice %q:\n%s", tc.want, out)
+				t.Errorf("the notice does not say %q:\n%s", tc.want, out)
 			}
-			if (siguiente.pendingSelectName == tc.nombre) != tc.seleccion {
-				t.Errorf("pendingSelectName = %q, la selección %v", siguiente.pendingSelectName, tc.seleccion)
+			if (next.pendingSelectName == tc.name) != tc.selected {
+				t.Errorf("pendingSelectName = %q, the selection %v", next.pendingSelectName, tc.selected)
 			}
 		})
 	}
 
-	t.Run("un error de archivado no reabre el modal", func(t *testing.T) {
+	t.Run("an archive error does not reopen the modal", func(t *testing.T) {
 		m := newDashModel(t, "api")
-		siguiente, _ := updateMsg(t, m, projectSavedMsg{err: errAccionFallida, action: "archive"})
-		if siguiente.projectModalOpen {
-			t.Error("un archivado fallido ha reabierto el modal de proyecto")
+		next, _ := updateMsg(t, m, projectSavedMsg{err: errActionFailed, action: "archive"})
+		if next.projectModalOpen {
+			t.Error("a failed archive reopened the project modal")
 		}
 	})
 }
 
-// El título del modal distingue creación de edición, y el texto de la pista
-// cambia con él: en crear, vacío significa "usa el default"; en editar, vacío
-// significa "no toques lo que hay".
+// The modal title tells creation from editing, and the hint text
+// changes with it: when creating, empty means "use the default"; when editing,
+// empty means "do not touch what is there".
 func TestProjectModalTitleFollowsTheMode(t *testing.T) {
-	crear := newProjectModel(t, 0)
-	crear.projectModalEdit = false
-	if out := ansi.Strip(crear.renderProjectModal("")); !strings.Contains(out, "New Project") {
-		t.Errorf("el modal de creación no dice New Project:\n%s", out)
+	creating := newProjectModel(t, 0)
+	creating.projectModalEdit = false
+	if out := ansi.Strip(creating.renderProjectModal("")); !strings.Contains(out, "New Project") {
+		t.Errorf("the creation modal does not say New Project:\n%s", out)
 	} else if !strings.Contains(out, "empty = default") {
-		t.Errorf("el modal de creación no avisa de que vacío = default:\n%s", out)
+		t.Errorf("the creation modal does not warn that empty = default:\n%s", out)
 	}
 
-	editar := *crear
-	editar.projectModalEdit = true
-	out := ansi.Strip(editar.renderProjectModal(""))
+	editing := *creating
+	editing.projectModalEdit = true
+	out := ansi.Strip(editing.renderProjectModal(""))
 	if !strings.Contains(out, "Edit Project") {
-		t.Errorf("el modal de edición no dice Edit Project:\n%s", out)
+		t.Errorf("the edit modal does not say Edit Project:\n%s", out)
 	}
 	if !strings.Contains(out, "keep current") {
-		t.Errorf("el modal de edición no avisa de que vacío = mantener:\n%s", out)
+		t.Errorf("the edit modal does not warn that empty = keep:\n%s", out)
 	}
 }

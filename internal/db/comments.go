@@ -8,7 +8,7 @@ import (
 	"tsk/internal/model"
 )
 
-// AddComment crea un comentario nuevo en una tarea.
+// AddComment creates a new comment on a task.
 func (db *DB) AddComment(taskID int64, body string) (*model.Comment, error) {
 	body = strings.TrimSpace(body)
 	if body == "" {
@@ -36,7 +36,7 @@ func (db *DB) AddComment(taskID int64, body string) (*model.Comment, error) {
 	}, nil
 }
 
-// ListComments devuelve los comentarios de una tarea en orden cronológico.
+// ListComments returns the comments of a task in chronological order.
 func (db *DB) ListComments(taskID int64) ([]model.Comment, error) {
 	rows, err := db.conn.Query(
 		`SELECT id, task_id, body, created_at FROM comments
@@ -58,7 +58,7 @@ func (db *DB) ListComments(taskID int64) ([]model.Comment, error) {
 	return comments, rows.Err()
 }
 
-// DeleteComment elimina un comentario por ID.
+// DeleteComment deletes a comment by ID.
 func (db *DB) DeleteComment(id int64) error {
 	result, err := db.conn.Exec(`DELETE FROM comments WHERE id = ?`, id)
 	if err != nil {

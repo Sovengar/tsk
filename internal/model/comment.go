@@ -1,7 +1,7 @@
 package model
 
-// Comment es una nota de seguimiento asociada a una tarea.
-// No tiene autor: todos los comentarios los escribe el usuario.
+// Comment is a follow-up note attached to a task.
+// It has no author: every comment is written by the user.
 type Comment struct {
 	ID        int64  `json:"id"`
 	TaskID    int64  `json:"task_id"`
@@ -9,13 +9,13 @@ type Comment struct {
 	CreatedAt string `json:"created_at"`
 }
 
-// CommentResponse es la respuesta JSON de un solo comentario.
+// CommentResponse is the JSON response for a single comment.
 type CommentResponse struct {
 	OK      bool    `json:"ok"`
 	Comment Comment `json:"comment"`
 }
 
-// CommentListResponse es la respuesta JSON de listado de comentarios.
+// CommentListResponse is the JSON response for a comment list.
 type CommentListResponse struct {
 	Comments []Comment `json:"comments"`
 }

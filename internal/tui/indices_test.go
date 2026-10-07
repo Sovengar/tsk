@@ -7,32 +7,32 @@ import (
 	"tsk/internal/model"
 )
 
-// Estas funciones se extrajeron de la navegación de List, Kanban y Dashboard
-// para poder comprobarlas exhaustivamente. Antes cada call site llevaba su
-// propia copia de la cuenta con su propio borde, y eso era a la vez la fuente
-// de los minion y la razón por la que no había forma de fijarlos sin montar una
-// vista entera y una base de datos.
+// These functions were extracted from the navigation of List, Kanban and
+// Dashboard so they could be checked exhaustively. Before, every call site
+// carried its own copy of the count with its own edge, and that was at the
+// same time the source of the mutants and the reason there was no way to pin
+// them down without building a whole view and a database.
 
-// cycleIndex da la vuelta por el final: es lo que hacen j/k en un ciclo, donde
-// bajar desde la última fila vuelve a la primera.
+// cycleIndex wraps around at the end: that is what j/k do in a cycle, where
+// going down from the last row returns to the first.
 func TestCycleIndex(t *testing.T) {
 	tests := []struct {
 		name      string
 		idx, n, d int
 		want      int
 	}{
-		{"abajo en medio", 1, 3, 1, 2},
-		{"abajo en la última da la vuelta", 2, 3, 1, 0},
-		{"arriba en la primera da la vuelta", 0, 3, -1, 2},
-		{"arriba en medio", 1, 3, -1, 0},
-		{"lista de uno siempre es cero", 0, 1, 1, 0},
-		{"lista de uno arriba también", 0, 1, -1, 0},
-		{"lista vacía no mueve", 5, 0, 1, 5},
-		{"lista vacía no mueve hacia atrás", 5, 0, -1, 5},
-		{"n negativo no mueve", 3, -2, 1, 3},
-		{"índice fuera de rango se normaliza", 7, 3, 1, 2},
-		{"salto mayor que la lista", 0, 3, 5, 2},
-		{"salto negativo mayor que la lista", 0, 3, -5, 1},
+		{"down in the middle", 1, 3, 1, 2},
+		{"down on the last wraps around", 2, 3, 1, 0},
+		{"up on the first wraps around", 0, 3, -1, 2},
+		{"up in the middle", 1, 3, -1, 0},
+		{"single-item list is always zero", 0, 1, 1, 0},
+		{"single-item list up as well", 0, 1, -1, 0},
+		{"empty list does not move", 5, 0, 1, 5},
+		{"empty list does not move backward", 5, 0, -1, 5},
+		{"negative n does not move", 3, -2, 1, 3},
+		{"out-of-range index is normalized", 7, 3, 1, 2},
+		{"step bigger than the list", 0, 3, 5, 2},
+		{"negative step bigger than the list", 0, 3, -5, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -43,23 +43,23 @@ func TestCycleIndex(t *testing.T) {
 	}
 }
 
-// La propiedad que hace que cycleIndex sea utilizable en navegación: para
-// cualquier delta, el resultado siempre está dentro de la lista.
+// The property that makes cycleIndex usable in navigation: for any delta,
+// the result is always inside the list.
 func TestCycleIndexAlwaysInRange(t *testing.T) {
 	for n := 1; n <= 8; n++ {
 		for idx := -2; idx <= n+2; idx++ {
 			for d := -9; d <= 9; d++ {
 				got := cycleIndex(idx, n, d)
 				if got < 0 || got >= n {
-					t.Fatalf("cycleIndex(%d, %d, %d) = %d, fuera de [0,%d)", idx, n, d, got, n)
+					t.Fatalf("cycleIndex(%d, %d, %d) = %d, out of [0,%d)", idx, n, d, got, n)
 				}
 			}
 		}
 	}
 }
 
-// Y recorrer con delta +1 n veces vuelve al punto de partida, para cualquier
-// índice inicial.
+// And walking with delta +1 n times returns to the starting point, for any
+// initial index.
 func TestCycleIndexIsAPermutation(t *testing.T) {
 	for n := 1; n <= 8; n++ {
 		for start := range n {
@@ -67,34 +67,34 @@ func TestCycleIndexIsAPermutation(t *testing.T) {
 			idx := start
 			for range n {
 				if seen[idx] {
-					t.Fatalf("n=%d: el ciclo repitió %d antes de completar %d vueltas", n, idx, n)
+					t.Fatalf("n=%d: the cycle repeated %d before completing %d turns", n, idx, n)
 				}
 				seen[idx] = true
 				idx = cycleIndex(idx, n, 1)
 			}
 			if idx != start {
-				t.Errorf("n=%d: tras %d pasos desde %d se vuelve a %d", n, n, start, idx)
+				t.Errorf("n=%d: after %d steps from %d it is back at %d", n, n, start, idx)
 			}
 		}
 	}
 }
 
-// shiftIndex se queda en el extremo en vez de dar la vuelta: es lo que hacen las
-// flechas al moverse entre columnas del Kanban.
+// shiftIndex stays at the extreme instead of wrapping: that is what the
+// arrows do when moving between Kanban columns.
 func TestShiftIndex(t *testing.T) {
 	tests := []struct {
 		name      string
 		idx, n, d int
 		want      int
 	}{
-		{"a la derecha en medio", 1, 3, 1, 2},
-		{"a la derecha en la última se queda", 2, 3, 1, 2},
-		{"a la izquierda en medio", 1, 3, -1, 0},
-		{"a la izquierda en la primera se queda", 0, 3, -1, 0},
-		{"lista vacía devuelve cero", 4, 0, 1, 0},
-		{"lista negativa devuelve cero", 4, -1, -1, 0},
-		{"índice fuera de rango se recorta", 9, 3, 1, 2},
-		{"índice negativo se recorta", -9, 3, 1, 0},
+		{"right in the middle", 1, 3, 1, 2},
+		{"right on the last stays", 2, 3, 1, 2},
+		{"left in the middle", 1, 3, -1, 0},
+		{"left on the first stays", 0, 3, -1, 0},
+		{"empty list returns zero", 4, 0, 1, 0},
+		{"negative list returns zero", 4, -1, -1, 0},
+		{"out-of-range index is clamped", 9, 3, 1, 2},
+		{"negative index is clamped", -9, 3, 1, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -111,28 +111,28 @@ func TestShiftIndexAlwaysInRange(t *testing.T) {
 			for d := -5; d <= 5; d++ {
 				got := shiftIndex(idx, n, d)
 				if got < 0 || got >= n {
-					t.Fatalf("shiftIndex(%d, %d, %d) = %d, fuera de [0,%d)", idx, n, d, got, n)
+					t.Fatalf("shiftIndex(%d, %d, %d) = %d, out of [0,%d)", idx, n, d, got, n)
 				}
 			}
 		}
 	}
 }
 
-// inRange es la guarda antes de cada tasks[idx]: su borde inferior importa
-// (un -1 indexaría por detrás) y el superior también (fuera de rango revienta).
+// inRange is the guard before every tasks[idx]: its lower edge matters
+// (a -1 would index backwards) and so does the upper one (out of range blows up).
 func TestInRange(t *testing.T) {
 	tests := []struct {
 		name   string
 		idx, n int
 		want   bool
 	}{
-		{"dentro", 0, 1, true},
-		{"último válido", 2, 3, true},
-		{"uno más allá", 3, 3, false},
-		{"negativo", -1, 3, false},
-		{"lista vacía", 0, 0, false},
-		{"lista vacía y negativo", -1, 0, false},
-		{"lista negativa", 0, -1, false},
+		{"inside", 0, 1, true},
+		{"last valid", 2, 3, true},
+		{"one past", 3, 3, false},
+		{"negative", -1, 3, false},
+		{"empty list", 0, 0, false},
+		{"empty list and negative", -1, 0, false},
+		{"negative list", 0, -1, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -143,9 +143,9 @@ func TestInRange(t *testing.T) {
 	}
 }
 
-// nextPriority: el ciclo depende del estado. En backlog hay cuatro peldaños
-// (incluye none) y fuera de backlog sólo tres, así que la misma prioridad
-// avanza distinto según dónde esté la tarea.
+// nextPriority: the cycle depends on the status. In backlog there are four
+// steps (it includes none) and out of backlog only three, so the same
+// priority advances differently depending on where the task is.
 func TestNextPriority(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -154,17 +154,17 @@ func TestNextPriority(t *testing.T) {
 		want     int
 	}{
 		// backlog: none → low → med → high → none
-		{"backlog desde none", "backlog", model.PriorityNone, model.PriorityLow},
-		{"backlog desde low", "backlog", model.PriorityLow, model.PriorityMedium},
-		{"backlog desde med", "backlog", model.PriorityMedium, model.PriorityHigh},
-		{"backlog desde high da la vuelta", "backlog", model.PriorityHigh, model.PriorityNone},
+		{"backlog from none", "backlog", model.PriorityNone, model.PriorityLow},
+		{"backlog from low", "backlog", model.PriorityLow, model.PriorityMedium},
+		{"backlog from med", "backlog", model.PriorityMedium, model.PriorityHigh},
+		{"backlog from high wraps around", "backlog", model.PriorityHigh, model.PriorityNone},
 
-		// fuera de backlog: low → med → high → low
-		{"doing desde low", "doing", model.PriorityLow, model.PriorityMedium},
-		{"doing desde med", "doing", model.PriorityMedium, model.PriorityHigh},
-		{"doing desde high da la vuelta", "doing", model.PriorityHigh, model.PriorityLow},
-		// none NO está en el ciclo de fuera de backlog: salta directo a low.
-		{"doing desde none entra al ciclo", "doing", model.PriorityNone, model.PriorityLow},
+		// out of backlog: low → med → high → low
+		{"doing from low", "doing", model.PriorityLow, model.PriorityMedium},
+		{"doing from med", "doing", model.PriorityMedium, model.PriorityHigh},
+		{"doing from high wraps around", "doing", model.PriorityHigh, model.PriorityLow},
+		// none is NOT in the out-of-backlog cycle: it jumps straight to low.
+		{"doing from none enters the cycle", "doing", model.PriorityNone, model.PriorityLow},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -175,9 +175,9 @@ func TestNextPriority(t *testing.T) {
 	}
 }
 
-// La prioridad se recorta a 0..3 antes de ciclar: llega de la base y allí no
-// hay garantía de rango. Sin el recorte un 7 con el ciclo de tres peldaños se
-// quedaría en 7 (= 1 = low) y "subir" no movería nada.
+// The priority is truncated to 0..3 before cycling: it arrives from the
+// database and there is no range guarantee. Without the truncation a 7 with
+// the three-step cycle would stay at 7 (= 1 = low) and "going up" would not move anything.
 func TestNextPriorityClampsOutOfRange(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -185,11 +185,11 @@ func TestNextPriorityClampsOutOfRange(t *testing.T) {
 		priority int
 		want     int
 	}{
-		{"backlog desde 7 acota a high y vuelve a none", "backlog", 7, model.PriorityNone},
-		{"backlog desde 99", "backlog", 99, model.PriorityNone},
-		{"backlog desde -5 acota a none", "backlog", -5, model.PriorityLow},
-		{"doing desde 7 acota a high y vuelve a low", "doing", 7, model.PriorityLow},
-		{"doing desde -5 acota a none", "doing", -5, model.PriorityLow},
+		{"backlog from 7 clamps to high and returns to none", "backlog", 7, model.PriorityNone},
+		{"backlog from 99", "backlog", 99, model.PriorityNone},
+		{"backlog from -5 clamps to none", "backlog", -5, model.PriorityLow},
+		{"doing from 7 clamps to high and returns to low", "doing", 7, model.PriorityLow},
+		{"doing from -5 clamps to none", "doing", -5, model.PriorityLow},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -200,52 +200,52 @@ func TestNextPriorityClampsOutOfRange(t *testing.T) {
 	}
 }
 
-// La salida siempre cae en el rango de prioridades válido.
+// The output always falls in the valid priority range.
 func TestNextPriorityAlwaysValid(t *testing.T) {
 	statuses := []string{"backlog", "todo", "doing", "reviewing", "done"}
 	for _, status := range statuses {
 		for p := -3; p <= 9; p++ {
 			got := nextPriority(status, p)
 			if got < model.PriorityNone || got > model.PriorityHigh {
-				t.Errorf("nextPriority(%q, %d) = %d, fuera del rango 0-3", status, p, got)
+				t.Errorf("nextPriority(%q, %d) = %d, outside the 0-3 range", status, p, got)
 			}
 		}
 	}
 }
 
-// Ciclar muchas veces en backlog recorre los cuatro estados y vuelve al punto
-// de partida; fuera de backlog recorre los tres.
+// Cycling many times in backlog walks the four states and returns to the
+// starting point; out of backlog it walks the three.
 func TestNextPriorityCycles(t *testing.T) {
-	t.Run("backlog recorre 4 estados", func(t *testing.T) {
+	t.Run("backlog walks 4 states", func(t *testing.T) {
 		p := model.PriorityNone
 		for range 4 {
 			p = nextPriority("backlog", p)
 		}
 		if p != model.PriorityNone {
-			t.Errorf("4 pasos en backlog = %d, want %d (vuelta al inicio)", p, model.PriorityNone)
+			t.Errorf("4 steps in backlog = %d, want %d (back to the start)", p, model.PriorityNone)
 		}
 	})
 
-	t.Run("fuera de backlog recorre 3 estados", func(t *testing.T) {
+	t.Run("outside backlog walks 3 states", func(t *testing.T) {
 		p := model.PriorityLow
 		for range 3 {
 			p = nextPriority("doing", p)
 		}
 		if p != model.PriorityLow {
-			t.Errorf("3 pasos fuera de backlog = %d, want %d (vuelta al inicio)", p, model.PriorityLow)
+			t.Errorf("3 steps outside backlog = %d, want %d (back to the start)", p, model.PriorityLow)
 		}
 	})
 }
 
-// taskAt es la guarda que estaba escrita delante de cada tasks[m.cursor].
-// Recibir el índice como parámetro es lo que permite matar su mutante de
-// BOUNDARY: idx == len(tasks) no ocurre nunca desde el teclado porque el cursor
-// llega acotado, pero aquí se puede pedir exactamente ese caso.
+// taskAt is the guard that was written in front of every tasks[m.cursor].
+// Receiving the index as a parameter is what allows killing its BOUNDARY
+// mutant: idx == len(tasks) never happens from the keyboard because the
+// cursor arrives bounded, but here that exact case can be asked for.
 func TestTaskAt(t *testing.T) {
 	tasks := []model.Task{
-		{ID: 1, Title: "primera"},
-		{ID: 2, Title: "segunda"},
-		{ID: 3, Title: "tercera"},
+		{ID: 1, Title: "first"},
+		{ID: 2, Title: "second"},
+		{ID: 3, Title: "third"},
 	}
 	tests := []struct {
 		name   string
@@ -254,14 +254,14 @@ func TestTaskAt(t *testing.T) {
 		wantID int64
 		wantOK bool
 	}{
-		{"primera", tasks, 0, 1, true},
-		{"del medio", tasks, 1, 2, true},
-		{"última", tasks, 2, 3, true},
-		{"uno más allá", tasks, 3, 0, false},
-		{"muy más allá", tasks, 99, 0, false},
-		{"negativo", tasks, -1, 0, false},
-		{"lista vacía", nil, 0, 0, false},
-		{"lista vacía con índice negativo", nil, -5, 0, false},
+		{"first", tasks, 0, 1, true},
+		{"the middle one", tasks, 1, 2, true},
+		{"last", tasks, 2, 3, true},
+		{"one past", tasks, 3, 0, false},
+		{"way past", tasks, 99, 0, false},
+		{"negative", tasks, -1, 0, false},
+		{"empty list", nil, 0, 0, false},
+		{"empty list with negative index", nil, -5, 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -273,7 +273,7 @@ func TestTaskAt(t *testing.T) {
 				return
 			}
 			if got == nil {
-				t.Fatalf("taskAt(%d) = nil, want la tarea %d", tt.idx, tt.wantID)
+				t.Fatalf("taskAt(%d) = nil, want task %d", tt.idx, tt.wantID)
 			}
 			if got.ID != tt.wantID {
 				t.Errorf("taskAt(%d).ID = %d, want %d", tt.idx, got.ID, tt.wantID)
@@ -282,8 +282,8 @@ func TestTaskAt(t *testing.T) {
 	}
 }
 
-// Con cualquier lista y cualquier índice, taskAt devuelve algo o nil, nunca
-// entra en pánico: es lo que hace seguro usarlo delante de cada tasks[idx].
+// With any list and any index, taskAt returns something or nil, it never
+// panics: that is what makes it safe to use in front of every tasks[idx].
 func TestTaskAtNeverPanics(t *testing.T) {
 	sizes := []int{0, 1, 2, 5}
 	for _, n := range sizes {
@@ -295,7 +295,7 @@ func TestTaskAtNeverPanics(t *testing.T) {
 			got := taskAt(tasks, idx)
 			if inRange(idx, n) {
 				if got == nil || got.ID != int64(idx+1) {
-					t.Fatalf("taskAt(n=%d, %d) = %+v, want la tarea %d", n, idx, got, idx+1)
+					t.Fatalf("taskAt(n=%d, %d) = %+v, want task %d", n, idx, got, idx+1)
 				}
 			} else if got != nil {
 				t.Fatalf("taskAt(n=%d, %d) = %+v, want nil", n, idx, got)
@@ -304,8 +304,8 @@ func TestTaskAtNeverPanics(t *testing.T) {
 	}
 }
 
-// previewBudgetFor: lo que cabe entre el mínimo de 1 línea y el tope, sin dejar
-// que el preview empuje el contenido fuera de la pantalla.
+// previewBudgetFor: what fits between the minimum of 1 line and the cap,
+// without letting the preview push the content off the screen.
 func TestPreviewBudgetFor(t *testing.T) {
 	const keybinds = 2
 	tests := []struct {
@@ -313,13 +313,13 @@ func TestPreviewBudgetFor(t *testing.T) {
 		height int
 		want   int
 	}{
-		{"terminal normal da el tope", 60, previewMaxLines},
-		{"justo en el tope", previewMaxLines + keybinds + minContentHeight + 2, previewMaxLines},
-		{"un poco menos del tope", previewMaxLines + keybinds + minContentHeight + 1, previewMaxLines - 1},
-		{"terminal pequeño da menos", 20, 20 - keybinds - minContentHeight - 2},
-		{"terminal mínimo da 1", 10, 1},
-		{"altura cero da 1", 0, 1},
-		{"altura negativa da 1", -10, 1},
+		{"normal terminal hits the cap", 60, previewMaxLines},
+		{"exactly at the cap", previewMaxLines + keybinds + minContentHeight + 2, previewMaxLines},
+		{"a bit under the cap", previewMaxLines + keybinds + minContentHeight + 1, previewMaxLines - 1},
+		{"small terminal gives less", 20, 20 - keybinds - minContentHeight - 2},
+		{"minimum terminal gives 1", 10, 1},
+		{"zero height gives 1", 0, 1},
+		{"negative height gives 1", -10, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -328,39 +328,39 @@ func TestPreviewBudgetFor(t *testing.T) {
 				t.Errorf("previewBudgetFor(%d, %d) = %d, want %d", tt.height, keybinds, got, tt.want)
 			}
 			if got < 1 || got > previewMaxLines {
-				t.Errorf("previewBudgetFor(%d, %d) = %d, fuera de [1,%d]", tt.height, keybinds, got, previewMaxLines)
+				t.Errorf("previewBudgetFor(%d, %d) = %d, out of [1,%d]", tt.height, keybinds, got, previewMaxLines)
 			}
 		})
 	}
 }
 
-// Más keybinds dejan menos presupuesto, nunca más.
+// More keybinds leave less budget, never more.
 func TestPreviewBudgetShrinksWithKeybinds(t *testing.T) {
 	for height := 12; height <= 60; height++ {
 		prev := previewBudgetFor(height, 0)
 		for k := 1; k <= 8; k++ {
 			got := previewBudgetFor(height, k)
 			if got > prev {
-				t.Errorf("height=%d: más keybinds (%d)dio más presupuesto: %d > %d", height, k, got, prev)
+				t.Errorf("height=%d: more keybinds (%d) gave more budget: %d > %d", height, k, got, prev)
 			}
 			prev = got
 		}
 	}
 }
 
-// El presupuesto nunca sale del rango acotado, para cualquier entrada.
+// The budget never leaves the bounded range, for any input.
 func TestPreviewBudgetAlwaysBounded(t *testing.T) {
 	for height := -5; height <= 80; height++ {
 		for keybinds := -2; keybinds <= 20; keybinds++ {
 			got := previewBudgetFor(height, keybinds)
 			if got < 1 || got > previewMaxLines {
-				t.Fatalf("previewBudgetFor(%d, %d) = %d, fuera de [1,%d]", height, keybinds, got, previewMaxLines)
+				t.Fatalf("previewBudgetFor(%d, %d) = %d, out of [1,%d]", height, keybinds, got, previewMaxLines)
 			}
 		}
 	}
 }
 
-// matchesStatus tiene tres modos: activas, todas, o un estado exacto.
+// matchesStatus has three modes: active, all, or an exact status.
 func TestMatchesStatus(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -369,14 +369,14 @@ func TestMatchesStatus(t *testing.T) {
 		active bool
 		want   bool
 	}{
-		{"todas las activas acepta una activa", statusFilterAllActive, "doing", true, true},
-		{"todas las activas rechaza una inactiva", statusFilterAllActive, "done", false, false},
-		{"todas no restringe", "", "done", false, true},
-		{"todas no restringe con activa", "", "todo", true, true},
-		{"estado exacto coincide", "doing", "doing", false, true},
-		{"estado exacto no coincide", "doing", "todo", false, false},
-		{"estado exacto con activa tampoco filtra", "todo", "todo", true, true},
-		{"un estado desconocido sólo coincide consigo mismo", "nuevo", "nuevo", false, true},
+		{"all-active accepts an active one", statusFilterAllActive, "doing", true, true},
+		{"all-active rejects an inactive one", statusFilterAllActive, "done", false, false},
+		{"all does not restrict", "", "done", false, true},
+		{"all does not restrict with active", "", "todo", true, true},
+		{"exact status matches", "doing", "doing", false, true},
+		{"exact status does not match", "doing", "todo", false, false},
+		{"exact status with active does not filter either", "todo", "todo", true, true},
+		{"an unknown status only matches itself", "new", "new", false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -387,36 +387,36 @@ func TestMatchesStatus(t *testing.T) {
 	}
 }
 
-// El filtro de estado "todas las activas" NO mira el campo status, sólo el
-// flag active: es lo que distingue ese modo del de coincidencia exacta.
+// The "all active" status filter does NOT look at the status field, only the
+// active flag: that is what tells that mode apart from exact match.
 func TestMatchesStatusAllActiveIgnoresStatusName(t *testing.T) {
-	for _, status := range []string{"todo", "doing", "done", "cancelled", "cualquiera"} {
+	for _, status := range []string{"todo", "doing", "done", "cancelled", "whatever"} {
 		if !matchesStatus(statusFilterAllActive, status, true) {
-			t.Errorf("con active=true el estado %q debería pasar", status)
+			t.Errorf("with active=true the status %q should pass", status)
 		}
 		if matchesStatus(statusFilterAllActive, status, false) {
-			t.Errorf("con active=false el estado %q no debería pasar", status)
+			t.Errorf("with active=false the status %q should not pass", status)
 		}
 	}
 }
 
-// matchesPriority: -1 es "cualquiera", cualquier otro valor exige coincidencia.
+// matchesPriority: -1 is "any", any other value demands a match.
 func TestMatchesPriority(t *testing.T) {
 	tests := []struct {
 		name           string
 		filter, actual int
 		want           bool
 	}{
-		{"sin filtro acepta cualquiera", -1, 0, true},
-		{"sin filtro acepta la máxima", -1, 3, true},
-		{"filtro none coincide con none", 0, 0, true},
-		{"filtro none no coincide con high", 0, 3, false},
-		{"filtro high coincide con high", 3, 3, true},
-		{"filtro high no coincide con none", 3, 0, false},
-		// Cualquier negativo desactiva el filtro, no sólo -1: es lo que hacía
-		// el `if m.filterPriority >= 0 && ...` original y se conserva.
-		{"otro negativo también desactiva el filtro", -2, 1, true},
-		{"otro negativo con la misma prioridad", -2, -2, true},
+		{"no filter accepts anything", -1, 0, true},
+		{"no filter accepts the highest", -1, 3, true},
+		{"none filter matches none", 0, 0, true},
+		{"none filter does not match high", 0, 3, false},
+		{"high filter matches high", 3, 3, true},
+		{"high filter does not match none", 3, 0, false},
+		// Any negative disables the filter, not only -1: that is what the
+		// original `if m.filterPriority >= 0 && ...` did and it is kept.
+		{"another negative also disables the filter", -2, 1, true},
+		{"another negative with the same priority", -2, -2, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -427,23 +427,23 @@ func TestMatchesPriority(t *testing.T) {
 	}
 }
 
-// clampTo es el borde que repetían cuatro clamps distintos del programa. Con
-// lista vacía devuelve 0, que es lo que todos ellos mostraban.
+// clampTo is the edge that four different clamps of the program repeated.
+// With an empty list it returns 0, which is what all of them showed.
 func TestClampTo(t *testing.T) {
 	tests := []struct {
 		name   string
 		idx, n int
 		want   int
 	}{
-		{"dentro", 2, 5, 2},
-		{"último válido", 4, 5, 4},
-		{"uno más allá", 5, 5, 4},
-		{"muy más allá", 99, 5, 4},
-		{"negativo", -3, 5, 0},
-		{"lista de uno", 7, 1, 0},
-		{"lista vacía", 4, 0, 0},
-		{"lista vacía con negativo", -4, 0, 0},
-		{"n negativo", 4, -2, 0},
+		{"inside", 2, 5, 2},
+		{"last valid", 4, 5, 4},
+		{"one past", 5, 5, 4},
+		{"way past", 99, 5, 4},
+		{"negative", -3, 5, 0},
+		{"single-item list", 7, 1, 0},
+		{"empty list", 4, 0, 0},
+		{"empty list with negative", -4, 0, 0},
+		{"negative n", 4, -2, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -460,30 +460,30 @@ func TestClampToAlwaysInRange(t *testing.T) {
 			got := clampTo(idx, n)
 			if n <= 0 {
 				if got != 0 {
-					t.Fatalf("clampTo(%d, %d) = %d, want 0 sin lista", idx, n, got)
+					t.Fatalf("clampTo(%d, %d) = %d, want 0 with no list", idx, n, got)
 				}
 				continue
 			}
 			if got < 0 || got >= n {
-				t.Fatalf("clampTo(%d, %d) = %d, fuera de [0,%d)", idx, n, got, n)
+				t.Fatalf("clampTo(%d, %d) = %d, out of [0,%d)", idx, n, got, n)
 			}
 		}
 	}
 }
 
-// firstValidIndex es el "si el índice no vale, el primero" sin mirar elementos.
+// firstValidIndex is the "if the index does not apply, the first one" without looking at elements.
 func TestFirstValidIndex(t *testing.T) {
 	tests := []struct {
 		name   string
 		idx, n int
 		want   int
 	}{
-		{"dentro", 2, 5, 2},
-		{"negativo", -1, 5, 0},
-		{"fuera por arriba", 9, 5, 4},
-		{"lista de uno", 3, 1, 0},
-		{"lista vacía", 3, 0, 0},
-		{"lista negativa", 3, -1, 0},
+		{"inside", 2, 5, 2},
+		{"negative", -1, 5, 0},
+		{"out at the top", 9, 5, 4},
+		{"single-item list", 3, 1, 0},
+		{"empty list", 3, 0, 0},
+		{"negative list", 3, -1, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -494,8 +494,8 @@ func TestFirstValidIndex(t *testing.T) {
 	}
 }
 
-// firstOrAt devuelve el primer elemento cuando el índice no vale. Es lo que
-// distingue esta función de taskAt2, que devuelve "".
+// firstOrAt returns the first element when the index does not apply. That is
+// what tells this function apart from taskAt2, which returns "".
 func TestFirstOrAt(t *testing.T) {
 	items := []string{"a", "b", "c"}
 	tests := []struct {
@@ -503,12 +503,12 @@ func TestFirstOrAt(t *testing.T) {
 		idx  int
 		want string
 	}{
-		{"primera", 0, "a"},
-		{"del medio", 1, "b"},
-		{"última", 2, "c"},
-		{"negativo cae en la primera", -1, "a"},
-		{"fuera por arriba cae en la última", 9, "c"},
-		{"uno más allá cae en la última", 3, "c"},
+		{"first", 0, "a"},
+		{"the middle one", 1, "b"},
+		{"last", 2, "c"},
+		{"negative falls on the first", -1, "a"},
+		{"out at the top falls on the last", 9, "c"},
+		{"one past falls on the last", 3, "c"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -519,47 +519,47 @@ func TestFirstOrAt(t *testing.T) {
 	}
 }
 
-// Y sobre lista vacía devuelve "", como taskAt2: no hay primer elemento.
+// And on an empty list it returns "", like taskAt2: there is no first element.
 func TestFirstOrAtEmpty(t *testing.T) {
 	for _, idx := range []int{-1, 0, 5} {
 		if got := firstOrAt(nil, idx); got != "" {
-			t.Errorf("firstOrAt(nil, %d) = %q, want vacío", idx, got)
+			t.Errorf("firstOrAt(nil, %d) = %q, want empty", idx, got)
 		}
 	}
 }
 
-// taskAt2 devuelve "" fuera de rango, a diferencia de firstOrAt.
+// taskAt2 returns "" out of range, unlike firstOrAt.
 func TestTaskAt2OutOfRange(t *testing.T) {
 	items := []string{"a", "b", "c"}
 	for _, idx := range []int{-1, 3, 99} {
 		if got := taskAt2(items, idx); got != "" {
-			t.Errorf("taskAt2(%d) = %q, want vacío fuera de rango", idx, got)
+			t.Errorf("taskAt2(%d) = %q, want empty out of range", idx, got)
 		}
 	}
 	if got := taskAt2(items, 1); got != "b" {
 		t.Errorf("taskAt2(1) = %q, want b", got)
 	}
 	if got := taskAt2(nil, 0); got != "" {
-		t.Errorf("taskAt2(nil, 0) = %q, want vacío", got)
+		t.Errorf("taskAt2(nil, 0) = %q, want empty", got)
 	}
 }
 
-// La selección del detalle no envuelve por arriba: -1 significa "nada
-// seleccionado", y desde ahí "j" va al primer comentario, no al segundo.
+// The detail's selection does not wrap upwards: -1 means "nothing
+// selected", and from there "j" goes to the first comment, not the second.
 func TestNextCommentSel(t *testing.T) {
 	tests := []struct {
 		name   string
 		sel, n int
 		want   int
 	}{
-		{"nada seleccionado va al primero", -1, 3, 0},
-		{"del primero al segundo", 0, 3, 1},
-		{"del segundo al tercero", 1, 3, 2},
-		{"en el último se queda", 2, 3, 2},
-		{"más allá del último se queda", 9, 3, 2},
-		{"un solo comentario", -1, 1, 0},
-		{"un solo comentario ya en el", 0, 1, 0},
-		{"sin comentarios", -1, 0, 0},
+		{"nothing selected goes to the first", -1, 3, 0},
+		{"from the first to the second", 0, 3, 1},
+		{"from the second to the third", 1, 3, 2},
+		{"on the last it stays", 2, 3, 2},
+		{"past the last it stays", 9, 3, 2},
+		{"a single comment", -1, 1, 0},
+		{"a single comment already on it", 0, 1, 0},
+		{"no comments", -1, 0, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -570,36 +570,36 @@ func TestNextCommentSel(t *testing.T) {
 	}
 }
 
-// Nunca sale de [0, n-1] para n >= 1, y es monótona hasta saturar en el último.
+// It never leaves [0, n-1] for n >= 1, and it is monotonic until it saturates at the last.
 func TestNextCommentSelStaysInRange(t *testing.T) {
 	for n := 1; n <= 6; n++ {
 		prev := -1
 		for sel := -1; sel <= 8; sel++ {
 			got := nextCommentSel(sel, n)
 			if got < 0 || got > n-1 {
-				t.Fatalf("nextCommentSel(%d, %d) = %d, fuera de [0,%d]", sel, n, got, n-1)
+				t.Fatalf("nextCommentSel(%d, %d) = %d, out of [0,%d]", sel, n, got, n-1)
 			}
 			if got < prev {
-				t.Fatalf("nextCommentSel(%d, %d) = %d retrocede desde %d", sel, n, got, prev)
+				t.Fatalf("nextCommentSel(%d, %d) = %d went backwards from %d", sel, n, got, prev)
 			}
 			prev = got
 		}
 	}
 }
 
-// Hacia atrás, el -1 es un tope real: desde el primer comentario se vuelve a
-// "nada seleccionado" y de ahí no se sale hacia -2.
+// Backwards, -1 is a real bound: from the first comment it goes back to
+// "nothing selected" and from there it does not go out to -2.
 func TestPrevCommentSel(t *testing.T) {
 	tests := []struct {
 		name string
 		sel  int
 		want int
 	}{
-		{"del último", 3, 2},
-		{"del segundo", 1, 0},
-		{"del primero vuelve a nada", 0, -1},
-		{"desde nada se queda", -1, -1},
-		{"muy negativo", -7, -1},
+		{"from the last", 3, 2},
+		{"from the second", 1, 0},
+		{"from the first back to nothing", 0, -1},
+		{"from nothing it stays", -1, -1},
+		{"very negative", -7, -1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -618,20 +618,20 @@ func TestPrevCommentSelNeverBelowMinusOne(t *testing.T) {
 	}
 }
 
-// Un pageSize de 0 o negativo no es "una página": es configuración ausente, y
-// cae al valor por defecto igual que el resto de la config.
+// A pageSize of 0 or negative is not "a page": it is missing config, and
+// it falls back to the default like the rest of the config.
 func TestResolvePageSize(t *testing.T) {
 	tests := []struct {
 		name string
 		in   int
 		want int
 	}{
-		{"cero", 0, config.DefaultPageSize},
-		{"negativo", -1, config.DefaultPageSize},
-		{"muy negativo", -100, config.DefaultPageSize},
-		{"uno", 1, 1},
-		{"diez", 10, 10},
-		{"muy grande", 100000, 100000},
+		{"zero", 0, config.DefaultPageSize},
+		{"negative", -1, config.DefaultPageSize},
+		{"very negative", -100, config.DefaultPageSize},
+		{"one", 1, 1},
+		{"ten", 10, 10},
+		{"very large", 100000, 100000},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -642,19 +642,19 @@ func TestResolvePageSize(t *testing.T) {
 	}
 }
 
-// El editor por defecto son las tres rutas de "c" (comentario), "E" (edición
-// completa) y la de descripción. Comparten función para que no diverjan.
+// The default editor is the three paths of "c" (comment), "E" (full
+// editing) and the description's. They share a function so they do not diverge.
 func TestEditorCommand(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
 		want string
 	}{
-		{"sin configurar", "", "nvim"},
+		{"unset", "", "nvim"},
 		{"vim", "vim", "vim"},
-		{"con argumentos", "code --wait", "code --wait"},
-		{"un espacio no es vacío", " ", " "},
-		{"guion", "-", "-"},
+		{"with arguments", "code --wait", "code --wait"},
+		{"a space is not empty", " ", " "},
+		{"dash", "-", "-"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -665,9 +665,9 @@ func TestEditorCommand(t *testing.T) {
 	}
 }
 
-// El reparto del Gantt tiene dos regímenes y dos suelos. Como función pura se
-// comprueba sobre un barrido de anchos, que es lo que la caja rellenada con
-// espacios no dejaba ver.
+// The Gantt split has two regimes and two floors. As a pure function it is
+// checked over a sweep of widths, which is what the box padded with spaces
+// did not let you see.
 func TestGanttLabelAndDays(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -675,17 +675,17 @@ func TestGanttLabelAndDays(t *testing.T) {
 		wantLabel   int
 		wantDayCols int
 	}{
-		{"holgado", 118, 30, 87},
-		{"justo en el umbral", 70, 30, 39},
-		{"una menos que el umbral", 69, 23, 45},
-		{"un tercio exacto", 60, 20, 39},
-		{"con suelo de etiqueta", 45, 15, 29},
-		{"etiqueta al mínimo", 43, 14, 28},
-		{"suelo de etiqueta por la regla de un tercio", 30, 14, 15},
-		{"días al mínimo", 20, 14, 7},
-		{"por debajo del suelo de días", 18, 14, 7},
-		{"cero", 0, 14, 7},
-		{"negativo", -50, 14, 7},
+		{"roomy", 118, 30, 87},
+		{"exactly at the threshold", 70, 30, 39},
+		{"one less than the threshold", 69, 23, 45},
+		{"an exact third", 60, 20, 39},
+		{"with label floor", 45, 15, 29},
+		{"label at the minimum", 43, 14, 28},
+		{"label floor from the one-third rule", 30, 14, 15},
+		{"days at the minimum", 20, 14, 7},
+		{"below the days floor", 18, 14, 7},
+		{"zero", 0, 14, 7},
+		{"negative", -50, 14, 7},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -698,37 +698,37 @@ func TestGanttLabelAndDays(t *testing.T) {
 	}
 }
 
-// Las dos mitades más el separador llenan el ancho interior mientras haya sitio
-// para las columnas de día; cuando no hay, la etiqueta manda y los días se
-// quedan en su mínimo.
+// The two halves plus the separator fill the inner width while there is
+// room for the day columns; when there is not, the label rules and the days
+// stay at their minimum.
 func TestGanttLabelAndDaysProperties(t *testing.T) {
 	for innerW := -20; innerW <= 300; innerW++ {
 		label, days := ganttLabelAndDays(innerW)
 		if label < ganttMinLabelWidth {
-			t.Fatalf("innerW=%d: etiqueta %d, want >= %d", innerW, label, ganttMinLabelWidth)
+			t.Fatalf("innerW=%d: label %d, want >= %d", innerW, label, ganttMinLabelWidth)
 		}
 		if days < ganttMinDayCols {
-			t.Fatalf("innerW=%d: días %d, want >= %d", innerW, days, ganttMinDayCols)
+			t.Fatalf("innerW=%d: days %d, want >= %d", innerW, days, ganttMinDayCols)
 		}
 		if label+1+days > innerW {
-			// Sólo puede pasar cuando los mínimos no caben, que es lo que hace
-			// el suelo: preferimos desbordar a quedarnos sin día visible.
+			// It can only happen when the minimums do not fit, which is what
+			// makes the floor: we prefer overflowing to being left without a visible day.
 			if label != ganttMinLabelWidth || days != ganttMinDayCols {
-				t.Fatalf("innerW=%d: (%d + 1 + %d) se sale y no está en los mínimos (%d, %d)",
+				t.Fatalf("innerW=%d: (%d + 1 + %d) overflows and is not at the minimums (%d, %d)",
 					innerW, label, days, label, days)
 			}
 		}
 	}
 }
 
-// El régimen cambia justo en el umbral: 70 columnas interiores mantienen la
-// etiqueta fija, 69 la dividen. Ese par es el que distingue el ">=" del "<".
+// The regime changes right at the threshold: 70 inner columns keep the
+// label fixed, 69 divide it. That pair is what tells the ">=" from the "<".
 func TestGanttLabelAndDaysThresholdIsExact(t *testing.T) {
 	if l, _ := ganttLabelAndDays(ganttLabelThreshold); l != ganttFixedLabelWidth {
-		t.Errorf("en el umbral la etiqueta es %d, want %d", l, ganttFixedLabelWidth)
+		t.Errorf("at the threshold the label is %d, want %d", l, ganttFixedLabelWidth)
 	}
 	if l, _ := ganttLabelAndDays(ganttLabelThreshold - 1); l == ganttFixedLabelWidth {
-		t.Errorf("una columna por debajo del umbral la etiqueta sigue siendo %d, want el tercio",
+		t.Errorf("one column below the threshold the label is still %d, want the third",
 			ganttFixedLabelWidth)
 	}
 }

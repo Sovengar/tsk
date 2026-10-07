@@ -9,23 +9,23 @@ import (
 	"tsk/internal/model"
 )
 
-// TestNewTaskOpenDefaults verifica el estado inicial del alta: foco en
-// Priority, assignee "Me" y overlay activo.
+// TestNewTaskOpenDefaults verifies the initial state of the form: focus on
+// Priority, assignee "Me" and active overlay.
 func TestNewTaskOpenDefaults(t *testing.T) {
 	m := newTestModel(t)
 
 	m, _ = press(m, "i")
 	if !m.newTaskOpen {
-		t.Fatal("i debe abrir el modal de nueva tarea")
+		t.Fatal("i must open the new task modal")
 	}
 	if m.newTaskFieldIdx != newTaskFieldPriority {
-		t.Errorf("foco inicial = %d, want priority", m.newTaskFieldIdx)
+		t.Errorf("initial focus = %d, want priority", m.newTaskFieldIdx)
 	}
 	if m.newTaskAssignee != "Me" {
-		t.Errorf("assignee inicial = %q, want Me", m.newTaskAssignee)
+		t.Errorf("initial assignee = %q, want Me", m.newTaskAssignee)
 	}
 	if m.newTaskPriority != model.PriorityLow {
-		t.Errorf("priority inicial = %d, want low", m.newTaskPriority)
+		t.Errorf("initial priority = %d, want low", m.newTaskPriority)
 	}
 	if m.newTaskProject != "api" {
 		t.Errorf("project = %q, want api", m.newTaskProject)
@@ -33,14 +33,14 @@ func TestNewTaskOpenDefaults(t *testing.T) {
 	if m.overlayKind() != overlayNewTask {
 		t.Errorf("overlay = %v, want overlayNewTask", m.overlayKind())
 	}
-	// "Me" coincide exacto: no debe sugerirse a sí mismo.
+	// "Me" matches exactly: it must not suggest itself.
 	if got := m.assigneeSuggestions(); len(got) != 0 {
-		t.Errorf("con assignee Me no debe haber sugerencias, got %v", got)
+		t.Errorf("with assignee Me there must be no suggestions, got %v", got)
 	}
 }
 
-// TestNewTaskTabNavigation verifica que Tab/Shift+Tab recorren los campos en
-// orden y dan la vuelta sin perderse.
+// TestNewTaskTabNavigation verifies that Tab/Shift+Tab walk the fields in
+// order and wrap around without getting lost.
 func TestNewTaskTabNavigation(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
@@ -55,17 +55,17 @@ func TestNewTaskTabNavigation(t *testing.T) {
 	for _, want := range order {
 		m, _ = press(m, "tab")
 		if m.newTaskFieldIdx != want {
-			t.Fatalf("tras tab: campo = %d, want %d", m.newTaskFieldIdx, want)
+			t.Fatalf("after tab: field = %d, want %d", m.newTaskFieldIdx, want)
 		}
 	}
 
 	m, _ = send(m, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
 	if m.newTaskFieldIdx != newTaskFieldTags {
-		t.Errorf("shift+tab desde priority: campo = %d, want tags", m.newTaskFieldIdx)
+		t.Errorf("shift+tab from priority: field = %d, want tags", m.newTaskFieldIdx)
 	}
 }
 
-// TestNewTaskPriorityKeys verifica la selección de prioridad con 1-4 y flechas.
+// TestNewTaskPriorityKeys verifies priority selection with 1-4 and arrows.
 func TestNewTaskPriorityKeys(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
@@ -76,53 +76,53 @@ func TestNewTaskPriorityKeys(t *testing.T) {
 	}
 	m, _ = press(m, "left")
 	if m.newTaskPriority != 2 {
-		t.Errorf("tras left: priority = %d, want 2", m.newTaskPriority)
+		t.Errorf("after left: priority = %d, want 2", m.newTaskPriority)
 	}
 	m, _ = press(m, "right")
 	if m.newTaskPriority != 3 {
-		t.Errorf("tras right: priority = %d, want 3", m.newTaskPriority)
+		t.Errorf("after right: priority = %d, want 3", m.newTaskPriority)
 	}
 	m, _ = press(m, "1")
 	if m.newTaskPriority != 1 {
-		t.Errorf("tras 1: priority = %d, want 1", m.newTaskPriority)
+		t.Errorf("after 1: priority = %d, want 1", m.newTaskPriority)
 	}
 }
 
-// TestNewTaskTypingOnPriorityJumpsToTitle verifica que tipear una letra sobre el
-// selector de prioridad salta al título y la inserta.
+// TestNewTaskTypingOnPriorityJumpsToTitle verifies that typing a letter over
+// the priority selector jumps to the title and inserts it.
 func TestNewTaskTypingOnPriorityJumpsToTitle(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
 
 	m, _ = press(m, "H")
 	if m.newTaskFieldIdx != newTaskFieldTitle {
-		t.Errorf("tapear sobre priority debe enfocar Title, got %d", m.newTaskFieldIdx)
+		t.Errorf("typing over priority must focus Title, got %d", m.newTaskFieldIdx)
 	}
 	if m.newTaskTitle != "H" {
 		t.Errorf("title = %q, want H", m.newTaskTitle)
 	}
 }
 
-// TestNewTaskRequiresTitle verifica la validación inline sin cerrar el modal.
+// TestNewTaskRequiresTitle verifies the inline validation without closing the modal.
 func TestNewTaskRequiresTitle(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
 
 	m, _ = press(m, "enter") // priority -> title
 	if m.newTaskFieldIdx != newTaskFieldTitle {
-		t.Fatalf("enter en priority debe avanzar a Title, got %d", m.newTaskFieldIdx)
+		t.Fatalf("enter on priority must advance to Title, got %d", m.newTaskFieldIdx)
 	}
-	m, _ = press(m, "enter") // submit sin título
+	m, _ = press(m, "enter") // submit without a title
 	if !m.newTaskOpen {
-		t.Fatal("el modal no debe cerrarse sin título")
+		t.Fatal("the modal must not close without a title")
 	}
 	if m.newTaskErr == "" {
-		t.Error("se esperaba error inline de título requerido")
+		t.Error("the inline required-title error was expected")
 	}
 }
 
-// TestNewTaskSubmitsFromTitle verifica que Enter en Title crea y cierra,
-// dejando el feedback del toast.
+// TestNewTaskSubmitsFromTitle verifies that Enter on Title creates and closes,
+// leaving the toast's feedback.
 func TestNewTaskSubmitsFromTitle(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
@@ -137,18 +137,18 @@ func TestNewTaskSubmitsFromTitle(t *testing.T) {
 
 	m, cmd := press(m, "enter")
 	if m.newTaskOpen {
-		t.Error("Enter en Title debe cerrar el modal")
+		t.Error("Enter on Title must close the modal")
 	}
 	if cmd == nil {
-		t.Error("se esperaba cmd de creación")
+		t.Error("the creation cmd was expected")
 	}
 	if m.toast != "Task created" {
 		t.Errorf("toast = %q, want 'Task created'", m.toast)
 	}
 }
 
-// TestNewTaskDescriptionUsesInlineEditor verifica que la descripción se edita
-// con el textarea embebido y que Enter inserta salto en lugar de crear.
+// TestNewTaskDescriptionUsesInlineEditor verifies that the description is
+// edited with the embedded textarea and that Enter inserts a break instead of creating.
 func TestNewTaskDescriptionUsesInlineEditor(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
@@ -156,7 +156,7 @@ func TestNewTaskDescriptionUsesInlineEditor(t *testing.T) {
 	m, _ = press(m, "tab") // description
 
 	if m.newTaskFieldIdx != newTaskFieldDescription {
-		t.Fatalf("campo = %d, want description", m.newTaskFieldIdx)
+		t.Fatalf("field = %d, want description", m.newTaskFieldIdx)
 	}
 
 	m, _ = press(m, "h")
@@ -166,15 +166,15 @@ func TestNewTaskDescriptionUsesInlineEditor(t *testing.T) {
 
 	m, _ = press(m, "enter")
 	if !m.newTaskOpen {
-		t.Fatal("Enter en Description no debe crear")
+		t.Fatal("Enter on Description must not create")
 	}
 	if !strings.Contains(m.newTaskTextarea.Value(), "\n") {
-		t.Errorf("Enter debe insertar salto de línea, got %q", m.newTaskTextarea.Value())
+		t.Errorf("Enter must insert a line break, got %q", m.newTaskTextarea.Value())
 	}
 }
 
-// TestNewTaskAssigneeAutocomplete verifica el filtrado fuzzy, la selección con
-// ↓ y la completación con Enter sin crear la tarea.
+// TestNewTaskAssigneeAutocomplete verifies the fuzzy filtering, selection with
+// ↓ and completion with Enter without creating the task.
 func TestNewTaskAssigneeAutocomplete(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
@@ -182,18 +182,18 @@ func TestNewTaskAssigneeAutocomplete(t *testing.T) {
 	m, _ = press(m, "tab") // description
 	m, _ = press(m, "tab") // assignee
 
-	// Limpiar el "Me" por defecto.
+	// Clear the default "Me".
 	m, _ = press(m, "backspace")
 	m, _ = press(m, "backspace")
 	if m.newTaskAssignee != "" {
-		t.Fatalf("assignee = %q, want vacío", m.newTaskAssignee)
+		t.Fatalf("assignee = %q, want empty", m.newTaskAssignee)
 	}
 
 	m, _ = press(m, "@")
 	m, _ = press(m, "m")
 	suggs := m.assigneeSuggestions()
-	if len(suggs) == 0 || suggs[0] != "@maria" {
-		t.Fatalf("sugerencias = %v, want @maria primero", suggs)
+	if len(suggs) == 0 || suggs[0] != "@margo" {
+		t.Fatalf("suggestions = %v, want @margo first", suggs)
 	}
 
 	m, _ = press(m, "down")
@@ -201,19 +201,19 @@ func TestNewTaskAssigneeAutocomplete(t *testing.T) {
 		t.Fatalf("suggIdx = %d, want 0", m.newTaskAssigneeSuggIdx)
 	}
 	m, _ = press(m, "enter")
-	if m.newTaskAssignee != "@maria" {
-		t.Errorf("assignee = %q, want @maria", m.newTaskAssignee)
+	if m.newTaskAssignee != "@margo" {
+		t.Errorf("assignee = %q, want @margo", m.newTaskAssignee)
 	}
 	if !m.newTaskOpen {
-		t.Error("Enter sobre una sugerencia debe completar, no crear")
+		t.Error("Enter on a suggestion must complete, not create")
 	}
-	// Al quedar el nombre completo no debe repetirse como sugerencia.
+	// With the full name left, it must not repeat itself as a suggestion.
 	if got := m.assigneeSuggestions(); len(got) != 0 {
-		t.Errorf("match exacto no debe sugerirse: %v", got)
+		t.Errorf("an exact match must not be suggested: %v", got)
 	}
 }
 
-// goNewTaskTags abre el alta y enfoca el campo Tags.
+// goNewTaskTags opens the form and focuses the Tags field.
 func goNewTaskTags(t *testing.T, m *Model) *Model {
 	t.Helper()
 	m, _ = press(m, "i")
@@ -221,13 +221,13 @@ func goNewTaskTags(t *testing.T, m *Model) *Model {
 		m, _ = press(m, "tab")
 	}
 	if m.newTaskFieldIdx != newTaskFieldTags {
-		t.Fatalf("campo = %d, want tags", m.newTaskFieldIdx)
+		t.Fatalf("field = %d, want tags", m.newTaskFieldIdx)
 	}
 	return m
 }
 
-// TestNewTaskTagsAddAndRemove verifica agregar con Enter y coma, y borrar la
-// última tag con backspace sobre el input vacío.
+// TestNewTaskTagsAddAndRemove verifies adding with Enter and comma, and
+// deleting the last tag with backspace on the empty input.
 func TestNewTaskTagsAddAndRemove(t *testing.T) {
 	m := newTestModel(t)
 	m = goNewTaskTags(t, m)
@@ -240,7 +240,7 @@ func TestNewTaskTagsAddAndRemove(t *testing.T) {
 		t.Fatalf("tags = %v, want [back]", m.newTaskTags)
 	}
 	if m.newTaskTagInput != "" {
-		t.Errorf("input = %q, want vacío tras commit", m.newTaskTagInput)
+		t.Errorf("input = %q, want empty after commit", m.newTaskTagInput)
 	}
 
 	m, _ = press(m, "f")
@@ -251,12 +251,12 @@ func TestNewTaskTagsAddAndRemove(t *testing.T) {
 
 	m, _ = press(m, "backspace")
 	if len(m.newTaskTags) != 1 || m.newTaskTags[0] != "back" {
-		t.Errorf("tras backspace: tags = %v, want [back]", m.newTaskTags)
+		t.Errorf("after backspace: tags = %v, want [back]", m.newTaskTags)
 	}
 }
 
-// TestNewTaskTagsCommitOnTab verifica que salir del campo no pierde la tag a
-// medio tipear.
+// TestNewTaskTagsCommitOnTab verifies that leaving the field does not lose the
+// half-typed tag.
 func TestNewTaskTagsCommitOnTab(t *testing.T) {
 	m := newTestModel(t)
 	m = goNewTaskTags(t, m)
@@ -264,12 +264,12 @@ func TestNewTaskTagsCommitOnTab(t *testing.T) {
 	m, _ = press(m, "x")
 	m, _ = press(m, "tab") // tags -> priority
 	if len(m.newTaskTags) != 1 || m.newTaskTags[0] != "x" {
-		t.Errorf("tags = %v, want [x] tras salir del campo", m.newTaskTags)
+		t.Errorf("tags = %v, want [x] after leaving the field", m.newTaskTags)
 	}
 }
 
-// TestNewTaskTagsAutocomplete verifica el filtrado fuzzy y la completación con
-// Enter sin crear la tarea.
+// TestNewTaskTagsAutocomplete verifies the fuzzy filtering and completion
+// with Enter without creating the task.
 func TestNewTaskTagsAutocomplete(t *testing.T) {
 	m := newTestModel(t)
 	m.tasks[0].Tags = []string{"backend", "frontend"}
@@ -280,7 +280,7 @@ func TestNewTaskTagsAutocomplete(t *testing.T) {
 	}
 	suggs := m.tagFieldSuggestions()
 	if len(suggs) == 0 || suggs[0] != "backend" {
-		t.Fatalf("sugerencias = %v, want backend primero", suggs)
+		t.Fatalf("suggestions = %v, want backend first", suggs)
 	}
 
 	m, _ = press(m, "down")
@@ -289,16 +289,16 @@ func TestNewTaskTagsAutocomplete(t *testing.T) {
 		t.Errorf("tags = %v, want [backend]", m.newTaskTags)
 	}
 	if !m.newTaskOpen {
-		t.Error("Enter sobre una sugerencia de tag no debe crear la tarea")
+		t.Error("Enter on a tag suggestion must not create the task")
 	}
-	// La tag ya elegida no vuelve a sugerirse (aunque el dropdown liste el resto).
+	// The tag already chosen is not suggested again (even if the dropdown lists the rest).
 	if got := m.tagFieldSuggestions(); containsFold(got, "backend") {
-		t.Errorf("tags ya agregadas no deben sugerirse: %v", got)
+		t.Errorf("already added tags must not be suggested: %v", got)
 	}
 }
 
-// TestNewTaskModalRenders verifica que el modal muestre todos los campos y no
-// desborde el ancho de la terminal.
+// TestNewTaskModalRenders verifies that the modal shows all the fields and
+// does not overflow the terminal width.
 func TestNewTaskModalRenders(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
@@ -306,39 +306,39 @@ func TestNewTaskModalRenders(t *testing.T) {
 	out := ansi.Strip(m.View().Content)
 	for _, want := range []string{"New Task", "Priority", "Title", "Description", "Assignee", "Me", "Tags", "optional"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("el modal no muestra %q:\n%s", want, out)
+			t.Errorf("the modal does not show %q:\n%s", want, out)
 		}
 	}
 	for _, line := range strings.Split(out, "\n") {
 		if w := ansi.StringWidth(line); w > m.width {
-			t.Fatalf("línea de ancho %d supera el ancho %d: %q", w, m.width, line)
+			t.Fatalf("line of width %d exceeds the width %d: %q", w, m.width, line)
 		}
 	}
 }
 
-// TestFuzzyFilter cubre el matcher compartido del autocompletado.
+// TestFuzzyFilter covers the shared matcher of the autocomplete.
 func TestFuzzyFilter(t *testing.T) {
-	items := []string{"@maria", "@juan", "Me"}
+	items := []string{"@margo", "@john", "Me"}
 
-	if got := fuzzyFilter(items, "mar", 5); len(got) != 1 || got[0] != "@maria" {
-		t.Errorf("fuzzyFilter(mar) = %v, want [@maria]", got)
+	if got := fuzzyFilter(items, "mar", 5); len(got) != 1 || got[0] != "@margo" {
+		t.Errorf("fuzzyFilter(mar) = %v, want [@margo]", got)
 	}
 
-	// Substring con match más temprano gana.
-	if got := fuzzyFilter([]string{"@juan", "@maria"}, "a", 5); got[0] != "@maria" {
-		t.Errorf("orden por score = %v, want @maria primero", got)
+	// Substring with an earlier match wins.
+	if got := fuzzyFilter([]string{"@john", "@margo"}, "a", 5); got[0] != "@margo" {
+		t.Errorf("order by score = %v, want @margo first", got)
 	}
 
-	// Query vacío respeta el orden original y el tope.
-	if got := fuzzyFilter(items, "", 2); len(got) != 2 || got[0] != "@maria" {
-		t.Errorf("fuzzyFilter('') = %v, want primeros dos en orden", got)
+	// Empty query respects the original order and the cap.
+	if got := fuzzyFilter(items, "", 2); len(got) != 2 || got[0] != "@margo" {
+		t.Errorf("fuzzyFilter('') = %v, want the first two in order", got)
 	}
 
-	// Subsecuencia y descarte.
-	if _, ok := fuzzyScore("jn", "@juan"); !ok {
-		t.Error("jn debería matchear @juan como subsecuencia")
+	// Subsequence and discard.
+	if _, ok := fuzzyScore("jn", "@john"); !ok {
+		t.Error("jn should match @john as a subsequence")
 	}
-	if _, ok := fuzzyScore("zz", "@juan"); ok {
-		t.Error("zz no debería matchear @juan")
+	if _, ok := fuzzyScore("zz", "@john"); ok {
+		t.Error("zz should not match @john")
 	}
 }

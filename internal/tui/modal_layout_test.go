@@ -7,10 +7,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// modalWidthFor y overlayModal son la base de todos los modales: el primero
-// decide cuánto ancho tienen y el segundo dónde caen. Los tests que había los
-// usaban de paso, así que sus bordes -- el umbral exacto y el relleno cuando el
-// modal es más alto que el fondo -- no los cubría nadie.
+// modalWidthFor and overlayModal are the base of all modals: the first one
+// decides how wide they are and the second where they land. The tests that
+// existed used them in passing, so their edges -- the exact threshold and the
+// fill when the modal is taller than the background -- were covered by nobody.
 
 func TestModalWidthFor(t *testing.T) {
 	tests := []struct {
@@ -18,16 +18,16 @@ func TestModalWidthFor(t *testing.T) {
 		preferred, w int
 		want         int
 	}{
-		{"pref entra de sobra", 52, 120, 52},
-		{"pref exactamente en el límite", 58, 60, 58},
-		{"pref una de más", 59, 60, 58},
-		{"no cabe", 52, 40, 38},
-		{"pantalla de dos columnas", 52, 2, 0},
-		{"pantalla de tres columnas", 52, 3, 1},
-		{"pantalla de una columna", 52, 1, -1},
-		{"pref de cero", 0, 40, 0},
-		{"pref negativo", -5, 40, -5},
-		{"pantalla negativa", 52, -10, -12},
+		{"pref fits with room to spare", 52, 120, 52},
+		{"pref exactly at the limit", 58, 60, 58},
+		{"pref one too many", 59, 60, 58},
+		{"does not fit", 52, 40, 38},
+		{"two-column screen", 52, 2, 0},
+		{"three-column screen", 52, 3, 1},
+		{"one-column screen", 52, 1, -1},
+		{"pref of zero", 0, 40, 0},
+		{"negative pref", -5, 40, -5},
+		{"negative screen", 52, -10, -12},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -38,118 +38,118 @@ func TestModalWidthFor(t *testing.T) {
 	}
 }
 
-// El umbral es "el modal más sus dos bordes tiene que caber": en w-2 columnas
-// de pantalla el modal preferido entra justo, y una más ya no.
+// The threshold is "the modal plus its two borders has to fit": at w-2
+// screen columns the preferred modal fits exactly, and one more no longer does.
 func TestModalWidthForThreshold(t *testing.T) {
 	const pref = 52
 	if got := modalWidthFor(pref, pref+2); got != pref {
-		t.Errorf("en %d columnas el modal es %d, want %d", pref+2, got, pref)
+		t.Errorf("at %d columns the modal is %d, want %d", pref+2, got, pref)
 	}
 	if got := modalWidthFor(pref, pref+1); got != pref+1-2 {
-		t.Errorf("en %d columnas el modal es %d, want %d", pref+1, got, pref-1)
+		t.Errorf("at %d columns the modal is %d, want %d", pref+1, got, pref-1)
 	}
 }
 
-// overlayModal centra el modal y deja el fondo alrededor. Con un fondo del mismo
-// alto que el modal, el vertical no se nota; con uno más alto, el modal va en
-// medio.
+// overlayModal centers the modal and leaves the background around it. With a
+// background of the same height as the modal, the vertical one goes unnoticed; with a
+// taller one, the modal goes in the middle.
 func TestOverlayModalCentresVertically(t *testing.T) {
-	modal := strings.Join([]string{"╭──╮", "│  │", "╰──╯"}, "\n") // 3 líneas
+	modal := strings.Join([]string{"╭──╮", "│  │", "╰──╯"}, "\n") // 3 lines
 
-	for _, fondo := range []struct {
+	for _, background := range []struct {
 		name    string
-		alto    int
+		height  int
 		wantTop int
 	}{
-		{"mismo alto, sin relleno", 3, 0},
-		{"una de más", 4, 0},
-		{"dos de más", 5, 1},
-		{"cuatro de más", 7, 2},
-		{"diez de más", 13, 5},
+		{"same height, no padding", 3, 0},
+		{"one too many", 4, 0},
+		{"two too many", 5, 1},
+		{"four too many", 7, 2},
+		{"ten too many", 13, 5},
 	} {
-		t.Run(fondo.name, func(t *testing.T) {
-			lineas := make([]string, fondo.alto)
-			for i := range lineas {
-				lineas[i] = strings.Repeat("·", 40)
+		t.Run(background.name, func(t *testing.T) {
+			lines := make([]string, background.height)
+			for i := range lines {
+				lines[i] = strings.Repeat("·", 40)
 			}
 
-			out := strings.Split(overlayModal(strings.Join(lineas, "\n"), modal, 4, 40), "\n")
-			if len(out) != fondo.alto {
-				t.Fatalf("salieron %d líneas, want %d", len(out), fondo.alto)
+			out := strings.Split(overlayModal(strings.Join(lines, "\n"), modal, 4, 40), "\n")
+			if len(out) != background.height {
+				t.Fatalf("%d lines came out, want %d", len(out), background.height)
 			}
-			primera := -1
+			first := -1
 			for i, l := range out {
 				if strings.Contains(l, "╭") {
-					primera = i
+					first = i
 					break
 				}
 			}
-			if primera != fondo.wantTop {
-				t.Errorf("el modal empieza en la línea %d, want %d", primera, fondo.wantTop)
+			if first != background.wantTop {
+				t.Errorf("the modal starts at line %d, want %d", first, background.wantTop)
 			}
 		})
 	}
 }
 
-// Con un fondo más corto que el modal, el fondo se rellena para que quepa entero.
-// Sin ese relleno el modal se saldría de las líneas.
+// With a background shorter than the modal, the background is padded so the
+// modal fits whole. Without that padding the modal would go out of the lines.
 func TestOverlayModalPadsShortContent(t *testing.T) {
 	modal := strings.Join([]string{"╭──╮", "│  │", "╰──╯"}, "\n")
 
 	out := strings.Split(overlayModal(strings.Repeat("·", 40), modal, 4, 40), "\n")
 	if len(out) != 3 {
-		t.Fatalf("salieron %d líneas, want 3", len(out))
+		t.Fatalf("%d lines came out, want 3", len(out))
 	}
 	for i, l := range out {
 		if !strings.Contains(l, "╭") && !strings.Contains(l, "│") && !strings.Contains(l, "╰") {
-			t.Errorf("la línea %d no tiene el modal: %q", i, l)
+			t.Errorf("line %d does not have the modal: %q", i, l)
 		}
 	}
 }
 
-// Y con un modal más alto que un fondo vacío, el relleno son líneas en blanco, no
-// puntos: el fondo no tenía nada que conservar.
+// And with a modal taller than an empty background, the padding is blank lines, not
+// dots: the background had nothing to preserve.
 func TestOverlayModalPadsEmptyContent(t *testing.T) {
 	modal := strings.Join([]string{"╭──╮", "│  │", "╰──╯"}, "\n")
 
 	out := strings.Split(overlayModal("", modal, 4, 40), "\n")
 	if len(out) < 3 {
-		t.Fatalf("salieron %d líneas, want al menos 3", len(out))
+		t.Fatalf("%d lines came out, want at least 3", len(out))
 	}
 }
 
-// El modal se centra también a lo horizontal, dejando fondo a los dos lados.
+// The modal is also centered horizontally, leaving background on both sides.
 func TestOverlayModalCentresHorizontally(t *testing.T) {
-	modal := "╭──╮" // 4 columnas
-	fondo := strings.Repeat("·", 40)
+	modal := "╭──╮" // 4 columns
+	background := strings.Repeat("·", 40)
 
-	// Sin ANSI: los códigos de reset que OverlayLine intercala cuentan como runes
-	// pero no ocupan columna, así que hay que quitarlos antes de medir.
-	out := strings.Split(ansi.Strip(overlayModal(fondo, modal, 4, 40)), "\n")
+	// No ANSI: the reset codes OverlayLine interleaves count as runes but do
+	// not take a column, so they have to be removed before measuring.
+	out := strings.Split(ansi.Strip(overlayModal(background, modal, 4, 40)), "\n")
 	if len(out) != 1 {
-		t.Fatalf("salieron %d líneas, want 1", len(out))
+		t.Fatalf("%d lines came out, want 1", len(out))
 	}
-	// Columna, no byte: "·" son dos bytes y "╭" tres, así que strings.Index daría
-	// una posición distinta de la que ocupa en pantalla.
+	// Column, not byte: "·" is two bytes and "╭" three, so strings.Index would
+	// give a position different from the one it occupies on screen.
 	i := len([]rune(out[0][:strings.Index(out[0], "╭")]))
 	if i != 18 {
-		t.Errorf("el modal empieza en la columna %d, want 18 (centrado en 40)", i)
+		t.Errorf("the modal starts at column %d, want 18 (centered in 40)", i)
 	}
 	if strings.Count(out[0], "·") != 36 {
-		t.Errorf("quedan %d columnas de fondo, want 36", strings.Count(out[0], "·"))
+		t.Errorf("%d background columns remain, want 36", strings.Count(out[0], "·"))
 	}
 }
 
-// Un modal más ancho que la pantalla se pega al borde en vez de empezar en
-// columna negativa.
+// A modal wider than the screen sticks to the edge instead of starting at a
+// negative column.
 func TestOverlayModalWiderThanScreen(t *testing.T) {
 	modal := strings.Repeat("x", 60)
 
 	out := ansi.Strip(overlayModal(strings.Repeat("·", 20), modal, 60, 20))
 	if !strings.HasPrefix(out, "x") {
-		t.Errorf("un modal más ancho que la pantalla no va al principio: %.20q", out)
+		t.Errorf("a modal wider than the screen does not start at the beginning: %.20q", out)
 	}
 	if strings.Contains(out, "·") {
-		t.Errorf("quedó fondo dentro de un modal que lo cubre entero: %.40q", out)
+		t.Errorf("background remained inside a modal that covers it entirely: %.40q", out)
 	}
 }

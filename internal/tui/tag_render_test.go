@@ -10,26 +10,25 @@ import (
 	"tsk/internal/model"
 )
 
-// El modal de tags mezcla tres cosas: qué sugerencias salen, cuál está
-// seleccionada y cuáles ya están aplicadas a la tarea. Los tests que lo cubren
-// buscaban el texto de una tag concreta, con lo que una condición de marcado
-// puesta al revés -- marcar todas, o ninguna -- seguía mostrando las mismas
-// palabras.
+// The tag modal mixes three things: which suggestions come out, which one
+// is selected and which are already applied to the task. The tests that
+// cover it looked for the text of a concrete tag, so a marking condition
+// set backwards -- marking all, or none -- still showed the same words.
 
-// tagRender devuelve el modal de tags sin colores.
+// tagRender returns the tag modal without colors.
 func tagRender(t *testing.T, m *Model) string {
 	t.Helper()
 	m.width = 120
 	return ansi.Strip(m.renderTagModal(""))
 }
 
-// newTagModel abre el modal de tags sobre la primera tarea, con tags distintas
-// en la base de datos para que haya sugerencias.
+// newTagModel opens the tag modal on the first task, with different tags in
+// the database so that there are suggestions.
 func newTagModel(t *testing.T, tags ...string) *Model {
 	t.Helper()
 	m := newTestModel(t)
 	for _, tag := range tags {
-		if _, err := m.database.CreateTaskFull("api", "con "+tag, "", "@juan", 1, "todo", 0, []string{tag}); err != nil {
+		if _, err := m.database.CreateTaskFull("api", "with "+tag, "", "@john", 1, "todo", 0, []string{tag}); err != nil {
 			t.Fatalf("CreateTaskFull(%q): %v", tag, err)
 		}
 	}
@@ -45,13 +44,13 @@ func newTagModel(t *testing.T, tags ...string) *Model {
 	return m
 }
 
-// Sin texto escrito salen todas las tags que hay; escribiendo un prefijo, sólo
-// las que empiezan por él. El prefijo se busca en minúsculas y sin espacios.
+// With no typed text all existing tags come out; typing a prefix, only those
+// that start with it. The prefix is searched lowercased and without spaces.
 func TestTagSuggestionsFilterByPrefix(t *testing.T) {
 	m := newTagModel(t, "bug", "build", "chore")
 
 	if got := m.tagSuggestions(); len(got) != 3 {
-		t.Errorf("sin escribir salen %d sugerencias, want 3: %v", len(got), got)
+		t.Errorf("without typing, %d suggestions come out, want 3: %v", len(got), got)
 	}
 
 	tests := []struct {
@@ -59,67 +58,67 @@ func TestTagSuggestionsFilterByPrefix(t *testing.T) {
 		input string
 		want  []string
 	}{
-		{"vacío sale todo", "", []string{"bug", "build", "chore"}},
-		{"sólo espacios equivale a vacío", "   ", []string{"bug", "build", "chore"}},
-		{"prefijo", "bu", []string{"bug", "build"}},
-		{"prefijo en minúsculas contra mayúsculas", "BU", []string{"bug", "build"}},
-		{"con espacios alrededor", "  bu  ", []string{"bug", "build"}},
-		{"sin coincidencias", "zzz", nil},
-		{"prefijo del medio no cuenta", "ug", nil},
+		{"empty shows everything", "", []string{"bug", "build", "chore"}},
+		{"only spaces is equivalent to empty", "   ", []string{"bug", "build", "chore"}},
+		{"prefix", "bu", []string{"bug", "build"}},
+		{"lowercase prefix against uppercase", "BU", []string{"bug", "build"}},
+		{"with surrounding spaces", "  bu  ", []string{"bug", "build"}},
+		{"no matches", "zzz", nil},
+		{"prefix in the middle does not count", "ug", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m.tagInput = tt.input
 			got := m.tagSuggestions()
 			if strings.Join(got, ",") != strings.Join(tt.want, ",") {
-				t.Errorf("tagSuggestions con %q = %v, want %v", tt.input, got, tt.want)
+				t.Errorf("tagSuggestions with %q = %v, want %v", tt.input, got, tt.want)
 			}
 		})
 	}
 }
 
-// Una tag que no existe en ninguna tarea no sale como sugerencia, pero el modal
-// lo ofrece como creación nueva.
+// A tag that exists in no task does not come out as a suggestion, but the
+// modal offers it as a new creation.
 func TestTagModalOffersNewTag(t *testing.T) {
 	m := newTagModel(t, "bug")
-	m.tagInput = "nueva"
+	m.tagInput = "new"
 
 	out := tagRender(t, m)
-	if !strings.Contains(out, "(nueva tag)") {
-		t.Errorf("una tag sin sugerencias no lo dice:\\n%s", out)
+	if !strings.Contains(out, "(new tag)") {
+		t.Errorf("a tag with no suggestions does not say it:\\n%s", out)
 	}
 	if strings.Contains(out, "bug") {
-		t.Errorf("salió una sugerencia que no empieza por el prefijo:\\n%s", out)
+		t.Errorf("a suggestion came out that does not start with the prefix:\\n%s", out)
 	}
 }
 
-// Con sugerencias, no sale el "(nueva tag)": hay de dónde elegir.
+// With suggestions, the "(new tag)" does not come out: there is where to choose from.
 func TestTagModalNoNewTagWhenThereAreSuggestions(t *testing.T) {
 	m := newTagModel(t, "bug")
 	m.tagInput = "bu"
 
-	if out := tagRender(t, m); strings.Contains(out, "(nueva tag)") {
-		t.Errorf("con sugerencias sale igualmente el (nueva tag):\\n%s", out)
+	if out := tagRender(t, m); strings.Contains(out, "(new tag)") {
+		t.Errorf("with suggestions the (new tag) still comes out:\\n%s", out)
 	}
 }
 
-// La línea "Current:" dice (none) sin tags y las tags unidas por comas con
-// ellas. Es lo que le dice a quien está en el modal qué tiene puesto ya.
+// The "Current:" line says (none) with no tags and the tags joined by
+// commas with them. It is what tells whoever is in the modal what is already set.
 func TestTagModalCurrentLine(t *testing.T) {
 	m := newTagModel(t)
 	m.detailTask.Tags = nil
 	if out := tagRender(t, m); !strings.Contains(out, "Current: (none)") {
-		t.Errorf("sin tags no dice (none):\\n%s", out)
+		t.Errorf("without tags it does not say (none):\\n%s", out)
 	}
 
-	m.detailTask.Tags = []string{"uno", "dos"}
-	if out := tagRender(t, m); !strings.Contains(out, "Current: uno, dos") {
-		t.Errorf("con tags no las lista:\\n%s", out)
+	m.detailTask.Tags = []string{"one", "two"}
+	if out := tagRender(t, m); !strings.Contains(out, "Current: one, two") {
+		t.Errorf("with tags it does not list them:\\n%s", out)
 	}
 }
 
-// Las sugerencias se recortan al tope, y el que se ve es el principio de la
-// lista, no un subconjunto disperso.
+// The suggestions are truncated to the cap, and what is seen is the
+// beginning of the list, not a scattered subset.
 func TestTagModalClipsSuggestions(t *testing.T) {
 	tags := make([]string, tagMaxSuggestions+5)
 	for i := range tags {
@@ -129,42 +128,42 @@ func TestTagModalClipsSuggestions(t *testing.T) {
 
 	suggs := m.tagSuggestions()
 	if len(suggs) != len(tags) {
-		t.Fatalf("el modelo tiene %d sugerencias, want %d", len(suggs), len(tags))
+		t.Fatalf("the model has %d suggestions, want %d", len(suggs), len(tags))
 	}
 
 	out := tagRender(t, m)
 	for _, tag := range tags[:tagMaxSuggestions] {
 		if !strings.Contains(out, tag) {
-			t.Errorf("no se ve %q, que debería estar entre las %d primeras:\\n%s", tag, tagMaxSuggestions, out)
+			t.Errorf("%q is not visible, it should be among the first %d:\\n%s", tag, tagMaxSuggestions, out)
 		}
 	}
 	for _, tag := range tags[tagMaxSuggestions:] {
 		if strings.Contains(out, tag) {
-			t.Errorf("se ve %q, que está más allá del tope:\\n%s", tag, out)
+			t.Errorf("%q is visible, it is beyond the cap:\\n%s", tag, out)
 		}
 	}
 }
 
-// Las tags que la tarea ya tiene salen con un tick, y las que no sin él. Es la
-// diferencia entre "puedes quitar esto" y "esto lo puedes añadir".
+// The tags the task already has come out with a tick and the others
+// without it. It is the difference between "you can remove this" and "you can add this".
 func TestTagModalMarksAppliedTags(t *testing.T) {
-	m := newTagModel(t, "aplicada", "libre")
-	m.detailTask.Tags = []string{"aplicada"}
+	m := newTagModel(t, "applied", "free")
+	m.detailTask.Tags = []string{"applied"}
 	m.tagInput = ""
 
 	out := tagRender(t, m)
-	if !strings.Contains(out, "✓ aplicada") {
-		t.Errorf("la tag aplicada no lleva el tick:\\n%s", out)
+	if !strings.Contains(out, "✓ applied") {
+		t.Errorf("the applied tag does not carry the tick:\\n%s", out)
 	}
-	for _, linea := range strings.Split(out, "\n") {
-		if strings.Contains(linea, "libre") && strings.Contains(linea, "✓") {
-			t.Errorf("una tag no aplicada lleva el tick: %q", linea)
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "free") && strings.Contains(line, "✓") {
+			t.Errorf("an unapplied tag carries the tick: %q", line)
 		}
 	}
 }
 
-// Escribir reinicia la selección: si no, el cursor se quedaría apuntando a una
-// sugerencia que ya no está en la lista.
+// Typing resets the selection: otherwise the cursor would stay pointing at
+// a suggestion that is no longer in the list.
 func TestTagTypingResetsSuggestionIndex(t *testing.T) {
 	m := newTagModel(t, "bug", "build")
 	m.tagSuggestIdx = 1
@@ -172,55 +171,55 @@ func TestTagTypingResetsSuggestionIndex(t *testing.T) {
 	for _, key := range []string{"b", "u"} {
 		next, _ := press(m, key)
 		if next.tagSuggestIdx != -1 {
-			t.Errorf("tras escribir %q el índice de sugerencia es %d, want -1", key, next.tagSuggestIdx)
+			t.Errorf("after typing %q the suggestion index is %d, want -1", key, next.tagSuggestIdx)
 		}
 	}
 
-	// Backspace también: se sigue editando el mismo input.
+	// Backspace too: the same input is still being edited.
 	m2 := newTagModel(t, "bug")
 	m2.tagSuggestIdx = 0
 	m2.tagInput = "bu"
 	next, _ := press(m2, "backspace")
 	if next.tagSuggestIdx != -1 {
-		t.Errorf("tras backspace el índice es %d, want -1", next.tagSuggestIdx)
+		t.Errorf("after backspace the index is %d, want -1", next.tagSuggestIdx)
 	}
 	if next.tagInput != "b" {
-		t.Errorf("tras backspace el input es %q, want %q", next.tagInput, "b")
+		t.Errorf("after backspace the input is %q, want %q", next.tagInput, "b")
 	}
 }
 
-// BUG: el espacio no se puede escribir en el input de tags.
+// BUG: the space cannot be typed in the tag input.
 //
-// Bubbletea no reporta el espacio como un carácter suelto sino con la cadena
-// "space", de modo que la condición `len(key) == 1` del handler lo descarta y la
-// tecla se pierde entera. Una tag con espacio -- "in progress", "waiting for QA" --
-// no se puede escribir a mano: hay que elegirla de las sugerencias o editar el
-// fichero.
+// Bubbletea does not report the space as a lone character but with the
+// string "space", so the handler's `len(key) == 1` condition discards it and
+// the key is lost entirely. A tag with a space -- "in progress", "waiting for QA"
+// -- cannot be typed by hand: it has to be chosen from the suggestions or
+// the file edited.
 //
-// El test fija el comportamiento actual, no el que debería. Cuando se arregle,
-// hay que cambiar esta expectativa.
+// The test pins the current behavior, not the one it should have. When it
+// is fixed, this expectation has to change.
 func TestTagSpaceIsNotTypedIntoTheInput(t *testing.T) {
 	m := newTagModel(t)
 	m.tagInput = "co"
 
 	next, _ := press(m, "space")
 	if next.tagInput != "co" {
-		t.Errorf("tras el espacio el input es %q, want %q sin cambio (bug conocido)", next.tagInput, "co")
+		t.Errorf("after space the input is %q, want %q unchanged (known bug)", next.tagInput, "co")
 	}
 
-	// El resto de imprimibles sí pasan: son los que la condición sí ve.
+	// The rest of the printable ones do pass: they are the ones the condition does see.
 	m2 := newTagModel(t)
 	m2.tagInput = ""
 	for _, key := range []string{"a", "Z", "1", "9", "-"} {
 		next, _ := press(m2, key)
 		if next.tagInput == "" {
-			t.Errorf("la tecla %q no llegó al input:\n%s", key, ansi.Strip(m2.renderTagModal("")))
+			t.Errorf("the key %q did not reach the input:\n%s", key, ansi.Strip(m2.renderTagModal("")))
 		}
 		m2.tagInput = next.tagInput
 	}
 }
 
-// Esc cierra el modal y limpia el estado, incluido el índice de sugerencia.
+// Esc closes the modal and clears the state, including the suggestion index.
 func TestTagEscResetsState(t *testing.T) {
 	m := newTagModel(t, "bug")
 	m.tagSuggestIdx = 2
@@ -228,18 +227,18 @@ func TestTagEscResetsState(t *testing.T) {
 
 	next, _ := press(m, "esc")
 	if next.tagOpen {
-		t.Error("esc no cerró el modal")
+		t.Error("esc did not close the modal")
 	}
 	if next.tagInput != "" {
-		t.Errorf("el input quedó en %q", next.tagInput)
+		t.Errorf("the input ended up as %q", next.tagInput)
 	}
 	if next.tagSuggestIdx != -1 {
-		t.Errorf("el índice quedó en %d, want -1", next.tagSuggestIdx)
+		t.Errorf("the index ended up as %d, want -1", next.tagSuggestIdx)
 	}
 }
 
-// El tick de una tag aplicada depende de la tarea del detalle: sin tarea abierta
-// no hay nada contra lo que comparar.
+// The tick of an applied tag depends on the detail's task: with no open task
+// there is nothing to compare against.
 func TestTagModalWithoutOpenTask(t *testing.T) {
 	m := newTagModel(t, "bug")
 	m.detailTask = nil
@@ -247,53 +246,53 @@ func TestTagModalWithoutOpenTask(t *testing.T) {
 
 	out := tagRender(t, m)
 	if strings.Contains(out, "✓") {
-		t.Errorf("sin tarea abierta sale un tick:\\n%s", out)
+		t.Errorf("with no open task a tick comes out:\\n%s", out)
 	}
 	if !strings.Contains(out, "Current: (none)") {
-		t.Errorf("sin tarea abierta:\\n%s", out)
+		t.Errorf("with no open task:\\n%s", out)
 	}
 }
 
-// hasTag es lo que decide el tick del render, así que el render y la regla de
-// negocio no pueden discrepar.
+// hasTag is what decides the render's tick, so the render and the business
+// rule cannot disagree.
 func TestTagAppliedFlagMatchesHasTag(t *testing.T) {
-	m := newTagModel(t, "aplicada", "libre")
-	m.detailTask.Tags = []string{"aplicada"}
+	m := newTagModel(t, "applied", "free")
+	m.detailTask.Tags = []string{"applied"}
 	m.tagInput = ""
 
 	out := tagRender(t, m)
-	for _, tag := range []string{"aplicada", "libre"} {
-		lineaConTag := ""
-		for _, linea := range strings.Split(out, "\n") {
-			if strings.Contains(linea, tag) && !strings.Contains(linea, "Current:") {
-				lineaConTag = linea
+	for _, tag := range []string{"applied", "free"} {
+		lineWithTag := ""
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, tag) && !strings.Contains(line, "Current:") {
+				lineWithTag = line
 				break
 			}
 		}
-		if lineaConTag == "" {
-			t.Errorf("no encontré la fila de %q:\n%s", tag, out)
+		if lineWithTag == "" {
+			t.Errorf("I did not find the row of %q:\n%s", tag, out)
 			continue
 		}
-		tieneTick := strings.Contains(lineaConTag, "✓")
-		if tieneTick != model.HasTag(m.detailTask.Tags, tag) {
-			t.Errorf("%q: el render dice tick=%v y HasTag=%v", tag, tieneTick, model.HasTag(m.detailTask.Tags, tag))
+		hasTick := strings.Contains(lineWithTag, "✓")
+		if hasTick != model.HasTag(m.detailTask.Tags, tag) {
+			t.Errorf("%q: the render says tick=%v and HasTag=%v", tag, hasTick, model.HasTag(m.detailTask.Tags, tag))
 		}
 	}
 }
 
-// La fila seleccionada va en negrita, y sólo una: con el índice en -1 (nada
-// seleccionado) no hay ninguna en negrita, y con un índice válido exactamente
-// esa. El tick y la negrita son marcas distintas y no se sustituyen.
+// The selected row goes in bold, and only one: with the index at -1 (nothing
+// selected) none is in bold, and with a valid index exactly that one.
+// The tick and the bold are different marks and do not replace each other.
 func TestTagModalHighlightsExactlyOneSuggestion(t *testing.T) {
 	tests := []struct {
 		name  string
 		idx   int
 		wantN int
 	}{
-		{"nada seleccionado", -1, 0},
-		{"primera", 0, 1},
-		{"la del medio", 1, 1},
-		{"la última", 2, 1},
+		{"nothing selected", -1, 0},
+		{"first", 0, 1},
+		{"the middle one", 1, 1},
+		{"the last one", 2, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -303,37 +302,37 @@ func TestTagModalHighlightsExactlyOneSuggestion(t *testing.T) {
 
 			raw := m.renderTagModal("")
 			if got := countBoldLines(raw); got != tt.wantN {
-				t.Errorf("con el índice en %d hay %d filas en negrita, want %d", tt.idx, got, tt.wantN)
+				t.Errorf("with the index at %d there are %d bold rows, want %d", tt.idx, got, tt.wantN)
 			}
 		})
 	}
 }
 
-// countBoldLines cuenta las líneas del modal que llevan el estilo de selección,
-// que es negrita. Se cuenta sobre el render sin quitar los códigos: si se
-// quitaran, las tres filas serían indistinguibles.
+// countBoldLines counts the modal's lines carrying the selection style,
+// which is bold. It is counted on the render without removing the codes: if
+// they were removed, the three rows would be indistinguishable.
 func countBoldLines(rendered string) int {
 	n := 0
-	for _, linea := range strings.Split(rendered, "\n") {
-		// El estilo de selección abre con la secuencia de negrita de lipgloss.
-		if strings.Contains(linea, "\x1b[1m") {
+	for _, line := range strings.Split(rendered, "\n") {
+		// The selection style opens with lipgloss's bold sequence.
+		if strings.Contains(line, "\x1b[1m") {
 			n++
 		}
 	}
 	return n
 }
 
-// Tab y Enter completan y consumen: ambas cosas limpian la selección de
-// sugerencias, porque el input pasa a ser el valor completo y la lista de
-// sugerencias va a cambiar.
+// Tab and Enter complete and consume: both clear the suggestion selection,
+// because the input becomes the full value and the suggestion list is
+// going to change.
 func TestTagTabAndEnterClearSuggestionIndex(t *testing.T) {
 	tests := []struct {
 		key       string
 		wantInput string
 	}{
-		// Tab completa: el input pasa a ser la sugerencia entera.
+		// Tab completes: the input becomes the whole suggestion.
 		{"tab", "build"},
-		// Enter la agrega y deja el input vacío para la siguiente.
+		// Enter adds it and leaves the input empty for the next one.
 		{"enter", ""},
 	}
 	for _, tt := range tests {
@@ -346,23 +345,23 @@ func TestTagTabAndEnterClearSuggestionIndex(t *testing.T) {
 			got := next
 
 			if got.tagSuggestIdx != -1 {
-				t.Errorf("tras %q el índice es %d, want -1", tt.key, got.tagSuggestIdx)
+				t.Errorf("after %q the index is %d, want -1", tt.key, got.tagSuggestIdx)
 			}
 			if got.tagInput != tt.wantInput {
-				t.Errorf("tras %q el input es %q, want %q", tt.key, got.tagInput, tt.wantInput)
+				t.Errorf("after %q the input is %q, want %q", tt.key, got.tagInput, tt.wantInput)
 			}
 		})
 	}
 }
 
-// countBoldLinesWith cuenta las líneas del render que llevan la negrita de
-// selección y además contienen marker. Hace falta el segundo filtro cuando el
-// modal resaltará más de una cosa -- el nombre de la persona, por ejemplo -- y lo
-// que importa es cuál de las listas está marcada.
+// countBoldLinesWith counts the render's lines carrying the selection bold
+// and also contain marker. The second filter is needed when the modal will
+// highlight more than one thing -- the person's name, for example -- and
+// what matters is which of the lists is marked.
 func countBoldLinesWith(rendered, marker string) int {
 	n := 0
-	for _, linea := range strings.Split(rendered, "\n") {
-		if strings.Contains(linea, "\x1b[1m") && strings.Contains(linea, marker) {
+	for _, line := range strings.Split(rendered, "\n") {
+		if strings.Contains(line, "\x1b[1m") && strings.Contains(line, marker) {
 			n++
 		}
 	}

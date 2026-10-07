@@ -8,16 +8,16 @@ import (
 	"tsk/internal/model"
 )
 
-// projectSavedMsg se emite al terminar una operación de proyecto (crear, editar,
-// archivar o restaurar). err != nil indica fallo.
+// projectSavedMsg is emitted when a project operation finishes (create, edit,
+// archive or restore). err != nil indicates failure.
 type projectSavedMsg struct {
 	err    error
 	name   string
 	action string // "create" | "edit" | "archive" | "unarchive"
 }
 
-// dashProjectList devuelve los proyectos visibles en el Dashboard según el
-// toggle de archivados.
+// dashProjectList returns the projects visible in the Dashboard according to
+// the archived toggle.
 func (m *Model) dashProjectList() []model.Project {
 	if m.showArchived {
 		return m.archivedProjects
@@ -25,7 +25,7 @@ func (m *Model) dashProjectList() []model.Project {
 	return m.projects
 }
 
-// selectedDashProject devuelve el proyecto seleccionado en el Dashboard, o nil.
+// selectedDashProject returns the project selected in the Dashboard, or nil.
 func (m *Model) selectedDashProject() *model.Project {
 	list := m.dashProjectList()
 	if inRange(m.dashProjectIdx, len(list)) {
@@ -34,13 +34,13 @@ func (m *Model) selectedDashProject() *model.Project {
 	return nil
 }
 
-// clampDashProjectIdx mantiene el índice de selección dentro de la lista visible.
+// clampDashProjectIdx keeps the selection index inside the visible list.
 func (m *Model) clampDashProjectIdx() {
 	m.dashProjectIdx = clampTo(m.dashProjectIdx, len(m.dashProjectList()))
 }
 
-// selectProjectByName selecciona un proyecto y ajusta la vista (activos o
-// archivados) según dónde aparezca.
+// selectProjectByName selects a project and adjusts the view (active or
+// archived) according to where it appears.
 func (m *Model) selectProjectByName(name string) {
 	for i, p := range m.projects {
 		if p.Name == name {
@@ -58,8 +58,8 @@ func (m *Model) selectProjectByName(name string) {
 	}
 }
 
-// openProjectModal abre el modal de proyecto en modo creación (edit=false) o
-// edición (edit=true). En creación limpia los campos.
+// openProjectModal opens the project modal in creation mode (edit=false) or
+// edit (edit=true). In creation it clears the fields.
 func (m *Model) openProjectModal(edit bool) tea.Cmd {
 	m.projectModalOpen = true
 	m.projectModalEdit = edit
@@ -73,7 +73,7 @@ func (m *Model) openProjectModal(edit bool) tea.Cmd {
 	return nil
 }
 
-// openProjectModalForEdit precarga los campos con el proyecto dado.
+// openProjectModalForEdit preloads the fields with the given project.
 func (m *Model) openProjectModalForEdit(p *model.Project) tea.Cmd {
 	m.openProjectModal(true)
 	m.projectEditingName = p.Name
@@ -83,7 +83,7 @@ func (m *Model) openProjectModalForEdit(p *model.Project) tea.Cmd {
 	return nil
 }
 
-// editTextInput aplica una tecla de edición a un buffer de texto simple.
+// editTextInput applies an editing key to a simple text buffer.
 func editTextInput(target *string, key string) {
 	if target == nil {
 		return
@@ -95,16 +95,16 @@ func editTextInput(target *string, key string) {
 		}
 	case key == "space" || key == " ":
 		*target += " "
-	// El 33 deja fuera el espacio a propósito: los campos de este modal son
-	// listas separadas por comas, y un espacio dentro rompería el nombre. La
-	// condición no se nota porque Bubbletea entrega el espacio con nombre
-	// ("space"), no como un carácter suelto.
+	// The 33 leaves the space out on purpose: the fields of this modal are
+	// comma-separated lists, and a space inside would break the name. The
+	// condition goes unnoticed because Bubbletea delivers the space as a named
+	// key ("space"), not as a lone character.
 	case len(key) == 1 && key[0] >= 33:
 		*target += key
 	}
 }
 
-// handleProjectModalKey procesa teclas del modal de proyecto.
+// handleProjectModalKey processes project modal keys.
 func (m Model) handleProjectModalKey(key string) (tea.Model, tea.Cmd) {
 	const numFields = 3
 
@@ -143,7 +143,7 @@ func (m Model) handleProjectModalKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// saveProjectCmd persiste la creación o edición de un proyecto.
+// saveProjectCmd persists the creation or editing of a project.
 func (m Model) saveProjectCmd(edit bool, original, name, workflow, listOrder string) tea.Cmd {
 	return func() tea.Msg {
 		if edit {
@@ -192,7 +192,7 @@ func (m Model) saveProjectCmd(edit bool, original, name, workflow, listOrder str
 	}
 }
 
-// projectActionCmd archiva o restaura un proyecto.
+// projectActionCmd archives or restores a project.
 func (m Model) projectActionCmd(action, name string) tea.Cmd {
 	return func() tea.Msg {
 		var err error
@@ -209,8 +209,8 @@ func (m Model) projectActionCmd(action, name string) tea.Cmd {
 	}
 }
 
-// handleConfirmKey resuelve el modal de confirmación de acciones destructivas:
-// archivar/restaurar proyecto o borrar un off-day.
+// handleConfirmKey resolves the confirmation modal for destructive actions:
+// archive/restore project or delete an off-day.
 func (m Model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "y", "Y", "enter":
@@ -243,10 +243,10 @@ func (m Model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleProjectSaved aplica el resultado de una operación de proyecto.
+// handleProjectSaved applies the result of a project operation.
 func (m Model) handleProjectSaved(msg projectSavedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		// Reabrir el modal para no perder lo escrito en crear/editar.
+		// Reopen the modal so the written text in create/edit is not lost.
 		if msg.action == "create" || msg.action == "edit" {
 			m.projectModalOpen = true
 		}
@@ -273,9 +273,9 @@ func (m Model) handleProjectSaved(msg projectSavedMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmd, m.loadProjects(), m.loadTasks())
 }
 
-// renderProjectModal renderiza el modal de creación/edición de proyecto dentro
-// de una caja con borde y el título embebido arriba. Los keybinds van en la
-// barra inferior, no duplicados.
+// renderProjectModal renders the project create/edit modal inside
+// a box with a border and the title embedded at the top. The keybinds go in
+// the bottom bar, not duplicated.
 func (m *Model) renderProjectModal(content string) string {
 	w := m.width
 
@@ -310,7 +310,7 @@ func (m *Model) renderProjectModal(content string) string {
 	return overlayModal(content, renderModalBox(title, lines, totalWidth), totalWidth, w)
 }
 
-// renderConfirmModal superpone una confirmación y/n sobre el contenido.
+// renderConfirmModal overlays a yes/no confirmation on the content.
 func (m *Model) renderConfirmModal(content string) string {
 	w := m.width
 

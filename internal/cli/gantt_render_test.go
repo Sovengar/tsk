@@ -7,15 +7,15 @@ import (
 	"tsk/internal/model"
 )
 
-// Estas aserciones son exactas a propósito, no "contains". El render del Gantt
-// es una rejilla: si un offset se mueve una columna, una etiqueta se desplaza o
-// el eje pierde una celda, el resultado sigue "pareciendo" un Gantt y por eso
-// sólo un assert literal lo detecta. Cubre los mutants de los offsets
-// (labelW+1, +d), del ancho de la rejilla y del recorte de la etiqueta.
+// These assertions are exact on purpose, not "contains". The Gantt render
+// is a grid: if an offset moves one column, a label shifts or
+// the axis loses a cell, the result still "looks like" a Gantt and that's why
+// only a literal assert detects it. It covers the mutants of the offsets
+// (labelW+1, +d), of the grid width and of the label truncation.
 
 const (
 	ganttLabelW  = 30
-	ganttHeadOff = 2 // cabecera y línea en blanco antes de la regla
+	ganttHeadOff = 2 // header and blank line before the ruler
 )
 
 func ganttLines(t *testing.T, s *model.Schedule, weeks int) []string {
@@ -23,83 +23,83 @@ func ganttLines(t *testing.T, s *model.Schedule, weeks int) []string {
 	return strings.Split(renderGanttText(s, weeks), "\n")
 }
 
-func TestRenderGanttTextRejilla(t *testing.T) {
-	// Arranca en lunes: los lunes caen en d=0 y d=7, así que la regla queda
-	// exactamente en 31+4+3+4 = 42 columnas (recortada por TrimRight) y el eje
-	// en 31+14 = 45.
+func TestRenderGanttTextGrid(t *testing.T) {
+	// Starts on a Monday: Mondays fall on d=0 and d=7, so the ruler ends up
+	// exactly at 31+4+3+4 = 42 columns (trimmed by TrimRight) and the axis
+	// at 31+14 = 45.
 	lines := ganttLines(t, &model.Schedule{Start: "2026-09-14"}, 2)
 
 	wantRuler := strings.Repeat(" ", ganttLabelW+1) + "3SEP" + "   " + "4SEP"
 	if lines[ganttHeadOff] != wantRuler {
-		t.Errorf("regla = %q\nwant   %q", lines[ganttHeadOff], wantRuler)
+		t.Errorf("ruler = %q\nwant   %q", lines[ganttHeadOff], wantRuler)
 	}
 
 	wantAxis := strings.Repeat(" ", ganttLabelW+1) + "|------|------"
 	if lines[ganttHeadOff+1] != wantAxis {
-		t.Errorf("eje = %q\nwant  %q", lines[ganttHeadOff+1], wantAxis)
+		t.Errorf("axis = %q\nwant  %q", lines[ganttHeadOff+1], wantAxis)
 	}
 	if got := len([]rune(lines[ganttHeadOff+1])); got != ganttLabelW+1+14 {
-		t.Errorf("eje = %d celdas, want %d", got, ganttLabelW+1+14)
+		t.Errorf("axis = %d cells, want %d", got, ganttLabelW+1+14)
 	}
 }
 
-func TestRenderGanttTextEjeSigueElLunes(t *testing.T) {
+func TestRenderGanttTextAxisFollowsMonday(t *testing.T) {
 	tests := []struct {
 		start  string
 		weeks  int
 		pipes  int
 		weekNb int
 	}{
-		{"2026-09-14", 2, 2, 14}, // lunes
-		{"2026-09-15", 2, 2, 14}, // martes: los lunes caen en d=5 y d=12
-		{"2026-09-16", 1, 1, 7},  // miércoles con una sola semana: lunes en d=4
+		{"2026-09-14", 2, 2, 14}, // Monday
+		{"2026-09-15", 2, 2, 14}, // Tuesday: Mondays fall on d=5 and d=12
+		{"2026-09-16", 1, 1, 7},  // Wednesday with a single week: Monday at d=4
 		{"2026-09-14", 4, 4, 28},
 	}
 	for _, tt := range tests {
 		t.Run(tt.start, func(t *testing.T) {
 			axis := ganttLines(t, &model.Schedule{Start: tt.start}, tt.weeks)[ganttHeadOff+1]
 			if got := strings.Count(axis, "|"); got != tt.pipes {
-				t.Errorf("eje con %d lunes, want %d (%q)", got, tt.pipes, axis)
+				t.Errorf("axis with %d Mondays, want %d (%q)", got, tt.pipes, axis)
 			}
 			if got := len([]rune(axis)) - ganttLabelW - 1; got != tt.weekNb {
-				t.Errorf("eje = %d celdas, want %d", got, tt.weekNb)
+				t.Errorf("axis = %d cells, want %d", got, tt.weekNb)
 			}
 		})
 	}
 }
 
-// TestRenderGanttTextRecortaLaUltimaEtiqueta: sólo cuando el calendario no
-// arranca en lunes la última etiqueta de semana cae tan a la derecha que no
-// cabe en la regla y se trunca. Es el único caso donde el `col+i < len(ruler)`
-// decide algo; sin esta aserción el guard es código muerto a ojos del test.
-func TestRenderGanttTextRecortaLaUltimaEtiqueta(t *testing.T) {
+// TestRenderGanttTextTruncatesLastLabel: only when the calendar does not
+// start on a Monday does the last week label fall so far right that it does not
+// fit in the ruler and gets truncated. It is the only case where `col+i < len(ruler)`
+// decides something; without this assertion the guard is dead code from the test's point of view.
+func TestRenderGanttTextTruncatesLastLabel(t *testing.T) {
 	ruler := ganttLines(t, &model.Schedule{Start: "2026-09-15"}, 2)[ganttHeadOff]
 	if !strings.HasSuffix(ruler, "1") {
-		t.Errorf("esperaba la etiqueta recortada a 1OCT→1: %q", ruler)
+		t.Errorf("expected the label truncated to 1OCT→1: %q", ruler)
 	}
 	if strings.Contains(ruler, "1OCT") {
-		t.Errorf("la etiqueta no debería caber entera: %q", ruler)
+		t.Errorf("the label should not fit whole: %q", ruler)
 	}
 
-	// Con arranque en lunes la última sí cabe: nada se recorta.
+	// With a Monday start the last one does fit: nothing is truncated.
 	full := ganttLines(t, &model.Schedule{Start: "2026-09-14"}, 2)[ganttHeadOff]
 	if !strings.HasSuffix(full, "4SEP") {
-		t.Errorf("con arranque en lunes la etiqueta va entera: %q", full)
+		t.Errorf("with a Monday start the label fits whole: %q", full)
 	}
 }
 
-// TestRenderGanttTextPosicionDeLasBarras fija en qué celda cae cada barra: la
-// primera empieza en la columna 31 (etiqueta de 30 + espacio) y una tarea que
-// empieza el día 5 lleva 5 celdas en blanco delante. Un redondeo de días
-// distinto (Hours()/24) mueve la barra sin cambiar nada visible a simple vista.
-func TestRenderGanttTextPosicionDeLasBarras(t *testing.T) {
+// TestRenderGanttTextBarPositions pins which cell each bar falls on: the
+// first one starts at column 31 (30-wide label + space) and a task that
+// starts on day 5 has 5 blank cells in front. A different day rounding
+// (Hours()/24) moves the bar without changing anything visible at a glance.
+func TestRenderGanttTextBarPositions(t *testing.T) {
 	s := &model.Schedule{
 		Start: "2026-09-14",
 		Assignees: []model.AssigneeSchedule{{
 			Assignee: "@a",
 			Entries: []model.ScheduleEntry{
-				{Task: model.Task{ID: 1, Title: "dos dias"}, Start: "2026-09-14", End: "2026-09-15", Estimate: 2},
-				{Task: model.Task{ID: 2, Title: "dia cinco"}, Start: "2026-09-19", End: "2026-09-19", Estimate: 1},
+				{Task: model.Task{ID: 1, Title: "two days"}, Start: "2026-09-14", End: "2026-09-15", Estimate: 2},
+				{Task: model.Task{ID: 2, Title: "day five"}, Start: "2026-09-19", End: "2026-09-19", Estimate: 1},
 			},
 		}},
 	}
@@ -112,27 +112,27 @@ func TestRenderGanttTextPosicionDeLasBarras(t *testing.T) {
 		}
 	}
 	if len(firstCells) != 2 {
-		t.Fatalf("barras = %v, want 2 (lineas: %q)", firstCells, lines)
+		t.Fatalf("bars = %v, want 2 (lines: %q)", firstCells, lines)
 	}
 	if firstCells[0] != 0 {
-		t.Errorf("primera barra en la celda %d, want 0", firstCells[0])
+		t.Errorf("first bar in cell %d, want 0", firstCells[0])
 	}
 	if firstCells[1] != 5 {
-		t.Errorf("barra del 19-sep en la celda %d, want 5", firstCells[1])
+		t.Errorf("bar for Sep 19 in cell %d, want 5", firstCells[1])
 	}
 }
 
-// TestRenderGanttTextRecortaFueraDeVentana: una entrada fuera del rango
-// visible no pinta barra ni desborda la fila. Cubre el recorte por la derecha
-// y por la izquierda (una fecha no parseable devuelve -1 en dayIndex).
-func TestRenderGanttTextRecortaFueraDeVentana(t *testing.T) {
+// TestRenderGanttTextClampsOutsideWindow: an entry outside the visible
+// range paints no bar and does not overflow the row. It covers the right-hand
+// and left-hand clamping (an unparseable date returns -1 in dayIndex).
+func TestRenderGanttTextClampsOutsideWindow(t *testing.T) {
 	tests := []struct {
 		name       string
 		start, end string
 	}{
-		{"se sale por la derecha", "2026-10-01", "2026-10-05"},
-		{"enteramente antes", "2020-01-01", "2020-01-02"},
-		{"fecha no parseable", "no-es-fecha", "tampoco"},
+		{"overflows to the right", "2026-10-01", "2026-10-05"},
+		{"entirely before", "2020-01-01", "2020-01-02"},
+		{"unparseable date", "not-a-date", "neither"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -141,25 +141,25 @@ func TestRenderGanttTextRecortaFueraDeVentana(t *testing.T) {
 				Assignees: []model.AssigneeSchedule{{
 					Assignee: "@a",
 					Entries: []model.ScheduleEntry{
-						{Task: model.Task{ID: 1, Title: "fuera"}, Start: tt.start, End: tt.end, Estimate: 1},
+						{Task: model.Task{ID: 1, Title: "outside"}, Start: tt.start, End: tt.end, Estimate: 1},
 					},
 				}},
 			}
 			for _, line := range ganttLines(t, s, 2) {
 				if strings.Contains(line, "█") {
-					t.Errorf("una entrada fuera de la ventana no debe pintar barra: %q", line)
+					t.Errorf("an entry outside the window must not paint a bar: %q", line)
 				}
 			}
 		})
 	}
 }
 
-// TestRenderGanttTextMarcaElEstimatePorDefecto: la tilde "~" sólo aparece cuando
-// el estimate vino del default, no cuando la tarea lo traía explícito.
-func TestRenderGanttTextMarcaElEstimatePorDefecto(t *testing.T) {
+// TestRenderGanttTextMarksDefaultEstimate: the tilde "~" only appears when
+// the estimate came from the default, not when the task brought it explicitly.
+func TestRenderGanttTextMarksDefaultEstimate(t *testing.T) {
 	entries := []model.ScheduleEntry{
-		{Task: model.Task{ID: 1, Title: "por defecto"}, Start: "2026-09-14", End: "2026-09-14", Estimate: 1, EstimateDefaulted: true},
-		{Task: model.Task{ID: 2, Title: "explicito"}, Start: "2026-09-14", End: "2026-09-14", Estimate: 1},
+		{Task: model.Task{ID: 1, Title: "default"}, Start: "2026-09-14", End: "2026-09-14", Estimate: 1, EstimateDefaulted: true},
+		{Task: model.Task{ID: 2, Title: "explicit"}, Start: "2026-09-14", End: "2026-09-14", Estimate: 1},
 	}
 	out := renderGanttText(&model.Schedule{
 		Start:     "2026-09-14",
@@ -167,29 +167,29 @@ func TestRenderGanttTextMarcaElEstimatePorDefecto(t *testing.T) {
 	}, 1)
 
 	if strings.Count(out, "~") != 1 {
-		t.Errorf("esperaba 1 marca de default, got %d:\n%s", strings.Count(out, "~"), out)
+		t.Errorf("expected 1 default mark, got %d:\n%s", strings.Count(out, "~"), out)
 	}
 }
 
-func TestRenderGanttTextTareasSinDueno(t *testing.T) {
+func TestRenderGanttTextTasksWithoutOwner(t *testing.T) {
 	s := &model.Schedule{
 		Start:      "2026-09-14",
-		Unassigned: []model.Task{{ID: 7, Title: "sin dueño"}, {ID: 8, Title: "otra"}},
+		Unassigned: []model.Task{{ID: 7, Title: "no owner"}, {ID: 8, Title: "other"}},
 	}
 	out := renderGanttText(s, 1)
 	if !strings.Contains(out, "Unassigned (2):") {
-		t.Errorf("falta el recuento: %q", out)
+		t.Errorf("the count is missing: %q", out)
 	}
-	// Sin dueño no se agenda: no debe haber ninguna barra ni línea por persona.
+	// With no owner nothing is scheduled: there must be no bar and no per-person line.
 	if strings.Contains(out, "█") || strings.Contains(out, "ends") {
-		t.Errorf("una tarea sin dueño no debería agendarse: %q", out)
+		t.Errorf("an unassigned task should not be scheduled: %q", out)
 	}
 }
 
-// TestRenderGanttTextEntrySpanningTheRightEdge: una entrada que termina el día
-// siguiente al final de la ventana debe recortarse al último día, sin escribir
-// fuera de la fila ni reventar. Cubre el `totalDays-1` del recorte: si el
-// borde fuese totalDays+1, la escritura se saldría de la fila.
+// TestRenderGanttTextEntrySpanningTheRightEdge: an entry that ends the day
+// after the end of the window must be clamped to the last day, without writing
+// outside the row or blowing up. It covers the `totalDays-1` of the clamp: if the
+// edge were totalDays+1, the write would go outside the row.
 func TestRenderGanttTextEntrySpanningTheRightEdge(t *testing.T) {
 	const weeks = 2
 	const totalDays = weeks * 7
@@ -199,9 +199,9 @@ func TestRenderGanttTextEntrySpanningTheRightEdge(t *testing.T) {
 		end      string
 		wantBars int
 	}{
-		{"termina en el último día visible", "2026-09-27", totalDays},
-		{"termina un día después", "2026-09-28", totalDays},
-		{"termina dos días después", "2026-09-29", totalDays},
+		{"ends on the last visible day", "2026-09-27", totalDays},
+		{"ends one day later", "2026-09-28", totalDays},
+		{"ends two days later", "2026-09-29", totalDays},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -210,13 +210,13 @@ func TestRenderGanttTextEntrySpanningTheRightEdge(t *testing.T) {
 				Assignees: []model.AssigneeSchedule{{
 					Assignee: "@a",
 					Entries: []model.ScheduleEntry{
-						{Task: model.Task{ID: 1, Title: "al borde"}, Start: "2026-09-14", End: tt.end, Estimate: 99},
+						{Task: model.Task{ID: 1, Title: "at the edge"}, Start: "2026-09-14", End: tt.end, Estimate: 99},
 					},
 				}},
 			}
 			line := ganttLines(t, s, weeks)[ganttHeadOff+3]
 			if got := strings.Count(line, "█"); got != tt.wantBars {
-				t.Errorf("%d celdas pintadas, want %d (%q)", got, tt.wantBars, line)
+				t.Errorf("%d painted cells, want %d (%q)", got, tt.wantBars, line)
 			}
 		})
 	}

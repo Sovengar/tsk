@@ -13,7 +13,7 @@ const (
 	PriorityHigh   = 3
 )
 
-// Task representa una tarea en un proyecto.
+// Task represents a task in a project.
 type Task struct {
 	ID          int64    `json:"id"`
 	ProjectID   int64    `json:"project_id"`
@@ -30,7 +30,7 @@ type Task struct {
 	CompletedAt string   `json:"completed_at,omitempty"`
 }
 
-// PriorityLabel devuelve la etiqueta legible de la prioridad.
+// PriorityLabel returns the readable label of the priority.
 func PriorityLabel(p int) string {
 	switch p {
 	case PriorityLow:
@@ -44,7 +44,7 @@ func PriorityLabel(p int) string {
 	}
 }
 
-// PriorityShortLabel devuelve la etiqueta abreviada (H/M/L).
+// PriorityShortLabel returns the abbreviated label (H/M/L).
 func PriorityShortLabel(p int) string {
 	switch p {
 	case PriorityLow:
@@ -58,7 +58,7 @@ func PriorityShortLabel(p int) string {
 	}
 }
 
-// PriorityBar devuelve un caracter visual de prioridad.
+// PriorityBar returns a visual priority character.
 func PriorityBar(p int) string {
 	switch p {
 	case PriorityHigh:
@@ -72,13 +72,13 @@ func PriorityBar(p int) string {
 	}
 }
 
-// IsActive indica si la tarea no está en estado terminal.
+// IsActive tells whether the task is not in a terminal state.
 func (t *Task) IsActive() bool {
 	return t.Status != CancelledStatus && t.Status != "done"
 }
 
-// NormalizeTags limpia una lista de tags: recorta espacios, pasa a minúsculas,
-// descarta vacíos y duplicados, preservando el orden de aparición.
+// NormalizeTags cleans a tag list: trims spaces, lowercases,
+// drops empties and duplicates, preserving the order of appearance.
 func NormalizeTags(tags []string) []string {
 	var out []string
 	seen := make(map[string]bool, len(tags))
@@ -93,7 +93,7 @@ func NormalizeTags(tags []string) []string {
 	return out
 }
 
-// ParseTags convierte un string "a, b,c" en una lista normalizada.
+// ParseTags converts an "a, b,c" string into a normalized list.
 func ParseTags(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -101,7 +101,7 @@ func ParseTags(s string) []string {
 	return NormalizeTags(strings.Split(s, ","))
 }
 
-// HasTag indica si la lista contiene el tag dado (comparación case-insensitive).
+// HasTag tells whether the list contains the given tag (case-insensitive comparison).
 func HasTag(tags []string, tag string) bool {
 	tag = strings.ToLower(strings.TrimSpace(tag))
 	for _, t := range tags {
@@ -112,7 +112,7 @@ func HasTag(tags []string, tag string) bool {
 	return false
 }
 
-// TagsJSON serializa tags para storage; siempre devuelve un array JSON.
+// TagsJSON serializes tags for storage; always returns a JSON array.
 func TagsJSON(tags []string) string {
 	if tags == nil {
 		tags = []string{}
@@ -121,7 +121,7 @@ func TagsJSON(tags []string) string {
 	return string(b)
 }
 
-// ParseTagsJSON deserializa tags desde storage; tolera vacío y null.
+// ParseTagsJSON deserializes tags from storage; tolerates empty and null.
 func ParseTagsJSON(s string) []string {
 	s = strings.TrimSpace(s)
 	if s == "" || s == "null" {
@@ -134,18 +134,18 @@ func ParseTagsJSON(s string) []string {
 	return NormalizeTags(tags)
 }
 
-// TaskListResponse es la respuesta JSON de listado.
+// TaskListResponse is the JSON listing response.
 type TaskListResponse struct {
 	Tasks []Task `json:"tasks"`
 }
 
-// TaskResponse es la respuesta JSON de una sola tarea.
+// TaskResponse is the JSON response of a single task.
 type TaskResponse struct {
 	OK   bool `json:"ok"`
 	Task Task `json:"task"`
 }
 
-// TaskActionResult es la respuesta de start/done/cancel/move.
+// TaskActionResult is the response of start/done/cancel/move.
 type TaskActionResult struct {
 	OK       bool   `json:"ok"`
 	Task     Task   `json:"task"`
@@ -153,7 +153,7 @@ type TaskActionResult struct {
 	Previous string `json:"previous,omitempty"`
 }
 
-// ErrorResult es el formato estándar de error.
+// ErrorResult is the standard error format.
 type ErrorResult struct {
 	Error string `json:"error"`
 }

@@ -2,8 +2,8 @@ package tui
 
 import "github.com/charmbracelet/x/ansi"
 
-// OverlayLine superpone modalLine sobre bgLine en la posición de display startX.
-// Preserva códigos ANSI del fondo fuera del área del modal.
+// OverlayLine overlays modalLine onto bgLine at display position startX.
+// Preserves the background's ANSI codes outside the modal area.
 func OverlayLine(bgLine, modalLine string, startX int) string {
 	bgWidth := ansi.StringWidth(bgLine)
 	modalWidth := ansi.StringWidth(modalLine)

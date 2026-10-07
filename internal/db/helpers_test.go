@@ -2,9 +2,9 @@ package db
 
 import "testing"
 
-// Helpers de setup: fallan el test si el alta falla, en vez de descartar el
-// error. No cambian el comportamiento del test — solo cómo se reporta un fallo
-// de setup, que antes se ignoraba silenciosamente.
+// Setup helpers: they fail the test if creation fails, instead of discarding
+// the error. They do not change the test's behavior — only how a setup
+// failure is reported, which used to be silently ignored.
 
 func mustCreateProject(t *testing.T, db *DB, name string, workflow []string) {
 	t.Helper()

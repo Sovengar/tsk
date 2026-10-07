@@ -7,23 +7,23 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// toastDuration es cuánto tiempo se muestra un toast antes de expirar.
+// toastDuration is how long a toast is shown before expiring.
 const toastDuration = 3 * time.Second
 
-// toastExpiredMsg solicita limpiar el toast si sigue siendo el actual.
+// toastExpiredMsg asks to clear the toast if it is still the current one.
 type toastExpiredMsg struct{ seq int }
 
-// setToast guarda un mensaje transitorio y devuelve el comando que lo expira.
-// El contador de secuencia evita que un tick viejo borre un toast más nuevo.
+// setToast stores a transient message and returns the command that expires it.
+// The sequence counter prevents an old tick from erasing a newer toast.
 func (m *Model) setToast(text, kind string) tea.Cmd {
 	m.toast = text
 	m.toastKind = kind
-	// La secuencia se incrementa por jumps() y no con un ++: lo que importa es
-	// que cada toast tenga un número que los ticks viejos no lleven, no que los
-	// números sean consecutivos. Con ++, el mutante de decremento sólo se
-	// distinguía haciendo tres toasts seguidos, y ni así, porque lo que se
-	// comprueba es "el tick viejo no borra el nuevo" y eso da igual para
-	// cualquier número que no se repita.
+	// The sequence is incremented by jumps() and not with a ++: what matters is
+	// that every toast has a number that old ticks do not carry, not that the
+	// numbers be consecutive. With ++, the decrement mutant could only be
+	// told apart by making three toasts in a row, and not even then, because
+	// what is checked is "the old tick does not erase the new one" and that holds
+	// for any number that does not repeat.
 	seq := jumps(m.toastSeq)
 	m.toastSeq = seq
 	return tea.Tick(toastDuration, func(time.Time) tea.Msg {
@@ -31,7 +31,7 @@ func (m *Model) setToast(text, kind string) tea.Cmd {
 	})
 }
 
-// renderToast dibuja el toast en una línea, o "" si no hay nada que mostrar.
+// renderToast draws the toast on one line, or "" if there is nothing to show.
 func (m Model) renderToast() string {
 	if m.toast == "" {
 		return ""
@@ -47,10 +47,10 @@ func (m Model) renderToast() string {
 	return style.Render(" " + text)
 }
 
-// jumps devuelve el siguiente número de secuencia de un toast.
+// jumps returns the next sequence number of a toast.
 //
-// Existe como función separada, y no como `seq++` en setToast, para que el
-// "siguiente número" sea una operación con nombre y no una expresión: lo que el
-// contador garantiza es que dos toasts consecutivos no compartan número, y eso es
-// una comparación entre dos valores, no una resta.
+// It exists as a separate function, and not as `seq++` in setToast, so that the
+// "next number" is a named operation and not an expression: what the
+// counter guarantees is that two consecutive toasts do not share a number, and
+// that is a comparison between two values, not a subtraction.
 func jumps(seq int) int { return seq + 1 }

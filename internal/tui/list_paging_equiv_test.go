@@ -2,14 +2,14 @@ package tui
 
 import "testing"
 
-// listWindowLegacy reproduce la aritmética ORIGINAL (currentPage, totalPages,
-// pageBounds) tal cual estaba antes del refactor. Sirve de red de seguridad: si
-// listWindow deja de dar lo mismo en un estado alcanzable, este test salta.
+// listWindowLegacy reproduces the ORIGINAL arithmetic (currentPage, totalPages,
+// pageBounds) just as it stood before the refactor. It works as a safety net: if
+// listWindow stops giving the same result in a reachable state, this test trips.
 //
-// La ÚNICA divergencia intencionada es con cursor >= total, que la propia
-// vista hace inalcanzable porque clampListCursor corre antes: el legacy devolvía
-// una ventana vacía y una leyenda del tipo "Page 20/2", y el nuevo recorta a la
-// última página real.
+// The ONLY intentional divergence is with cursor >= total, which the view itself
+// makes unreachable because clampListCursor runs first: the legacy returned
+// an empty window and a caption like "Page 20/2", and the new one clamps to the
+// last real page.
 func listWindowLegacy(total, size, cursor int) (page, pages, start, end int) {
 	pages = (total + size - 1) / size
 	if pages < 1 {
@@ -28,8 +28,8 @@ func listWindowLegacy(total, size, cursor int) (page, pages, start, end int) {
 }
 
 func TestListWindowMatchesLegacyArithmetic(t *testing.T) {
-	// Un solo modelo por (size, total): crear la DB de pruebas por cada cursor
-	// convertía esta red de seguridad en 60 segundos de suite.
+	// A single model per (size, total): creating the test DB for every cursor
+	// turned this safety net into 60 seconds of suite.
 	for _, size := range []int{1, 2, 3, 5, 10, 37} {
 		for total := 0; total <= 40; total++ {
 			m := modelWithTasks(t, total, size)
@@ -40,12 +40,12 @@ func TestListWindowMatchesLegacyArithmetic(t *testing.T) {
 				w := m.listWindow()
 
 				if w.total != total || w.size != size {
-					t.Fatalf("fixture rota: total/size = %d/%d, want %d/%d", w.total, w.size, total, size)
+					t.Fatalf("broken fixture: total/size = %d/%d, want %d/%d", w.total, w.size, total, size)
 				}
-				// cursor < total es el rango alcanzable: tras clampListCursor el
-				// cursor siempre cumple cursor < total.
+				// cursor < total is the reachable range: after clampListCursor the
+				// cursor always satisfies cursor < total.
 				if cursor < total && (w.page != page || w.pages != pages || w.start != start || w.end != end) {
-					t.Fatalf("size=%d total=%d cursor=%d: legacy {p:%d pages:%d start:%d end:%d} != nuevo {p:%d pages:%d start:%d end:%d}",
+					t.Fatalf("size=%d total=%d cursor=%d: legacy {p:%d pages:%d start:%d end:%d} != new {p:%d pages:%d start:%d end:%d}",
 						size, total, cursor, page, pages, start, end, w.page, w.pages, w.start, w.end)
 				}
 			}
@@ -53,7 +53,7 @@ func TestListWindowMatchesLegacyArithmetic(t *testing.T) {
 	}
 }
 
-// El clamp legacy y el nuevo coinciden para todo cursor válido.
+// The legacy clamp and the new one match for every valid cursor.
 func TestClampMatchesLegacyForValidCursors(t *testing.T) {
 	for _, size := range []int{1, 3, 5, 10} {
 		for total := 1; total <= 30; total++ {

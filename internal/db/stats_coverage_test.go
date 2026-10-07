@@ -5,221 +5,221 @@ import (
 	"testing"
 )
 
-// Stats hace tres consultas contra la misma vista: un COUNT, un GROUP BY status
-// y un GROUP BY assignee. Con la base sana las tres funcionan, así que sus tres
-// ramas de error sólo se ven si se estropea el ESQUEMA, no los datos.
+// Stats runs three queries against the same view: a COUNT, a GROUP BY status
+// and a GROUP BY assignee. With a healthy database all three work, so their three
+// error branches only show up if the SCHEMA is broken, not the data.
 //
-// La herramienta es sustituir la tabla tasks por una VISTA. Una vista es SQL,
-// no datos, y eso abre dos sabotajes distintos que hay que no confundir, porque
-// cada uno falla en un punto distinto de Stats:
+// The tool is to replace the tasks table with a VIEW. A view is SQL,
+// not data, and that opens two distinct sabotages that must not be confused, because
+// each fails at a different point of Stats:
 //
-//   - Una columna QUE NO EXISTE. El COUNT no la menciona -- cuenta filas, y da
-//     lo mismo)-- así que pasa; el GROUP BY sí la nombra y falla al_PREPARAR la
-//     consulta. Es un fallo de db.conn.Query: todavía no ha salido ninguna fila.
+//   - A column THAT DOES NOT EXIST. The COUNT does not mention it -- it counts rows, and
+//     that is all the same-- so it passes; the GROUP BY does name it and fails while PREPARING the
+//     query. It is a db.conn.Query failure: no row has come out yet.
 //
-//   - Una columna con un valor que no se puede convertir (un NULL). La consulta
-//     se prepara, se ejecuta, la fila llega... y es el SCAN el que no sabe qué
-//     hacer. database/sql no tiene NULL→string: no hay con qué llenarlo.
+//   - A column with a value that cannot be converted (a NULL). The query
+//     is prepared, it runs, the row arrives... and it is the SCAN that does not know
+//     what to do. database/sql has no NULL→string: there is nothing to fill it with.
 //
-// Confundirlos daría un test que pasa por la razón equivocada, que es peor que
-// no tener test: el día que la consulta cambie, el test seguirá verde por un
-// motivo que ya no existe.
+// Confusing them would give a test that passes for the wrong reason, which is worse
+// than having no test: the day the query changes, the test will stay green for a
+// reason that no longer exists.
 
-// vistaDeTasks cambia el esquema de tasks por la vista dada. Se llama con el
-// cuerpo del SELECT de la vista, y la vista tiene que traer las doce columnas
-// que el resto del código espera -- no es una vista de caja negra sobre el
-// esquema, es el mismo esquema con una columna cambiada.
-func vistaDeTasks(t *testing.T, selectDeLaVista string) *DB {
+// tasksView swaps the tasks schema for the given view. It is called with the
+// body of the view's SELECT, and the view has to bring the twelve columns
+// the rest of the code expects -- it is not a black-box view over the
+// schema, it is the same schema with one column changed.
+func tasksView(t *testing.T, viewSelect string) *DB {
 	t.Helper()
 	database := newTestDB(t)
-	poblarAPI(t, database)
+	populateAPI(t, database)
 
 	if _, err := database.Conn().Exec(`ALTER TABLE tasks RENAME TO tasks_real`); err != nil {
-		t.Fatalf("renombrando tasks: %v", err)
+		t.Fatalf("renaming tasks: %v", err)
 	}
-	if _, err := database.Conn().Exec(`CREATE VIEW tasks AS ` + selectDeLaVista + ` FROM tasks_real t0`); err != nil {
-		t.Fatalf("creando la vista: %v", err)
+	if _, err := database.Conn().Exec(`CREATE VIEW tasks AS ` + viewSelect + ` FROM tasks_real t0`); err != nil {
+		t.Fatalf("creating the view: %v", err)
 	}
 	return database
 }
 
-// sabotearColumna cambia una columna de la vista por la expresión dada, bajo el
-// MISMO nombre. Es el sabotaje del Scan: la consulta funciona, la fila llega, y
-// lo que no se puede convertir es el valor.
+// breakColumn swaps a view column for the given expression, under the
+// SAME name. It is the Scan sabotage: the query works, the row arrives, and
+// what cannot be converted is the value.
 //
-// Para quitar una columna del todo --el sabotaje de la consulta-- hay que pasar
-// un nombre nuevo, y por eso es un helper aparte.
-func sabotearColumna(t *testing.T, columna, expresion string) *DB {
+// To remove a column entirely -- the query sabotage -- you have to pass
+// a new name, and that is why it is a separate helper.
+func breakColumn(t *testing.T, column, expr string) *DB {
 	t.Helper()
 	colStatus, colAssignee := "t0.status", "t0.assignee"
-	switch columna {
+	switch column {
 	case "status":
-		colStatus = expresion
+		colStatus = expr
 	case "assignee":
-		colAssignee = expresion
+		colAssignee = expr
 	default:
-		t.Fatalf("columna desconocida: %q", columna)
+		t.Fatalf("unknown column: %q", column)
 	}
 
 	cols := "t0.id, t0.project_id, t0.title, t0.description, " + colStatus + " AS status," +
 		" t0.priority, " + colAssignee + " AS assignee," +
 		" t0.created_at, t0.updated_at, t0.completed_at, t0.estimate, t0.tags"
-	return vistaDeTasks(t, "SELECT "+cols)
+	return tasksView(t, "SELECT "+cols)
 }
 
-// quitarColumna deja la columna de la vista sin el nombre que el código
-// consulta. El COUNT la ignora porque no la nombra; el GROUP BY la nombra y no
-// se puede preparar.
-func quitarColumna(t *testing.T, columna string) *DB {
+// dropColumn leaves the view's column without the name the code
+// queries. The COUNT ignores it because it does not name it; the GROUP BY names it and cannot
+// be prepared.
+func dropColumn(t *testing.T, column string) *DB {
 	t.Helper()
-	// El truco es el ALIAS, no el valor: la columna sigue ahí con su contenido,
-	// pero la vista ya no la llama status, así que "GROUP BY t.status" no
-	// encuentra a quién agrupar.
+	// The trick is the ALIAS, not the value: the column is still there with its content,
+	// but the view no longer calls it status, so "GROUP BY t.status" does not
+	// find what to group by.
 	colStatus, colAssignee := "t0.status AS status", "t0.assignee AS assignee"
-	switch columna {
+	switch column {
 	case "status":
 		colStatus = `t0.status AS estado`
 	case "assignee":
 		colAssignee = `t0.assignee AS responsable`
 	default:
-		t.Fatalf("columna desconocida: %q", columna)
+		t.Fatalf("unknown column: %q", column)
 	}
 
 	cols := "t0.id, t0.project_id, t0.title, t0.description, " + colStatus + "," +
 		" t0.priority, " + colAssignee + "," +
 		" t0.created_at, t0.updated_at, t0.completed_at, t0.estimate, t0.tags"
-	return vistaDeTasks(t, "SELECT "+cols)
+	return tasksView(t, "SELECT "+cols)
 }
 
-// Los dos fallos de la CONSULTA. El sabotaje es real y no un truco del arnés:
-// sin él, Stats devuelve el mapa entero. Y cada caso comprueba el mensaje, que
-// es lo que distingue "la consulta no se pudo preparar" de cualquier otro fallo
-// por el que Stats pueda devolver error.
+// The two QUERY failures. The sabotage is real and not a harness trick:
+// without it, Stats returns the whole map. And each case checks the message, which
+// is what distinguishes "the query could not be prepared" from any other failure
+// by which Stats might return an error.
 func TestStatsFailsWhenTheGroupingColumnDoesNotExist(t *testing.T) {
-	t.Run("la consulta de estado", func(t *testing.T) {
-		database := quitarColumna(t, "status")
+	t.Run("the status query", func(t *testing.T) {
+		database := dropColumn(t, "status")
 
 		_, err := database.Stats("")
 		if err == nil {
-			t.Fatal("Stats sin columna status: want error")
+			t.Fatal("Stats without a status column: want error")
 		}
-		// El nombre en el mensaje dice QUÉ columna faltó, y dice que es la de
-		// estado: si el sabotaje se hubiera colado en la de responsable, el
-		// mensaje sería otro y el test no mediría lo que dice medir.
+		// The name in the message says WHICH column was missing, and says it is the
+		// status one: if the sabotage had slipped into the assignee one, the
+		// message would be different and the test would not measure what it claims to.
 		if !strings.Contains(err.Error(), "t.status") {
-			t.Errorf("el fallo no es la columna de estado: %v", err)
+			t.Errorf("the failure is not the status column: %v", err)
 		}
 	})
 
-	t.Run("la consulta por responsable", func(t *testing.T) {
-		database := quitarColumna(t, "assignee")
+	t.Run("the query by assignee", func(t *testing.T) {
+		database := dropColumn(t, "assignee")
 
 		_, err := database.Stats("")
 		if err == nil {
-			t.Fatal("Stats sin columna assignee: want error")
+			t.Fatal("Stats without an assignee column: want error")
 		}
 		if !strings.Contains(err.Error(), "t.assignee") {
-			t.Errorf("el fallo no es la columna de responsable: %v", err)
+			t.Errorf("the failure is not the assignee column: %v", err)
 		}
 	})
 }
 
-// Los dos fallos del SCAN, que son distintos: la consulta funcionó y lo que no
-// se puede convertir es el valor.
+// The two SCAN failures, which are different: the query worked and what
+// cannot be converted is the value.
 func TestStatsFailsWhenTheGroupingColumnIsNull(t *testing.T) {
-	t.Run("el estado llega como NULL", func(t *testing.T) {
-		database := sabotearColumna(t, "status", "NULL")
+	t.Run("the status arrives as NULL", func(t *testing.T) {
+		database := breakColumn(t, "status", "NULL")
 
 		_, err := database.Stats("")
 		if err == nil {
-			t.Fatal("Stats con un estado NULL: want error")
+			t.Fatal("Stats with a NULL status: want error")
 		}
-		// "Scan error on column index 0" y no un fallo de consulta: el índice 0
-		// es el estado, la primera columna del GROUP BY, y es la que se saboteó.
+		// "Scan error on column index 0" and not a query failure: index 0
+		// is the status, the first column of the GROUP BY, and it is the one that was sabotaged.
 		if !strings.Contains(err.Error(), "Scan error on column index 0") {
-			t.Errorf("el fallo no es el Scan del estado: %v", err)
+			t.Errorf("the failure is not the status Scan: %v", err)
 		}
 	})
 
-	t.Run("el responsable llega como NULL", func(t *testing.T) {
-		database := sabotearColumna(t, "assignee", "NULL")
+	t.Run("the assignee arrives as NULL", func(t *testing.T) {
+		database := breakColumn(t, "assignee", "NULL")
 
 		_, err := database.Stats("")
 		if err == nil {
-			t.Fatal("Stats con un responsable NULL: want error")
+			t.Fatal("Stats with a NULL assignee: want error")
 		}
-		// Sigue siendo la columna 0 porque esta consulta devuelve el
-		// responsable primero.
+		// It is still column 0 because this query returns the
+		// assignee first.
 		if !strings.Contains(err.Error(), "Scan error on column index 0") {
-			t.Errorf("el fallo no es el Scan del responsable: %v", err)
+			t.Errorf("the failure is not the assignee Scan: %v", err)
 		}
 	})
 }
 
-// UnStats que falla a la mitad tiene que fallar entero: si devolviera lo que
-// llevaba, el comando mostraría un total sin desglose y nadie notaría que falta
-// una columna.
-func TestStatsDevuelveNadaCuandoFalla(t *testing.T) {
-	database := sabotearColumna(t, "assignee", "NULL")
+// A Stats that fails halfway has to fail entirely: if it returned what it
+// had, the command would show a total with no breakdown and nobody would notice a
+// column is missing.
+func TestStatsReturnsNothingWhenItFails(t *testing.T) {
+	database := breakColumn(t, "assignee", "NULL")
 
 	res, err := database.Stats("")
 	if err == nil {
-		t.Fatal("Stats con un responsable NULL: want error")
+		t.Fatal("Stats with a NULL assignee: want error")
 	}
 	if res != nil {
-		t.Errorf("Stats ha devuelto %v además del error: un error aquí significa que el mapa es inventado", res)
+		t.Errorf("Stats returned %v in addition to the error: an error here means the map is invented", res)
 	}
 }
 
-// MoveTask lee la tarea y luego su proyecto. La tarea se lee con un JOIN que
-// sólo trae p.name, así que sobrevive a un proyecto con el workflow corrupto;
-// la segunda lectura, que trae las ocho columnas, no.
+// MoveTask reads the task and then its project. The task is read with a JOIN that
+// only brings p.name, so it survives a project with a corrupt workflow;
+// the second read, which brings all eight columns, does not.
 func TestMoveTaskFailsWhenTheProjectCannotBeRead(t *testing.T) {
 	database := newTestDB(t)
-	poblarAPI(t, database)
+	populateAPI(t, database)
 
-	// workflow es JSON y se parsea al escanear: un workflow inválido rompe
-	// scanProject sin tocar el resto de la fila.
+	// workflow is JSON and parsed on scan: an invalid workflow breaks
+	// scanProject without touching the rest of the row.
 	if _, err := database.Conn().Exec(`UPDATE projects SET workflow = 'no soy json'`); err != nil {
-		t.Fatalf("corrompiendo el workflow: %v", err)
+		t.Fatalf("corrupting the workflow: %v", err)
 	}
 
-	// La lectura por clave de la tarea sí funciona, o el test no mediría lo que
-	// dice: si fallara ahí, el error vendría de GetTask y no de GetProjectByID.
+	// The task's key lookup does work, or the test would not measure what it
+	// says: if it failed there, the error would come from GetTask and not from GetProjectByID.
 	if _, err := database.GetTask(1); err != nil {
-		t.Fatalf("GetTask también falla, el test no mide lo que dice: %v", err)
+		t.Fatalf("GetTask also fails, the test does not measure what it claims: %v", err)
 	}
 
 	if _, err := database.MoveTask(1, "done"); err == nil {
-		t.Error("MoveTask con un proyecto ilegible: want error")
+		t.Error("MoveTask with an unreadable project: want error")
 	}
 
-	// Y la tarea no se ha movido: el fallo es al leer, antes de escribir.
+	// And the task has not moved: the failure is on the read, before the write.
 	var status string
 	if err := database.Conn().QueryRow(`SELECT status FROM tasks WHERE id = 1`).Scan(&status); err != nil {
-		t.Fatalf("leyendo el estado: %v", err)
+		t.Fatalf("reading the status: %v", err)
 	}
 	if status == "done" {
-		t.Error("la tarea se movió pese a que su proyecto no se pudo leer")
+		t.Error("the task moved even though its project could not be read")
 	}
 }
 
-// La regla del sabotaje es que la base tiene que seguir siendo una base: si el
-// esquema no cuela, la conclusión es que el test mide una bbdd rota y no un
-// camino de error del código.
-func TestSabotearColumnaDejaUnaBaseUsable(t *testing.T) {
-	database := sabotearColumna(t, "status", "NULL")
+// The rule of the sabotage is that the database has to keep being a database: if the
+// schema does not hold, the conclusion is that the test measures a broken database and not a
+// code error path.
+func TestBreakColumnLeavesADatabaseUsable(t *testing.T) {
+	database := breakColumn(t, "status", "NULL")
 
 	var count int
 	if err := database.Conn().QueryRow(`SELECT COUNT(*) FROM tasks_real`).Scan(&count); err != nil {
-		t.Fatalf("la tabla original ha desaparecido: %v", err)
+		t.Fatalf("the original table has disappeared: %v", err)
 	}
 	if count == 0 {
-		t.Error("el sabotage ha vaciado la base, así que no mide un fallo de Stats sino una base sin datos")
+		t.Error("the sabotage emptied the database, so it does not measure a Stats failure but a database without data")
 	}
-	// Y el resto de la API sigue respondiendo: sólo se ha roto la lectura de
-	// status, no la base entera.
+	// And the rest of the API keeps responding: only the read of
+	// status broke, not the whole database.
 	if _, err := database.GetProject("api"); err != nil {
-		t.Errorf("el sabotage ha roto más de lo que dice: %v", err)
+		t.Errorf("the sabotage broke more than it claims: %v", err)
 	}
 }

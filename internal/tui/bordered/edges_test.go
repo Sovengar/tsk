@@ -7,225 +7,225 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Los bordes de una caja tienen tres suelos --el ancho total, el interior y el
-// relleno de cada línea-- y cada suelo tenía su comparación con un borde que
-// ningún test podía alcanzar. Estos tests los alcanzan por los dos lados.
+// A box's borders have three floors --the total width, the interior and the
+// padding of each line-- and each floor had its comparison against an edge
+// that no test could reach. These tests reach them from both sides.
 //
-// El fondo común es el mismo en los tres: una clamped a un mínimo se puede
-// escribir con max y queda como una identidad en el borde, o como una condición
-// cuyo borde hay que provocar. Con max() no hay borde que provocar: no hay
-// comparación que mutar.
+// The common background is the same in all three: a clamp to a minimum can be
+// written with max and stays an identity at the edge, or a condition whose
+// edge has to be provoked. With max() there is no edge to provoke: there is
+// no comparison to mutate.
 
-// cajaDe es un atajo para una caja redondeada con el ancho pedido.
-func cajaDe(width int) lipgloss.Border { return lipgloss.RoundedBorder() }
+// boxOf is a shortcut for a rounded box with the requested width.
+func boxOf(width int) lipgloss.Border { return lipgloss.RoundedBorder() }
 
 func render(t *testing.T, content string, width int) string {
 	t.Helper()
-	return RenderWithTitleEx(cajaDe(width), nil, AlignLeft, " T ", content, width)
+	return RenderWithTitleEx(boxOf(width), nil, AlignLeft, " T ", content, width)
 }
 
-func lineasDe(s string) []string { return strings.Split(strings.TrimRight(s, "\n"), "\n") }
+func linesOf(s string) []string { return strings.Split(strings.TrimRight(s, "\n"), "\n") }
 
-// El suelo del ancho total: dos columnas, una por esquina. Un width de 1 sube a
-// 2 y la caja se dibuja sin interior.
-func TestAnchoMinimoDeLaCaja(t *testing.T) {
-	t.Run("por debajo del mínimo la caja no colapsa", func(t *testing.T) {
+// The floor of the total width: two columns, one per corner. A width of 1
+// goes up to 2 and the box is drawn with no interior.
+func TestMinimumBoxWidth(t *testing.T) {
+	t.Run("below the minimum the box does not collapse", func(t *testing.T) {
 		for _, w := range []int{-5, 0, 1} {
-			out := render(t, "hola", w)
-			lineas := lineasDe(out)
-			if len(lineas) < 3 {
-				t.Fatalf("width=%d: la caja tiene %d líneas, want al menos 3 (arriba, medio, abajo)",
-					w, len(lineas))
+			out := render(t, "hello", w)
+			lines := linesOf(out)
+			if len(lines) < 3 {
+				t.Fatalf("width=%d: the box has %d lines, want at least 3 (top, middle, bottom)",
+					w, len(lines))
 			}
-			// La línea del medio tiene que existir y no reventar: es el interior
-			// de anchura 0.
-			if !strings.Contains(lineas[1], "│") {
-				t.Errorf("width=%d: la línea del medio no tiene bordes: %q", w, lineas[1])
+			// The middle line has to exist and not blow up: it is the interior
+			// of width 0.
+			if !strings.Contains(lines[1], "│") {
+				t.Errorf("width=%d: the middle line has no borders: %q", w, lines[1])
 			}
 		}
 	})
 
-	t.Run("exactamente el mínimo", func(t *testing.T) {
+	t.Run("exactly the minimum", func(t *testing.T) {
 		out := render(t, "", 2)
-		lineas := lineasDe(out)
-		if len(lineas) != 3 {
-			t.Errorf("con width=2 hay %d líneas, want 3", len(lineas))
+		lines := linesOf(out)
+		if len(lines) != 3 {
+			t.Errorf("with width=2 there are %d lines, want 3", len(lines))
 		}
-		// El interior de una caja de 2 es 0 columnas: los dos bordes juntos.
-		if n := len([]rune(strings.Trim(lineas[1], "│"))); n != 0 {
-			t.Errorf("el interior mide %d columnas, want 0", n)
+		// The interior of a box of 2 is 0 columns: the two borders together.
+		if n := len([]rune(strings.Trim(lines[1], "│"))); n != 0 {
+			t.Errorf("the interior measures %d columns, want 0", n)
 		}
 	})
 }
 
-// El suelo del interior: no puede ser negativo porque las esquinas anchas de un
-// borde de terceros se comen el ancho entero. Con un borde de esquinas de tres
-// columnas y width 3, el interior es -3.
-func TestInteriorNoPuedeSerNegativo(t *testing.T) {
-	ancho := lipgloss.Border{
+// The floor of the interior: it cannot be negative because the wide corners
+// of a third-party border eat the whole width. With a border of
+// three-column corners and width 3, the interior is -3.
+func TestInteriorCannotBeNegative(t *testing.T) {
+	wideBorder := lipgloss.Border{
 		Top: "-", Bottom: "-", Left: "|", Right: "|",
 		TopLeft: "/3./", TopRight: "/3./",
 		BottomLeft: "\\3.\\", BottomRight: "\\3.\\",
 	}
-	// Con un ancho menor que las esquinas, el interior sale negativo.
+	// With a width smaller than the corners, the interior comes out negative.
 	for _, w := range []int{2, 3, 4} {
-		out := RenderWithTitleEx(ancho, nil, AlignLeft, "", "contenido", w)
-		for i, l := range lineasDe(out) {
+		out := RenderWithTitleEx(wideBorder, nil, AlignLeft, "", "content", w)
+		for i, l := range linesOf(out) {
 			if strings.Contains(l, "Repeat") || strings.Contains(l, "panic") {
-				t.Errorf("w=%d línea %d: la salida parece rota: %q", w, i, l)
+				t.Errorf("w=%d line %d: the output looks broken: %q", w, i, l)
 			}
 		}
 	}
-	// Y con un borde normal, el interior es el ancho menos 2.
+	// And with a normal border, the interior is the width minus 2.
 	out := render(t, "abcd", 10)
-	lineas := lineasDe(out)
-	if n := len([]rune(strings.Trim(lineas[1], "│ "))); n != 4 {
-		t.Errorf("con width=10 el interior visible mide %d columnas, want 4", n)
+	lines := linesOf(out)
+	if n := len([]rune(strings.Trim(lines[1], "│ "))); n != 4 {
+		t.Errorf("with width=10 the visible interior measures %d columns, want 4", n)
 	}
 }
 
-// El recorte del título: cuando el título ya cabe entero, el recorte es una
-// identidad y tiene que NOTARSE que no se ha recortado. Un título de anchura
-// exactamente igual al interior es el borde, y ahí el `>` y el `>=` dan lo mismo
-// -- por eso hace falta un título que llene el interior con un carácter menos y
-// uno que lo llene de más.
-func TestElTituloSeRecortaSoloCuandoNoCabe(t *testing.T) {
-	const ancho = 20 // interior = 18
+// The title truncation: when the title already fits whole, the truncation is
+// an identity and it has to BE NOTICED that nothing was truncated. A title of
+// exactly the same width as the interior is the edge, and there `>` and `>=`
+// give the same -- that is why a title that fills the interior with one
+// character less and one that fills it too much are needed.
+func TestTitleIsTruncatedOnlyWhenItDoesNotFit(t *testing.T) {
+	const width = 20 // interior = 18
 
-	t.Run("cabe de sobra", func(t *testing.T) {
-		out := RenderWithTitleEx(cajaDe(ancho), nil, AlignLeft, " corto ", "contenido", ancho)
-		if !strings.Contains(out, "corto") {
-			t.Errorf("el título corto ha desaparecido: %q", out)
+	t.Run("fits with room to spare", func(t *testing.T) {
+		out := RenderWithTitleEx(boxOf(width), nil, AlignLeft, " short ", "content", width)
+		if !strings.Contains(out, "short") {
+			t.Errorf("the short title disappeared: %q", out)
 		}
 	})
 
-	t.Run("llena el interior exacto", func(t *testing.T) {
-		// 18 columnas de título = exactamente el interior.
-		titulo := strings.Repeat("T", 18)
-		out := RenderWithTitleEx(cajaDe(ancho), nil, AlignLeft, titulo, "x", ancho)
+	t.Run("fills the interior exactly", func(t *testing.T) {
+		// 18 columns of title = exactly the interior.
+		title := strings.Repeat("T", 18)
+		out := RenderWithTitleEx(boxOf(width), nil, AlignLeft, title, "x", width)
 		if n := strings.Count(out, "T"); n != 18 {
-			t.Errorf("salen %d caracteres de título, want 18: el interior es de 18 y el título llena", n)
+			t.Errorf("%d title characters come out, want 18: the interior is 18 and the title fills it", n)
 		}
 	})
 
-	t.Run("no cabe y se recorta", func(t *testing.T) {
-		titulo := strings.Repeat("T", 25)
-		out := RenderWithTitleEx(cajaDe(ancho), nil, AlignLeft, titulo, "x", ancho)
+	t.Run("does not fit and is truncated", func(t *testing.T) {
+		title := strings.Repeat("T", 25)
+		out := RenderWithTitleEx(boxOf(width), nil, AlignLeft, title, "x", width)
 		if n := strings.Count(out, "T"); n != 18 {
-			t.Errorf("un título de 25 sale con %d caracteres, want 18 (el ancho del interior)", n)
+			t.Errorf("a title of 25 comes out with %d characters, want 18 (the interior width)", n)
 		}
 	})
 
-	t.Run("el interior no cambia por culpa del título", func(t *testing.T) {
-		for _, largo := range []int{0, 5, 18, 25, 100} {
-			out := RenderWithTitleEx(cajaDe(ancho), nil, AlignLeft,
-				strings.Repeat("T", largo), "contenido", ancho)
-			lineas := lineasDe(out)
-			for i, l := range lineas {
-				if n := len([]rune(l)); n != ancho {
-					t.Errorf("título de %d, línea %d mide %d columnas, want %d",
-						largo, i, n, ancho)
+	t.Run("the interior does not change because of the title", func(t *testing.T) {
+		for _, long := range []int{0, 5, 18, 25, 100} {
+			out := RenderWithTitleEx(boxOf(width), nil, AlignLeft,
+				strings.Repeat("T", long), "content", width)
+			lines := linesOf(out)
+			for i, l := range lines {
+				if n := len([]rune(l)); n != width {
+					t.Errorf("title of %d, line %d measures %d columns, want %d",
+						long, i, n, width)
 				}
 			}
 		}
 	})
 }
 
-// El suelo del relleno: una palabra más larga que el interior se desborda, y el
-// suelo en cero es lo que evita que strings.Repeat reviente con un número
-// negativo. Este es el caso que de verdad importa -- un título de tarea largo en
-// una terminal estrecha -- y el que un `max` deja escrito.
-func TestPalabraMasAnchaQueElInterior(t *testing.T) {
-	const ancho = 12 // interior = 10
-	larga := strings.Repeat("x", 40)
+// The floor of the padding: a word longer than the interior overflows, and
+// the floor at zero is what keeps strings.Repeat from blowing up with a
+// negative number. This is the case that really matters -- a long task title
+// in a narrow terminal -- and the one a `max` leaves on record.
+func TestWordWiderThanTheInterior(t *testing.T) {
+	const width = 12 // interior = 10
+	long := strings.Repeat("x", 40)
 
-	out := RenderWithTitleEx(cajaDe(ancho), nil, AlignLeft, "", larga, ancho)
+	out := RenderWithTitleEx(boxOf(width), nil, AlignLeft, "", long, width)
 
-	lineas := lineasDe(out)
-	if len(lineas) < 3 {
-		t.Fatalf("sólo %d líneas: la palabra larga no ha producido nada", len(lineas))
+	lines := linesOf(out)
+	if len(lines) < 3 {
+		t.Fatalf("only %d lines: the long word produced nothing", len(lines))
 	}
-	// Todas las líneas miden el ancho de la caja, ni una más.
-	for i, l := range lineas {
-		if n := len([]rune(l)); n != ancho {
-			t.Errorf("línea %d mide %d columnas, want %d: %q", i, n, ancho, l)
+	// All the lines measure the box width, not one more.
+	for i, l := range lines {
+		if n := len([]rune(l)); n != width {
+			t.Errorf("line %d measures %d columns, want %d: %q", i, n, width, l)
 		}
 	}
-	// Y la palabra sale entera en varias líneas, no cortada a media columna.
+	// And the word comes out whole on several lines, not cut mid-column.
 	if got := strings.Count(out, "x"); got != 40 {
-		t.Errorf("salen %d caracteres de la palabra, want 40: el relleno la truncó", got)
+		t.Errorf("%d characters of the word come out, want 40: the padding truncated it", got)
 	}
 }
 
-// El relleno de cada línea con ancho variable, que es lo que hace el suelo útil
-// en el caso normal: un contenido que ocupa justo el interior, uno que se queda
-// corto y uno que se pasa.
-func TestRellenoSegunElAnchoDeCadaLinea(t *testing.T) {
-	const ancho = 20 // interior = 18
-	contenido := "corto\n" + strings.Repeat("y", 18) + "\n" + strings.Repeat("z", 19)
+// The padding of each line with variable width, which is what makes the floor
+// useful in the normal case: content that takes exactly the interior, one
+// that falls short and one that goes past.
+func TestPaddingPerLineWidth(t *testing.T) {
+	const width = 20 // interior = 18
+	content := "short\n" + strings.Repeat("y", 18) + "\n" + strings.Repeat("z", 19)
 
-	out := RenderWithTitleEx(cajaDe(ancho), nil, AlignLeft, "", contenido, ancho)
-	lineas := lineasDe(out)
+	out := RenderWithTitleEx(boxOf(width), nil, AlignLeft, "", content, width)
+	lines := linesOf(out)
 
-	if len(lineas) < 5 {
-		t.Fatalf("sólo %d líneas para 3 de contenido", len(lineas))
+	if len(lines) < 5 {
+		t.Fatalf("only %d lines for 3 content lines", len(lines))
 	}
-	for i, l := range lineas {
-		if n := len([]rune(l)); n != ancho {
-			t.Errorf("línea %d mide %d columnas, want %d: %q", i, n, ancho, l)
+	for i, l := range lines {
+		if n := len([]rune(l)); n != width {
+			t.Errorf("line %d measures %d columns, want %d: %q", i, n, width, l)
 		}
 	}
 }
 
-// parseAnsiSegments parte una cadena con códigos ANSI en trozos de estilo y de
-// texto. El caso que importa es una CSI que empieza JUSTO después del primer
-// carácter: es el texto con color de toda la vida, y es donde la búsqueda de la
-// siguiente CSI devuelve 0.
+// parseAnsiSegments splits a string with ANSI codes into style and text
+// pieces. The case that matters is a CSI that starts RIGHT after the first
+// character: it is the colored text of a lifetime, and it is where the search
+// for the next CSI returns 0.
 //
-// Devolver 0 es justo lo que el código anterior no podía distinguir: buscaba
-// desde el principio de s, y como el `if strings.HasPrefix` de arriba ya había
-// descartado que s empezara por CSI, ese 0 no ocurría nunca. Con la búsqueda
-// empezando en s[1:] el 0 es un valor de verdad, y esta comprobación lo ata.
-func TestParseAnsiSegmentsParteEnLaPrimeraCSI(t *testing.T) {
+// Returning 0 is exactly what the previous code could not distinguish: it
+// searched from the beginning of s, and since the `if strings.HasPrefix`
+// above had already discarded that s started with CSI, that 0 never happened.
+// With the search starting at s[1:] the 0 is a real value, and this check ties it down.
+func TestParseAnsiSegmentsSplitsAtFirstCSI(t *testing.T) {
 	const esc = "\x1b["
-	rojo := esc + "31m"
-	fin := "\x1b[0m"
+	red := esc + "31m"
+	reset := "\x1b[0m"
 
-	casos := []struct {
-		nombre  string
-		entrada string
-		want    []ansiSegment
+	cases := []struct {
+		name  string
+		input string
+		want  []ansiSegment
 	}{
-		{"texto y luego CSI", "a" + rojo + "b",
+		{"text and then CSI", "a" + red + "b",
 			[]ansiSegment{
 				{style: "", text: "a"},
-				{style: rojo, text: ""},
+				{style: red, text: ""},
 				{style: "", text: "b"},
 			}},
-		{"CSI en el segundo carácter", "x" + rojo + "y" + fin + "z",
+		{"CSI at the second character", "x" + red + "y" + reset + "z",
 			[]ansiSegment{
 				{style: "", text: "x"},
-				{style: rojo, text: ""},
+				{style: red, text: ""},
 				{style: "", text: "y"},
-				{style: fin, text: ""},
+				{style: reset, text: ""},
 				{style: "", text: "z"},
 			}},
-		{"CSI justo al principio", rojo + "b",
+		{"CSI right at the start", red + "b",
 			[]ansiSegment{
-				{style: rojo, text: ""},
+				{style: red, text: ""},
 				{style: "", text: "b"},
 			}},
-		{"CSI al final", "a" + rojo,
+		{"CSI at the end", "a" + red,
 			[]ansiSegment{
 				{style: "", text: "a"},
-				{style: rojo, text: ""},
+				{style: red, text: ""},
 			}},
-		{"CSI truncada", "a" + "\x1b[31",
+		{"truncated CSI", "a" + "\x1b[31",
 			[]ansiSegment{
 				{style: "", text: "a"},
 				{style: "\x1b[31", text: ""},
 			}},
-		{"CSI vacía", "a" + esc + "m" + "b",
+		{"empty CSI", "a" + esc + "m" + "b",
 			[]ansiSegment{
 				{style: "", text: "a"},
 				{style: esc + "m", text: ""},
@@ -233,62 +233,62 @@ func TestParseAnsiSegmentsParteEnLaPrimeraCSI(t *testing.T) {
 			}},
 	}
 
-	for _, tc := range casos {
-		t.Run(tc.nombre, func(t *testing.T) {
-			got := parseAnsiSegments(tc.entrada)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseAnsiSegments(tc.input)
 			if len(got) != len(tc.want) {
-				t.Fatalf("segmentos = %d, want %d: %+v", len(got), len(tc.want), got)
+				t.Fatalf("segments = %d, want %d: %+v", len(got), len(tc.want), got)
 			}
 			for i := range tc.want {
 				if got[i].style != tc.want[i].style || got[i].text != tc.want[i].text {
-					t.Errorf("segmento %d = {style:%q text:%q}, want {style:%q text:%q}",
+					t.Errorf("segment %d = {style:%q text:%q}, want {style:%q text:%q}",
 						i, got[i].style, got[i].text, tc.want[i].style, tc.want[i].text)
 				}
 			}
-			// Lo que de verdad importa: rearmar los segmentos devuelve el
-			// original, sin perder ni un byte de estilo.
+			// What really matters: rearming the segments returns the original,
+			// without losing a single byte of style.
 			var b strings.Builder
 			for _, seg := range got {
 				b.WriteString(seg.style)
 				b.WriteString(seg.text)
 			}
-			if b.String() != tc.entrada {
-				t.Errorf("rearmando sale %q, want %q", b.String(), tc.entrada)
+			if b.String() != tc.input {
+				t.Errorf("reassembled comes out %q, want %q", b.String(), tc.input)
 			}
 		})
 	}
 }
 
-// El ESC suelto: no abre CSI, así que es texto, y tiene que avanzar el bucle por
-// sí solo. Este caso es el que impedía añadir un "end = 1" de seguridad, y de
-// paso comprueba que la búsqueda desde s[1:] no se come ESCs intermedios.
-func TestParseAnsiSegmentsConEscSuelto(t *testing.T) {
-	entrada := "a\x1bb"
-	got := parseAnsiSegments(entrada)
+// The lone ESC: it does not open a CSI, so it is text, and it has to advance
+// the loop by itself. This is the case that prevented adding a safety
+// "end = 1", and it also checks that the search from s[1:] does not eat intermediate ESCs.
+func TestParseAnsiSegmentsWithLoneEsc(t *testing.T) {
+	input := "a\x1bb"
+	got := parseAnsiSegments(input)
 
 	if len(got) != 1 {
-		t.Fatalf("segmentos = %d, want 1 (un ESC suelto es texto, no estilo): %+v", len(got), got)
+		t.Fatalf("segments = %d, want 1 (a lone ESC is text, not style): %+v", len(got), got)
 	}
-	if got[0].style != "" || got[0].text != entrada {
-		t.Errorf("segmento = {style:%q text:%q}, want {style:\"\" text:%q}",
-			got[0].style, got[0].text, entrada)
+	if got[0].style != "" || got[0].text != input {
+		t.Errorf("segment = {style:%q text:%q}, want {style:\"\" text:%q}",
+			got[0].style, got[0].text, input)
 	}
 }
 
-// Un texto que empieza y acaba en ESC, con CSI en medio: comprueba que el primer
-// carácter se emite como texto y no se pierde por buscar desde s[1:].
-func TestParseAnsiSegmentsNoPierdeElPrimerCaracter(t *testing.T) {
-	const rojo = "\x1b[31m"
-	entrada := "á" + rojo + "é" // 'á' ocupa dos bytes en UTF-8
+// A text that starts and ends in ESC, with a CSI in between: it checks that
+// the first character is emitted as text and is not lost by searching from s[1:].
+func TestParseAnsiSegmentsKeepsFirstCharacter(t *testing.T) {
+	const red = "\x1b[31m"
+	input := "á" + red + "é" // 'á' takes two bytes in UTF-8
 
-	got := parseAnsiSegments(entrada)
+	got := parseAnsiSegments(input)
 	if len(got) != 3 {
 		t.Fatalf("segmentos = %d, want 3: %+v", len(got), got)
 	}
 	if got[0].text != "á" {
-		t.Errorf("el primer segmento es %q, want %q: el primer carácter se ha partido", got[0].text, "á")
+		t.Errorf("the first segment is %q, want %q: the first character was split", got[0].text, "á")
 	}
 	if got[2].text != "é" {
-		t.Errorf("el último segmento es %q, want %q", got[2].text, "é")
+		t.Errorf("the last segment is %q, want %q", got[2].text, "é")
 	}
 }

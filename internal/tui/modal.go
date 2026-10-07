@@ -7,9 +7,9 @@ import (
 	"tsk/internal/tui/bordered"
 )
 
-// renderModalBox dibuja las líneas en una caja con borde redondeado y un título
-// embebido en la línea superior izquierda. width es el ancho total del modal
-// (bordes incluidos).
+// renderModalBox draws the lines into a box with a rounded border and a title
+// embedded in the top-left line. width is the total width of the modal
+// (borders included).
 func renderModalBox(title string, lines []string, width int) string {
 	return bordered.RenderWithTitleEx(
 		lipgloss.RoundedBorder(),
@@ -21,17 +21,17 @@ func renderModalBox(title string, lines []string, width int) string {
 	)
 }
 
-// modalWidthFor ajusta el ancho preferido del modal al ancho disponible.
+// modalWidthFor adjusts the modal's preferred width to the available width.
 //
-// Un min en vez de un if: el umbral es "cabe entero", así que a preferred == w-2
-// las dos formas devuelven lo mismo y la comparación era un mutante equivalente.
+// A min instead of an if: the threshold is "fits entirely", so at preferred == w-2
+// both forms return the same and the comparison was an equivalent mutant.
 func modalWidthFor(preferred, w int) int {
 	return min(preferred, w-2)
 }
 
-// overlayModal centra un modal ya renderizado sobre content, preservando el
-// fondo. totalWidth es el ancho total del modal (bordes incluidos). Los keybinds
-// se muestran en la barra inferior, no dentro del modal.
+// overlayModal centers an already rendered modal over content, preserving the
+// background. totalWidth is the total width of the modal (borders included). The keybinds
+// are shown in the bottom bar, not inside the modal.
 func overlayModal(content, modal string, totalWidth, w int) string {
 	lines := strings.Split(content, "\n")
 	modalLines := strings.Split(modal, "\n")

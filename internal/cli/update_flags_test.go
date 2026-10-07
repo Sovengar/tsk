@@ -5,126 +5,126 @@ import (
 	"testing"
 )
 
-// Los "si hay algo que hacer" de `tsk update`.
+// The "is there anything to do" checks of `tsk update`.
 //
-// update acepta seis formas de cambiar una tarea y las aplica en cuatro bloques
-// independientes: campos sueltos, --tags, --tag y --untag. Cada bloque está
-// detrás de su propio "si hay algo", así que la tentación es un solo flag: sin
-// --title no hay updates, y la llamada se salta entera.
+// update accepts six ways to change a task and applies them in four independent
+// blocks: loose fields, --tags, --tag and --untag. Each block sits
+// behind its own "is there something", so the temptation is a single flag: without
+// --title there are no updates, and the call is skipped entirely.
 //
-// El problema es que saltarse un if que no tocaba no se ve en la salida: update
-// sin flags imprime la tarea igual de bien saltándoselo que ejecutándolo. Lo
-// único que lo distingue es si se ha TOCADO la base de datos, y por eso el
-// sabotaje es una base de sólo lectura: si el bloque se ejecutara, el UPDATE
-// saltaría un trigger y el comando saldría con error.
+// The problem is that skipping an if that was not touched does not show up in the output: update
+// without flags prints the task just as well skipping it as running it. The
+// only thing that distinguishes it is whether the database was TOUCHED, and that's why the
+// sabotage is a read-only database: if the block ran, the UPDATE
+// would trip a trigger and the command would exit with an error.
 //
-// Sin esta comprobación, cambiar `>` por `>=` -- o borrar el if entero -- deja
-// la suite en verde mientras update empieza a escribir en cada llamada.
+// Without this check, changing `>` to `>=` -- or deleting the whole if -- leaves
+// the suite green while update starts writing on every call.
 
-// sinNadaQueHacer es un update que no cambia nada: ni un solo flag de los que
-// tocan la base.
-func sinNadaQueHacer() []string { return []string{"update", "1"} }
+// updateWithoutFlags is an update that changes nothing: not a single one of the flags
+// that touch the database.
+func updateWithoutFlags() []string { return []string{"update", "1"} }
 
-func TestUpdateSinFlagsNoEscribe(t *testing.T) {
-	conDBSoloLectura(t)
+func TestUpdateWithoutFlagsDoesNotWrite(t *testing.T) {
+	withReadOnlyDB(t)
 
-	// Sin flags, update sólo lee y muestra. Que la base sea de sólo lectura no
-	// lo afecta: si escribiera, el trigger saltaría y esto fallaría.
-	salida, code := run(t, sinNadaQueHacer()...)
+	// Without flags, update only reads and shows. The database being read-only does not
+	// affect it: if it wrote, the trigger would trip and this would fail.
+	output, code := run(t, updateWithoutFlags()...)
 	if code != 0 {
-		t.Errorf("update sin flags ha fallado con la base de sólo lectura: %s", salida)
+		t.Errorf("update without flags failed on the read-only database: %s", output)
 	}
-	if !strings.Contains(salida, "una tarea") {
-		t.Errorf("update sin flags no ha mostrado la tarea: %s", salida)
+	if !strings.Contains(output, "a task") {
+		t.Errorf("update without flags did not show the task: %s", output)
 	}
 }
 
-// Los cuatro bloques por separado, con el mismo argumento: cada uno tiene que
-// ser invisible cuando no le toca escribir.
-func TestCadaBloqueDeUpdateSoloEscribeConSuFlag(t *testing.T) {
-	casos := []struct {
-		nombre string
-		args   []string
+// The four blocks separately, with the same argument: each one has to
+// be invisible when it is not its turn to write.
+func TestEachUpdateBlockWritesOnlyWithItsFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
 	}{
-		{"campos sueltos", []string{"update", "1", "--title", "otro"}},
-		{"tags", []string{"update", "1", "--tags", "nueva"}},
-		{"tag", []string{"update", "1", "--tag", "nueva"}},
-		{"untag", []string{"update", "1", "--untag", "nueva"}},
+		{"loose fields", []string{"update", "1", "--title", "other"}},
+		{"tags", []string{"update", "1", "--tags", "new"}},
+		{"tag", []string{"update", "1", "--tag", "new"}},
+		{"untag", []string{"update", "1", "--untag", "new"}},
 	}
-	for _, tc := range casos {
-		t.Run(tc.nombre, func(t *testing.T) {
-			conDBSoloLectura(t)
-			salida, code := runErr(t, tc.args...)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			withReadOnlyDB(t)
+			output, code := runErr(t, tc.args...)
 			if code != 1 {
-				t.Errorf("%v: código %d, want 1: este bloque sí tenía que escribir", tc.args, code)
+				t.Errorf("%v: code %d, want 1: this block did have to write", tc.args, code)
 			}
-			if !strings.Contains(salida, "sólo lectura") {
-				t.Errorf("%v: el error no menciona la base de sólo lectura: %s", tc.args, salida)
+			if !strings.Contains(output, "read-only database") {
+				t.Errorf("%v: the error does not mention the read-only database: %s", tc.args, output)
 			}
 		})
 	}
 }
 
-// --weeks ignora lo que no sea un entero positivo. El "positivo" es lo que
-// importa: con `>= 0`, un `--weeks 0` se aceptaría y el gantt se dibujaría con
-// cero semanas, que no es lo que pidió quien lo escribió.
-func TestWeeksIgnoraLoQueNoSeaUnEnteroPositivo(t *testing.T) {
-	// Las tres formas que tienen que ignorarse. Un entero negativo y un cero se
-	// descartan por la comparación con 0; el texto ni siquiera llega a ser un
-	// entero.
-	for _, valor := range []string{"0", "-3", "abc", "", "2.5"} {
-		t.Run("weeks="+valor, func(t *testing.T) {
-			conDBReal(t)
+// --weeks ignores anything that is not a positive integer. The "positive" is what
+// matters: with `>= 0`, a `--weeks 0` would be accepted and the gantt would be drawn with
+// zero weeks, which is not what whoever wrote it asked for.
+func TestWeeksIgnoresAnythingThatIsNotAPositiveInteger(t *testing.T) {
+	// The three forms that have to be ignored. A negative integer and a zero are
+	// discarded by the comparison with 0; the text never even becomes an
+	// integer.
+	for _, value := range []string{"0", "-3", "abc", "", "2.5"} {
+		t.Run("weeks="+value, func(t *testing.T) {
+			withRealDB(t)
 
-			args := []string{"gantt", "--weeks", valor}
-			if valor == "" {
+			args := []string{"gantt", "--weeks", value}
+			if value == "" {
 				args = []string{"gantt", "--weeks"}
 			}
-			salida, code := run(t, args...)
+			output, code := run(t, args...)
 			if code != 0 {
-				t.Fatalf("--weeks %q ha fallado: %s", valor, salida)
+				t.Fatalf("--weeks %q failed: %s", value, output)
 			}
-			// Lo que vale es el de la config, no el que se pasó. Con un valor
-			// negativo el gantt se dibujaría al revés y con 0 no se dibujaría
-			// nada, así que cualquier semanas positivo vale como prueba de que
-			// el valor se descartó.
-			if !strings.Contains(salida, "weeks") {
-				t.Fatalf("la salida no parece un gantt: %s", salida)
+			// What counts is the config's, not the one passed in. With a
+			// negative value the gantt would be drawn backwards and with 0 nothing
+			// would be drawn, so any positive weeks serves as proof that
+			// the value was discarded.
+			if !strings.Contains(output, "weeks") {
+				t.Fatalf("the output does not look like a gantt: %s", output)
 			}
-			semanas := semanasDeLaSalida(salida)
-			if semanas <= 0 {
-				t.Errorf("--weeks %q ha llegado al gantt: se画出 con %d semanas",
-					valor, semanas)
+			weeks := weeksFromOutput(output)
+			if weeks <= 0 {
+				t.Errorf("--weeks %q reached the gantt: drawn with %d weeks",
+					value, weeks)
 			}
 		})
 	}
 
-	// Y el que sí vale, que es el caso de que el filtro no se coma lo bueno.
-	t.Run("un entero positivo se aplica", func(t *testing.T) {
-		conDBReal(t)
-		salida, code := run(t, "gantt", "--weeks", "3")
+	// And the one that does count, which is the case where the filter does not eat the good one.
+	t.Run("a positive integer is applied", func(t *testing.T) {
+		withRealDB(t)
+		output, code := run(t, "gantt", "--weeks", "3")
 		if code != 0 {
-			t.Fatalf("--weeks 3 ha fallado: %s", salida)
+			t.Fatalf("--weeks 3 failed: %s", output)
 		}
-		if got := semanasDeLaSalida(salida); got != 3 {
-			t.Errorf("el gantt dice %d semanas, want 3", got)
+		if got := weeksFromOutput(output); got != 3 {
+			t.Errorf("the gantt says %d weeks, want 3", got)
 		}
 	})
 }
 
-// semanasDeLaSalida saca el número de la cabecera "Gantt · start <fecha> · N
-// weeks". Devolver 0 cuando no lo encuentra hace que el test falle en vez de
-// pasar por un default.
-func semanasDeLaSalida(salida string) int {
-	const sufijo = " weeks"
-	i := strings.Index(salida, sufijo)
+// weeksFromOutput extracts the number from the "Gantt · start <date> · N
+// weeks" header. Returning 0 when it is not found makes the test fail instead of
+// passing through a default.
+func weeksFromOutput(output string) int {
+	const suffix = " weeks"
+	i := strings.Index(output, suffix)
 	if i < 0 {
 		return 0
 	}
-	antes := strings.TrimRight(salida[:i], " ·")
-	ultimo := antes[strings.LastIndex(antes, " ")+1:]
+	trimmed := strings.TrimRight(output[:i], " ·")
+	last := trimmed[strings.LastIndex(trimmed, " ")+1:]
 	n := 0
-	for _, c := range ultimo {
+	for _, c := range last {
 		if c < '0' || c > '9' {
 			return 0
 		}

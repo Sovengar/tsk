@@ -8,17 +8,17 @@ import (
 	"tsk/internal/model"
 )
 
-// CreateTask crea una tarea nueva sin estimación.
+// CreateTask creates a new task without an estimate.
 func (db *DB) CreateTask(projectName, title, description, assignee string, priority int, status string) (*model.Task, error) {
 	return db.CreateTaskWithEstimate(projectName, title, description, assignee, priority, status, 0)
 }
 
-// CreateTaskWithEstimate crea una tarea nueva con estimate en días.
+// CreateTaskWithEstimate creates a new task with an estimate in days.
 func (db *DB) CreateTaskWithEstimate(projectName, title, description, assignee string, priority int, status string, estimate float64) (*model.Task, error) {
 	return db.CreateTaskFull(projectName, title, description, assignee, priority, status, estimate, nil)
 }
 
-// CreateTaskFull crea una tarea nueva con estimate y tags.
+// CreateTaskFull creates a new task with estimate and tags.
 func (db *DB) CreateTaskFull(projectName, title, description, assignee string, priority int, status string, estimate float64, tags []string) (*model.Task, error) {
 	p, err := db.GetProject(projectName)
 	if err != nil {
@@ -29,7 +29,7 @@ func (db *DB) CreateTaskFull(projectName, title, description, assignee string, p
 	}
 
 	if status == "" {
-		status = p.Workflow[0] // primer estado del workflow
+		status = p.Workflow[0] // first status of the workflow
 	}
 	if !model.HasStatus(p.Workflow, status) {
 		return nil, fmt.Errorf("status %q not in project workflow %v", status, p.Workflow)
@@ -66,7 +66,7 @@ func (db *DB) CreateTaskFull(projectName, title, description, assignee string, p
 	}, nil
 }
 
-// GetTask busca una tarea por ID.
+// GetTask looks up a task by ID.
 func (db *DB) GetTask(id int64) (*model.Task, error) {
 	var t model.Task
 	var completedAt sql.NullString
@@ -91,12 +91,12 @@ func (db *DB) GetTask(id int64) (*model.Task, error) {
 	return &t, nil
 }
 
-// ListTasks lista tareas con filtros opcionales.
+// ListTasks lists tasks with optional filters.
 func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, error) {
-	// El orden de estados de la List sale de list_order (orden de presentación,
-	// independiente del workflow). Si está vacío ('[]') se cae al orden del
-	// workflow. Los estados no listados van después de los listados, y los que
-	// no existen en el workflow (p. ej. cancelled) al final.
+	// The status order of the List comes from list_order (presentation
+	// order, independent of the workflow). When empty ('[]') it falls back to the
+	// workflow order. Unlisted statuses come after the listed ones, and those
+	// that do not exist in the workflow (e.g. cancelled) at the end.
 	query := `
 		WITH ranked AS (
 			SELECT t.id, t.project_id, p.name, t.title, t.description, t.status, t.priority, t.assignee,
@@ -160,7 +160,7 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 	return tasks, rows.Err()
 }
 
-// MoveTask mueve una tarea a un estado específico.
+// MoveTask moves a task to a specific status.
 func (db *DB) MoveTask(id int64, newStatus string) (*model.Task, error) {
 	t, err := db.GetTask(id)
 	if err != nil {
@@ -190,7 +190,7 @@ func (db *DB) MoveTask(id int64, newStatus string) (*model.Task, error) {
 	return db.GetTask(id)
 }
 
-// StartTask mueve al segundo estado del workflow.
+// StartTask moves to the second status of the workflow.
 func (db *DB) StartTask(id int64) (*model.Task, error) {
 	t, err := db.GetTask(id)
 	if err != nil {
@@ -203,7 +203,7 @@ func (db *DB) StartTask(id int64) (*model.Task, error) {
 	return db.MoveTask(id, model.StartStatus(p.Workflow))
 }
 
-// ReviewTask mueve al estado que contiene "review".
+// ReviewTask moves to the status containing "review".
 func (db *DB) ReviewTask(id int64) (*model.Task, error) {
 	t, err := db.GetTask(id)
 	if err != nil {
@@ -220,7 +220,7 @@ func (db *DB) ReviewTask(id int64) (*model.Task, error) {
 	return db.MoveTask(id, status)
 }
 
-// DoneTask mueve al último estado del workflow.
+// DoneTask moves to the last status of the workflow.
 func (db *DB) DoneTask(id int64) (*model.Task, error) {
 	t, err := db.GetTask(id)
 	if err != nil {
@@ -233,12 +233,12 @@ func (db *DB) DoneTask(id int64) (*model.Task, error) {
 	return db.MoveTask(id, model.TerminalStatus(p.Workflow))
 }
 
-// CancelTask cancela una tarea.
+// CancelTask cancels a task.
 func (db *DB) CancelTask(id int64) (*model.Task, error) {
 	return db.MoveTask(id, model.CancelledStatus)
 }
 
-// UpdateTask actualiza metadata de una tarea.
+// UpdateTask updates task metadata.
 func (db *DB) UpdateTask(id int64, updates map[string]any) (*model.Task, error) {
 	_, err := db.GetTask(id)
 	if err != nil {
@@ -265,7 +265,7 @@ func (db *DB) UpdateTask(id int64, updates map[string]any) (*model.Task, error) 
 	return db.GetTask(id)
 }
 
-// SetTaskTags reemplaza las tags de una tarea.
+// SetTaskTags replaces a task's tags.
 func (db *DB) SetTaskTags(id int64, tags []string) (*model.Task, error) {
 	if _, err := db.GetTask(id); err != nil {
 		return nil, err
@@ -280,7 +280,7 @@ func (db *DB) SetTaskTags(id int64, tags []string) (*model.Task, error) {
 	return db.GetTask(id)
 }
 
-// AddTaskTags agrega tags sin duplicar las existentes.
+// AddTaskTags adds tags without duplicating existing ones.
 func (db *DB) AddTaskTags(id int64, tags []string) (*model.Task, error) {
 	t, err := db.GetTask(id)
 	if err != nil {
@@ -289,7 +289,7 @@ func (db *DB) AddTaskTags(id int64, tags []string) (*model.Task, error) {
 	return db.SetTaskTags(id, append(append([]string{}, t.Tags...), tags...))
 }
 
-// RemoveTaskTags quita las tags indicadas de una tarea.
+// RemoveTaskTags removes the given tags from a task.
 func (db *DB) RemoveTaskTags(id int64, tags []string) (*model.Task, error) {
 	t, err := db.GetTask(id)
 	if err != nil {
@@ -308,7 +308,7 @@ func (db *DB) RemoveTaskTags(id int64, tags []string) (*model.Task, error) {
 	return db.SetTaskTags(id, kept)
 }
 
-// Stats devuelve estadísticas de tareas, excluyendo proyectos archivados.
+// Stats returns task statistics, excluding archived projects.
 func (db *DB) Stats(projectName string) (map[string]any, error) {
 	joinQuery := ` JOIN projects p ON t.project_id = p.id WHERE p.archived = 0`
 	args := []any{}

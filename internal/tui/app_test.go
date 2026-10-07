@@ -10,7 +10,7 @@ import (
 	"tsk/internal/model"
 )
 
-// newTestModel construye un modelo con una DB en memoria y datos de prueba.
+// newTestModel builds a model with an in-memory DB and test data.
 func newTestModel(t *testing.T) *Model {
 	t.Helper()
 	database, err := db.NewTestDB()
@@ -39,14 +39,14 @@ func createFixtures(t *testing.T, database *db.DB) {
 	mustCreateProject(t, database, "api", nil)
 	mustCreateProject(t, database, "web", []string{"todo", "doing", "done"})
 
-	mustCreateTask(t, database, "api", "Fix N+1 query", "desc", "@juan", 3, "doing")
-	mustCreateTask(t, database, "api", "Add caching", "", "@maria", 2, "backlog")
-	mustCreateTask(t, database, "api", "Update README", "", "@juan", 1, "reviewing")
-	mustCreateTask(t, database, "web", "Fix checkout", "", "@maria", 3, "todo")
+	mustCreateTask(t, database, "api", "Fix N+1 query", "desc", "@john", 3, "doing")
+	mustCreateTask(t, database, "api", "Add caching", "", "@margo", 2, "backlog")
+	mustCreateTask(t, database, "api", "Update README", "", "@john", 1, "reviewing")
+	mustCreateTask(t, database, "web", "Fix checkout", "", "@margo", 3, "todo")
 }
 
-// Helpers de setup: fallan el test si el alta falla, en vez de descartar el
-// error silenciosamente.
+// Setup helpers: they fail the test if the creation fails, instead of
+// discarding the error silently.
 
 func mustCreateProject(t *testing.T, database *db.DB, name string, workflow []string) {
 	t.Helper()
@@ -98,7 +98,7 @@ func press(m *Model, key string) (*Model, tea.Cmd) {
 		km = tea.KeyPressMsg{Code: rune(key[0]), Text: key}
 	}
 	next, cmd := m.Update(km)
-	// Bubbletea v2 puede devolver value o pointer depending on context
+	// Bubbletea v2 can return a value or a pointer depending on the context
 	switch v := next.(type) {
 	case *Model:
 		return v, cmd
@@ -136,48 +136,48 @@ func TestViewSwitching123(t *testing.T) {
 func TestTabCyclesProjectFilter(t *testing.T) {
 	m := newTestModel(t)
 
-	// List: Tab cicla el filtro Project (all -> api -> web -> all).
+	// List: Tab cycles the Project filter (all -> api -> web -> all).
 	if m.filterProject != "" {
-		t.Fatalf("filtro inicial = %q, want vacío", m.filterProject)
+		t.Fatalf("initial filter = %q, want empty", m.filterProject)
 	}
 	m, _ = press(m, "tab")
 	if m.filterProject != "api" {
-		t.Errorf("tab en List: filterProject = %q, want api", m.filterProject)
+		t.Errorf("tab in List: filterProject = %q, want api", m.filterProject)
 	}
 	m, _ = press(m, "tab")
 	if m.filterProject != "web" {
-		t.Errorf("tab en List: filterProject = %q, want web", m.filterProject)
+		t.Errorf("tab in List: filterProject = %q, want web", m.filterProject)
 	}
 	m, _ = press(m, "tab")
 	if m.filterProject != "" {
-		t.Errorf("tab en List debe volver a all: filterProject = %q", m.filterProject)
+		t.Errorf("tab in List must return to all: filterProject = %q", m.filterProject)
 	}
 
-	// Kanban: Tab también cicla proyectos (las columnas se mueven con h/l).
+	// Kanban: Tab also cycles projects (the columns move with h/l).
 	m, _ = press(m, "2")
 	m, _ = press(m, "tab")
 	if m.filterProject != "api" {
-		t.Errorf("tab en Kanban: filterProject = %q, want api", m.filterProject)
+		t.Errorf("tab in Kanban: filterProject = %q, want api", m.filterProject)
 	}
 	if m.kanbanCol != 0 {
-		t.Errorf("tab en Kanban no debe mover columna: kanbanCol = %d", m.kanbanCol)
+		t.Errorf("tab in Kanban must not move the column: kanbanCol = %d", m.kanbanCol)
 	}
 
-	// Gantt: Tab cicla proyectos.
+	// Gantt: Tab cycles projects.
 	m, _ = press(m, "3")
 	m, _ = press(m, "tab")
 	if m.filterProject != "web" {
-		t.Errorf("tab en Gantt: filterProject = %q, want web", m.filterProject)
+		t.Errorf("tab in Gantt: filterProject = %q, want web", m.filterProject)
 	}
 
-	// Dashboard: Tab sigue ciclando el proyecto resaltado.
+	// Dashboard: Tab keeps cycling the highlighted project.
 	m, _ = press(m, "4")
 	m, _ = press(m, "tab")
 	if m.currentView != viewDashboard {
-		t.Errorf("tab desde dashboard cambió de view: %v", m.currentView)
+		t.Errorf("tab from the dashboard changed the view: %v", m.currentView)
 	}
 	if m.dashProjectIdx != 1 {
-		t.Errorf("tab en dashboard: projectIdx = %d, want 1", m.dashProjectIdx)
+		t.Errorf("tab in the dashboard: projectIdx = %d, want 1", m.dashProjectIdx)
 	}
 }
 
@@ -203,16 +203,16 @@ func TestListNavigation(t *testing.T) {
 		t.Errorf("after k: cursor = %d, want 0", m.cursor)
 	}
 
-	// k en el tope de la página no hace nada (clamp, sin wrap)
+	// k at the page's cap does nothing (clamp, no wrap)
 	m, _ = press(m, "k")
 	if m.cursor != 0 {
 		t.Errorf("k at top: cursor = %d, want 0", m.cursor)
 	}
 
-	// Llevar el cursor al final de la página. El bucle va ACOTADO a propósito:
-	// "while cursor < final" se cuelga si un mutante deja de avanzar el cursor,
-	// y un test colgado se reporta como TIMED OUT en vez de como fallo, que es
-	// la peor señal posible en un gate.
+	// Take the cursor to the end of the page. The loop is BOUNDED on purpose:
+	// "while cursor < final" hangs if a mutant stops advancing the cursor,
+	// and a hung test is reported as TIMED OUT instead of as a failure, which
+	// is the worst possible signal in a gate.
 	tasks := m.filteredTasks()
 	for range len(tasks) + 2 {
 		m, _ = press(m, "j")
@@ -221,7 +221,7 @@ func TestListNavigation(t *testing.T) {
 		t.Fatalf("cursor = %d, want %d", m.cursor, len(tasks)-1)
 	}
 
-	// j en el final de la página no hace nada (clamp, sin wrap)
+	// j at the end of the page does nothing (clamp, no wrap)
 	m, _ = press(m, "j")
 	if m.cursor != len(tasks)-1 {
 		t.Errorf("j at bottom: cursor = %d, want %d", m.cursor, len(tasks)-1)
@@ -263,10 +263,10 @@ func TestListCancelTask(t *testing.T) {
 func TestListPageNavigation(t *testing.T) {
 	m := newTestModel(t)
 	m.pageSize = 2
-	addTasks(t, m, 5) // 4 fixtures + 5 = 9 tareas activas
+	addTasks(t, m, 5) // 4 fixtures + 5 = 9 active tasks
 	m, _ = press(m, "1")
 
-	// n: salta al primer elemento de la próxima página
+	// n: jumps to the first element of the next page
 	m, _ = press(m, "n")
 	if m.cursor != 2 {
 		t.Errorf("after n: cursor = %d, want 2", m.cursor)
@@ -276,7 +276,7 @@ func TestListPageNavigation(t *testing.T) {
 		t.Errorf("after 2x n: cursor = %d, want 4", m.cursor)
 	}
 
-	// p: salta al primer elemento de la página previa
+	// p: jumps to the first element of the previous page
 	m, _ = press(m, "p")
 	if m.cursor != 2 {
 		t.Errorf("after p: cursor = %d, want 2", m.cursor)
@@ -286,13 +286,13 @@ func TestListPageNavigation(t *testing.T) {
 		t.Errorf("after 2x p: cursor = %d, want 0", m.cursor)
 	}
 
-	// p en la primera página no hace nada
+	// p on the first page does nothing
 	m, _ = press(m, "p")
 	if m.cursor != 0 {
 		t.Errorf("p at first page: cursor = %d, want 0", m.cursor)
 	}
 
-	// n en la última página no hace nada
+	// n on the last page does nothing
 	tasks := m.filteredTasks()
 	m.cursor = len(tasks) - 1
 	last := m.cursor
@@ -308,7 +308,7 @@ func TestListPageCursorClamp(t *testing.T) {
 	addTasks(t, m, 5)
 	m, _ = press(m, "1")
 
-	// Página 0 = [0, 2): j se detiene en 1
+	// Page 0 = [0, 2): j stops at 1
 	m, _ = press(m, "j")
 	if m.cursor != 1 {
 		t.Fatalf("after j: cursor = %d, want 1", m.cursor)
@@ -318,7 +318,7 @@ func TestListPageCursorClamp(t *testing.T) {
 		t.Errorf("j at page end: cursor = %d, want 1", m.cursor)
 	}
 
-	// k se detiene en 0
+	// k stops at 0
 	m, _ = press(m, "k")
 	if m.cursor != 0 {
 		t.Errorf("after k: cursor = %d, want 0", m.cursor)
@@ -337,10 +337,10 @@ func TestPageLegend(t *testing.T) {
 		cursor   int
 		want     string
 	}{
-		{"primera de varias", 4, 3, 0, "1-3 of 4 · Page 1/2"},
-		{"última parcial", 4, 3, 3, "4-4 of 4 · Page 2/2"},
-		{"una sola página", 4, 10, 2, "1-4 of 4 · Page 1/1"},
-		{"sin tareas", 0, 10, 0, "0-0 of 0 · Page 1/1"},
+		{"first of several", 4, 3, 0, "1-3 of 4 · Page 1/2"},
+		{"last partial", 4, 3, 3, "4-4 of 4 · Page 2/2"},
+		{"a single page", 4, 10, 2, "1-4 of 4 · Page 1/1"},
+		{"no tasks", 0, 10, 0, "0-0 of 0 · Page 1/1"},
 	}
 
 	for _, tt := range tests {
@@ -360,7 +360,7 @@ func TestPageLegend(t *testing.T) {
 
 func TestCursorClampedWhenTasksShrink(t *testing.T) {
 	m := newTestModel(t)
-	addTasks(t, m, 20) // 24 tareas
+	addTasks(t, m, 20) // 24 tasks
 	m.cursor = 20
 
 	m.tasks = m.tasks[:2]
@@ -407,16 +407,16 @@ func TestListPriorityFilter(t *testing.T) {
 		t.Errorf("after 2 left: priority = %d, want 2", m.filterPriority)
 	}
 
-	// Enter aplica y avanza al siguiente campo; todavía no cierra.
+	// Enter applies and advances to the next field; it does not close yet.
 	m, _ = press(m, "enter")
 	if !m.filterOpen {
-		t.Fatal("enter en un campo intermedio no debe cerrar el modal")
+		t.Fatal("enter in an intermediate field must not close the modal")
 	}
 	if m.filterFieldIdx != filterFieldTag {
-		t.Errorf("enter debe avanzar a Tag, got %d", m.filterFieldIdx)
+		t.Errorf("enter must advance to Tag, got %d", m.filterFieldIdx)
 	}
 
-	// Esc cierra.
+	// Esc closes.
 	m, _ = press(m, "esc")
 	if m.filterOpen {
 		t.Error("esc should close modal")
@@ -450,7 +450,7 @@ func TestListAssigneeFilter(t *testing.T) {
 		}
 	}
 
-	// cierra el modal
+	// closes the modal
 	_, _ = press(m, "enter")
 }
 
@@ -524,7 +524,7 @@ func TestMergedWorkflow(t *testing.T) {
 	wf := m.mergedWorkflow()
 	// api: backlog,todo,doing,reviewing,done,cancelled (default)
 	// web: todo,doing,done
-	// merged: default completo (6 únicos)
+	// merged: full default (6 unique)
 	if len(wf) != len(model.DefaultWorkflow) {
 		t.Errorf("merged workflow len = %d, want %d: %v", len(wf), len(model.DefaultWorkflow), wf)
 	}

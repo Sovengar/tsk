@@ -9,14 +9,14 @@ import (
 	"tsk/internal/model"
 )
 
-// CreateProject registra un proyecto nuevo con el orden de lista por defecto
-// (vacío = seguir el orden del workflow).
+// CreateProject registers a new project with the default list order
+// (empty = follow the workflow order).
 func (db *DB) CreateProject(name string, workflow []string) (*model.Project, error) {
 	return db.CreateProjectWithListOrder(name, workflow, nil)
 }
 
-// CreateProjectWithListOrder registra un proyecto nuevo con workflow y
-// list_order explícitos.
+// CreateProjectWithListOrder registers a new project with explicit
+// workflow and list_order.
 func (db *DB) CreateProjectWithListOrder(name string, workflow, listOrder []string) (*model.Project, error) {
 	if workflow == nil {
 		workflow = model.DefaultWorkflow
@@ -51,10 +51,10 @@ func (db *DB) CreateProjectWithListOrder(name string, workflow, listOrder []stri
 	}, nil
 }
 
-// projectColumns es la lista de columnas de projects en orden de escaneo.
+// projectColumns is the list of projects columns in scan order.
 const projectColumns = `id, name, workflow, list_order, archived, archived_at, created_at, updated_at`
 
-// scanProject escanea una fila de projects usando projectColumns.
+// scanProject scans a projects row using projectColumns.
 func scanProject(scan func(dest ...any) error) (model.Project, error) {
 	var p model.Project
 	var workflowJSON, listOrderJSON string
@@ -80,7 +80,7 @@ func scanProject(scan func(dest ...any) error) (model.Project, error) {
 	return p, nil
 }
 
-// GetProject busca un proyecto por nombre, incluidos los archivados.
+// GetProject looks up a project by name, including archived ones.
 func (db *DB) GetProject(name string) (*model.Project, error) {
 	p, err := scanProject(db.conn.QueryRow(
 		`SELECT `+projectColumns+` FROM projects WHERE name = ?`, name,
@@ -94,7 +94,7 @@ func (db *DB) GetProject(name string) (*model.Project, error) {
 	return &p, nil
 }
 
-// GetProjectByID busca un proyecto por ID, incluidos los archivados.
+// GetProjectByID looks up a project by ID, including archived ones.
 func (db *DB) GetProjectByID(id int64) (*model.Project, error) {
 	p, err := scanProject(db.conn.QueryRow(
 		`SELECT `+projectColumns+` FROM projects WHERE id = ?`, id,
@@ -108,12 +108,12 @@ func (db *DB) GetProjectByID(id int64) (*model.Project, error) {
 	return &p, nil
 }
 
-// ListProjects devuelve los proyectos activos (no archivados), ordenados por nombre.
+// ListProjects returns the active (non-archived) projects, ordered by name.
 func (db *DB) ListProjects() ([]model.Project, error) {
 	return db.listProjectsWhere(`archived = 0`)
 }
 
-// ListArchivedProjects devuelve los proyectos archivados, ordenados por nombre.
+// ListArchivedProjects returns the archived projects, ordered by name.
 func (db *DB) ListArchivedProjects() ([]model.Project, error) {
 	return db.listProjectsWhere(`archived = 1`)
 }
@@ -136,8 +136,8 @@ func (db *DB) listProjectsWhere(where string) ([]model.Project, error) {
 	return projects, rows.Err()
 }
 
-// ArchiveProject marca un proyecto como archivado (soft delete). Las tareas no
-// se tocan: quedan ocultas transitivamente al excluir el proyecto archivado.
+// ArchiveProject marks a project as archived (soft delete). Tasks are not
+// touched: they are hidden transitively by excluding the archived project.
 func (db *DB) ArchiveProject(name string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	result, err := db.conn.Exec(
@@ -153,7 +153,7 @@ func (db *DB) ArchiveProject(name string) error {
 	return nil
 }
 
-// UnarchiveProject restaura un proyecto archivado.
+// UnarchiveProject restores an archived project.
 func (db *DB) UnarchiveProject(name string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	result, err := db.conn.Exec(
@@ -169,7 +169,7 @@ func (db *DB) UnarchiveProject(name string) error {
 	return nil
 }
 
-// UpdateProject actualiza un proyecto.
+// UpdateProject updates a project.
 func (db *DB) UpdateProject(name string, updates map[string]any) error {
 	p, err := db.GetProject(name)
 	if err != nil {
@@ -186,9 +186,9 @@ func (db *DB) UpdateProject(name string, updates map[string]any) error {
 		updates["name"] = strings.TrimSpace(s)
 	}
 
-	// effectiveWorkflow es el workflow resultante tras aplicar los updates
-	// (o el actual si no se toca). Se usa para validar list_order aunque ambos
-	// cambien en la misma llamada.
+	// effectiveWorkflow is the workflow resulting from applying the updates
+	// (or the current one if untouched). It is used to validate list_order even when both
+	// change in the same call.
 	effectiveWorkflow := p.Workflow
 	workflowChanged := false
 
@@ -197,13 +197,13 @@ func (db *DB) UpdateProject(name string, updates map[string]any) error {
 		if err := model.ValidateWorkflow(workflow); err != nil {
 			return err
 		}
-		// Verificar que no se eliminen estados con tareas
+		// Check that statuses with tasks are not removed
 		for _, oldStatus := range p.Workflow {
 			if oldStatus == model.TerminalStatus(p.Workflow) {
-				continue // done no se puede eliminar nunca
+				continue // done can never be removed
 			}
 			if !model.HasStatus(workflow, oldStatus) {
-				// Verificar si hay tareas en ese estado
+				// Check whether there are tasks in that status
 				var count int
 				err := db.conn.QueryRow(
 					`SELECT COUNT(*) FROM tasks WHERE project_id = ? AND status = ? AND status != ?`,
@@ -217,7 +217,7 @@ func (db *DB) UpdateProject(name string, updates map[string]any) error {
 					if !force {
 						return fmt.Errorf("cannot remove status %q — %d tasks still in this status", oldStatus, count)
 					}
-					// --force: reasignar tareas al primer estado del nuevo workflow
+					// --force: reassign tasks to the first status of the new workflow
 					firstStatus := workflow[0]
 					if _, err := db.conn.Exec(
 						`UPDATE tasks SET status = ?, updated_at = ? WHERE project_id = ? AND status = ?`,
@@ -240,8 +240,8 @@ func (db *DB) UpdateProject(name string, updates map[string]any) error {
 		}
 		updates["list_order"] = model.WorkflowJSON(listOrder)
 	} else if workflowChanged {
-		// El workflow cambió sin tocar list_order: descartar entradas que ya no
-		// existen para evitar desincronización.
+		// The workflow changed without touching list_order: drop entries that no longer
+		// exist to avoid desynchronization.
 		var kept []string
 		for _, s := range p.ListOrder {
 			if s == model.CancelledStatus || model.HasStatus(effectiveWorkflow, s) {
@@ -259,7 +259,7 @@ func (db *DB) UpdateProject(name string, updates map[string]any) error {
 		return nil
 	}
 
-	// Construir UPDATE dinámico
+	// Build dynamic UPDATE
 	setClauses := []string{}
 	args := []any{}
 	for k, v := range updates {
@@ -273,10 +273,10 @@ func (db *DB) UpdateProject(name string, updates map[string]any) error {
 	query := fmt.Sprintf("UPDATE projects SET %s WHERE id = ?", joinStrings(setClauses, ", "))
 	if _, err = db.conn.Exec(query, args...); err != nil {
 		if isUniqueViolation(err) {
-			// La única columna UNIQUE de projects es name, así que una
-			// violación sólo puede venir de updates["name"], que está siempre
-			// que se actualice el nombre. El mensaje genérico que había para el
-			// caso de que no estuviera nunca se ejecutaba.
+			// The only UNIQUE column of projects is name, so a
+			// violation can only come from updates["name"], which is always
+			// present when the name is updated. The generic message there was for the
+			// case where it was never present, which never runs.
 			return fmt.Errorf("project already exists: %s", updates["name"])
 		}
 		return err
@@ -284,7 +284,7 @@ func (db *DB) UpdateProject(name string, updates map[string]any) error {
 	return nil
 }
 
-// DeleteProject elimina un proyecto y sus tareas (CASCADE).
+// DeleteProject deletes a project and its tasks (CASCADE).
 func (db *DB) DeleteProject(name string) error {
 	result, err := db.conn.Exec(`DELETE FROM projects WHERE name = ?`, name)
 	if err != nil {
@@ -297,7 +297,7 @@ func (db *DB) DeleteProject(name string) error {
 	return nil
 }
 
-// ProjectTaskCount devuelve el número de tareas de un proyecto.
+// ProjectTaskCount returns the number of tasks of a project.
 func (db *DB) ProjectTaskCount(projectID int64) (int, error) {
 	var count int
 	err := db.conn.QueryRow(`SELECT COUNT(*) FROM tasks WHERE project_id = ?`, projectID).Scan(&count)
@@ -315,7 +315,7 @@ func joinStrings(ss []string, sep string) string {
 	return result
 }
 
-// isUniqueViolation detecta violaciones del índice UNIQUE de SQLite.
+// isUniqueViolation detects violations of SQLite's UNIQUE index.
 func isUniqueViolation(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }

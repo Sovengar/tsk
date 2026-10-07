@@ -9,15 +9,15 @@ import (
 	"tsk/internal/model"
 )
 
-// El modal de detalle reparte su alto entre comentarios y descripción, recorta
-// ambos al ancho de la caja y marca el comentario seleccionado. Los tests que lo
-// cubrían miraban si aparecía un texto; lo que hay que mirar es cuánta gente hay
-// y dónde.
+// The detail modal splits its height between comments and description,
+// truncates both to the box width and marks the selected comment. The tests
+// that covered it looked at whether some text appeared; what has to be looked
+// at is how many people there are and where.
 //
-// Los asserts son de ancho y de posición: el texto sale entero en cuanto cabe, y
-// una línea que se recorta se nota en su longitud.
+// The asserts are about width and position: the text comes out whole as soon
+// as it fits, and a truncated line shows in its length.
 
-// newDetailWithTags abre el detalle de una tarea con las tags dadas.
+// newDetailWithTags opens the detail of a task with the given tags.
 func newDetailWithTags(t *testing.T, tags ...string) *Model {
 	t.Helper()
 	m := newTestModel(t)
@@ -31,87 +31,87 @@ func newDetailWithTags(t *testing.T, tags ...string) *Model {
 	return m
 }
 
-// detailRender devuelve el detalle sin colores.
+// detailRender returns the detail without colors.
 func detailRender(t *testing.T, m *Model, h int) string {
 	t.Helper()
 	return ansi.Strip(m.renderDetail(m.detailTask, h))
 }
 
-// Sin tags, la metadata pone un guion largo en vez de una lista vacía, que se
-// vería como un hueco.
+// With no tags, the metadata puts a long dash instead of an empty list, which
+// would look like a hole.
 func TestDetailTagsDashWhenNone(t *testing.T) {
 	m := newDetailWithTags(t)
 	out := detailRender(t, m, 40)
 	if !strings.Contains(out, "Tags:") {
-		t.Fatalf("no sale la línea de tags:\n%s", out)
+		t.Fatalf("the tags line does not show:\n%s", out)
 	}
-	for _, linea := range strings.Split(out, "\n") {
-		if !strings.Contains(linea, "Tags:") {
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, "Tags:") {
 			continue
 		}
-		if !strings.Contains(linea, "—") {
-			t.Errorf("sin tags la línea no lleva el guion largo: %q", linea)
+		if !strings.Contains(line, "—") {
+			t.Errorf("without tags the line does not carry the long dash: %q", line)
 		}
 		return
 	}
 }
 
 func TestDetailTagsJoined(t *testing.T) {
-	m := newDetailWithTags(t, "uno", "dos", "tres")
+	m := newDetailWithTags(t, "one", "two", "three")
 	out := detailRender(t, m, 40)
-	if !strings.Contains(out, "uno, dos, tres") {
-		t.Errorf("las tags no salen unidas por comas:\n%s", out)
+	if !strings.Contains(out, "one, two, three") {
+		t.Errorf("the tags do not come out comma-joined:\n%s", out)
 	}
 }
 
-// Una descripción larga se recorta, y la línea recortada llega al ancho interior
-// de la caja. Con altura de sobra sale entera.
+// A long description is truncated, and the truncated line reaches the box's
+// inner width. With height to spare it comes out whole.
 func TestDetailDescriptionIsClippedToBox(t *testing.T) {
-	larga := strings.Repeat("palabra ", 200)
+	longDesc := strings.Repeat("word ", 200)
 	m := newDetailWithTags(t)
-	m.detailTask.Description = larga
+	m.detailTask.Description = longDesc
 
-	ancho := modalInnerWidth(m.width)
+	width := modalInnerWidth(m.width)
 
-	// Con altura de sobra la descripción no se recorta en vertical, pero cada
-	// línea sí se recorta en horizontal al ancho de la caja.
+	// With height to spare the description is not truncated vertically, but
+	// each line is truncated horizontally to the box width.
 	out := detailRender(t, m, 200)
-	masLarga := 0
-	for _, linea := range strings.Split(out, "\n") {
-		if w := ansi.StringWidth(linea); w > masLarga {
-			masLarga = w
+	widest := 0
+	for _, line := range strings.Split(out, "\n") {
+		if w := ansi.StringWidth(line); w > widest {
+			widest = w
 		}
 	}
-	if masLarga > ancho+2 {
-		t.Errorf("una línea mide %d, más que el ancho interior %d de la caja", masLarga, ancho)
+	if widest > width+2 {
+		t.Errorf("a line measures %d, more than the box's inner width %d", widest, width)
 	}
 }
 
-// Con poca altura, la descripción se recorta en vertical: entran menos líneas que
-// palabras tiene.
+// With little height, the description is truncated vertically: fewer lines fit
+// than words it has.
 func TestDetailDescriptionBudgetGrowsWithHeight(t *testing.T) {
 	m := newDetailWithTags(t)
-	m.detailTask.Description = strings.Repeat("palabra\n", 100)
+	m.detailTask.Description = strings.Repeat("word\n", 100)
 
-	corta := strings.Count(detailRender(t, m, 20), "palabra")
-	larga := strings.Count(detailRender(t, m, 80), "palabra")
-	if corta >= larga {
-		t.Errorf("con 20 de alto salen %d líneas de descripción y con 80 salen %d: el alto no acota",
-			corta, larga)
+	few := strings.Count(detailRender(t, m, 20), "word")
+	many := strings.Count(detailRender(t, m, 80), "word")
+	if few >= many {
+		t.Errorf("with height 20, %d description lines come out and with 80, %d: the height does not bound",
+			few, many)
 	}
-	if corta == 0 {
-		t.Error("con 20 de alto no sale ninguna línea de descripción")
+	if few == 0 {
+		t.Error("with height 20 no description line comes out")
 	}
 }
 
-// El comentario seleccionado lleva un "> " delante y el resto "  ". Es lo que
-// distingue la selección del resto de las marcas del modal.
+// The selected comment carries a "> " in front and the rest "  ". It is what
+// tells the selection apart from the rest of the modal's marks.
 func TestDetailCommentMarkerFollowsSelection(t *testing.T) {
 	m := newDetailWithTags(t)
 	m.detailComments = []model.Comment{
-		{ID: 1, Body: "primero", CreatedAt: "2026-01-01T10:00:00Z"},
-		{ID: 2, Body: "segundo", CreatedAt: "2026-01-02T11:00:00Z"},
-		{ID: 3, Body: "tercero", CreatedAt: "2026-01-03T12:00:00Z"},
+		{ID: 1, Body: "first", CreatedAt: "2026-01-01T10:00:00Z"},
+		{ID: 2, Body: "second", CreatedAt: "2026-01-02T11:00:00Z"},
+		{ID: 3, Body: "third", CreatedAt: "2026-01-03T12:00:00Z"},
 	}
 	m.width = 120
 	m.clampOffdayIdx()
@@ -119,44 +119,44 @@ func TestDetailCommentMarkerFollowsSelection(t *testing.T) {
 	for sel := 0; sel < 3; sel++ {
 		m.detailCommentSel = sel
 		out := detailRender(t, m, 60)
-		esperado := "> " + formatCommentTime(m.detailComments[sel].CreatedAt)
-		if !strings.Contains(out, esperado) {
-			t.Errorf("con la selección en %d no sale %q:\n%s", sel, esperado, out)
+		expected := "> " + formatCommentTime(m.detailComments[sel].CreatedAt)
+		if !strings.Contains(out, expected) {
+			t.Errorf("with the selection at %d %q does not come out:\n%s", sel, expected, out)
 		}
-		// Sólo un "> " de comentario: el de la caja es "│", no "> ".
+		// Only one comment "> ": the box's is "│", not "> ".
 		if n := strings.Count(out, "> 20"); n != 1 {
-			t.Errorf("con la selección en %d hay %d marcadores, want 1:\n%s", sel, n, out)
+			t.Errorf("with the selection at %d there are %d markers, want 1:\n%s", sel, n, out)
 		}
 	}
 }
 
-// Sin selección no hay ningún "> " en los comentarios.
+// With no selection there is no "> " in the comments.
 func TestDetailNoMarkerWithoutSelection(t *testing.T) {
 	m := newDetailWithTags(t)
-	m.detailComments = []model.Comment{{ID: 1, Body: "uno", CreatedAt: "2026-01-01T10:00:00Z"}}
+	m.detailComments = []model.Comment{{ID: 1, Body: "one", CreatedAt: "2026-01-01T10:00:00Z"}}
 	m.width = 120
 
 	out := detailRender(t, m, 60)
 	if strings.Contains(out, "> "+formatCommentTime("2026-01-01T10:00:00Z")) {
-		t.Errorf("sin selección sale un marcador:\n%s", out)
+		t.Errorf("without a selection a marker comes out:\n%s", out)
 	}
 }
 
-// Un comentario multilínea se colapsa a una línea: el cuerpo entero no puede
-// ocupar tres filas de la caja.
+// A multi-line comment collapses to one line: the whole body cannot take
+// three rows of the box.
 func TestDetailCommentBodyCollapsedToOneLine(t *testing.T) {
 	m := newDetailWithTags(t)
-	m.detailComments = []model.Comment{{ID: 1, Body: "uno\ndos\ntres", CreatedAt: "2026-01-01T10:00:00Z"}}
+	m.detailComments = []model.Comment{{ID: 1, Body: "one\ntwo\nthree", CreatedAt: "2026-01-01T10:00:00Z"}}
 	m.width = 120
 
 	out := detailRender(t, m, 60)
-	if !strings.Contains(out, "uno dos tres") {
-		t.Errorf("el cuerpo no se colapsó a una línea:\n%s", out)
+	if !strings.Contains(out, "one two three") {
+		t.Errorf("the body did not collapse to one line:\n%s", out)
 	}
 }
 
-// Un comentario larguísimo se recorta al ancho de la caja: el modal entero mide
-// lo que mide, sin desbordar por un cuerpo de texto.
+// A very long comment is truncated to the box width: the whole modal measures
+// what it measures, without overflowing because of a text body.
 func TestDetailLongCommentIsClipped(t *testing.T) {
 	m := newDetailWithTags(t)
 	m.detailComments = []model.Comment{{
@@ -168,105 +168,105 @@ func TestDetailLongCommentIsClipped(t *testing.T) {
 
 	out := detailRender(t, m, 60)
 	if !strings.Contains(out, "xxxx") {
-		t.Fatalf("no sale el comentario:\n%s", out)
+		t.Fatalf("the comment does not show:\n%s", out)
 	}
-	for _, linea := range strings.Split(out, "\n") {
-		if !strings.Contains(linea, "xxxx") {
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, "xxxx") {
 			continue
 		}
-		if w := ansi.StringWidth(linea); w > m.width {
-			t.Errorf("la línea del comentario mide %d, más que el modal (%d)", w, m.width)
+		if w := ansi.StringWidth(line); w > m.width {
+			t.Errorf("the comment's line measures %d, more than the modal (%d)", w, m.width)
 		}
 	}
 }
 
-// El contenido se descentra hacia arriba: el relleno va sólo delante, en la mitad
-// del alto que sobra. Abajo no hay nada -- ese hueco lo pone el layout que
-// rodea el modal --, así que lo que se mide es el número de líneas de arriba, y
-// tiene que ser la mitad del sobrante y no el sobrante entero.
+// The content is off-centered upwards: the fill goes only in front, in half
+// of the leftover height. Below there is nothing -- that gap is put by the
+// layout that wraps the modal --, so what is measured is the number of lines
+// on top, and it has to be half the remainder and not the whole remainder.
 func TestDetailPaddedDownByHalfTheSlack(t *testing.T) {
 	m := newDetailWithTags(t)
-	m.detailComments = []model.Comment{{ID: 1, Body: "uno", CreatedAt: "2026-01-01T10:00:00Z"}}
+	m.detailComments = []model.Comment{{ID: 1, Body: "one", CreatedAt: "2026-01-01T10:00:00Z"}}
 	m.width = 100
 
-	const alto = 60
-	out := detailRender(t, m, alto)
-	lineas := strings.Split(out, "\n")
+	const height = 60
+	out := detailRender(t, m, height)
+	lines := strings.Split(out, "\n")
 
-	arriba := 0
-	for arriba < len(lineas) && strings.TrimSpace(lineas[arriba]) == "" {
-		arriba++
+	top := 0
+	for top < len(lines) && strings.TrimSpace(lines[top]) == "" {
+		top++
 	}
-	if arriba == 0 {
-		t.Fatalf("no hay relleno:\\n%q", out)
+	if top == 0 {
+		t.Fatalf("there is no padding:\\n%q", out)
 	}
 
-	contenido := len(lineas) - arriba
-	if want := (alto - contenido) / 2; arriba != want {
-		t.Errorf("relleno %d líneas, want %d (la mitad de las %d que sobran)",
-			arriba, want, alto-contenido)
+	content := len(lines) - top
+	if want := (height - content) / 2; top != want {
+		t.Errorf("padding %d lines, want %d (half of the %d left over)",
+			top, want, height-content)
 	}
 }
 
-// Con el alto justo al tamaño del contenido no hay ni una línea de margen.
+// With the height exactly at the content size there is not even one margin line.
 func TestDetailNotCentredWhenItFills(t *testing.T) {
 	m := newDetailWithTags(t)
 	m.width = 100
 
 	out := detailRender(t, m, 3)
 	if strings.HasPrefix(out, "\\n") {
-		t.Errorf("con alto 3 hay margen superior:\\n%q", out)
+		t.Errorf("with height 3 there is a top margin:\\n%q", out)
 	}
 }
 
-// Las cajas del detalle se dibujan al ancho completo del modal, bordes
-// incluidos. El ancho interior es dos menos, y es lo que se usa para recortar el
-// contenido.
+// The detail's boxes are drawn at the modal's full width, borders
+// included. The inner width is two less, and that is what is used to truncate
+// the content.
 func TestDetailBoxesShareWidth(t *testing.T) {
 	m := newDetailWithTags(t)
-	m.detailComments = []model.Comment{{ID: 1, Body: "uno", CreatedAt: "2026-01-01T10:00:00Z"}}
+	m.detailComments = []model.Comment{{ID: 1, Body: "one", CreatedAt: "2026-01-01T10:00:00Z"}}
 	m.width = 100
 
 	out := detailRender(t, m, 60)
-	ancho := 0
-	for _, linea := range strings.Split(out, "\n") {
-		i := strings.Index(linea, "╭")
+	width := 0
+	for _, line := range strings.Split(out, "\n") {
+		i := strings.Index(line, "╭")
 		if i < 0 {
 			continue
 		}
-		runes := []rune(linea[i:])
+		runes := []rune(line[i:])
 		for j, r := range runes {
-			if r == '╮' && j+1 > ancho {
-				ancho = j + 1
+			if r == '╮' && j+1 > width {
+				width = j + 1
 			}
 		}
 	}
-	if want := m.width; ancho != want {
-		t.Errorf("la caja más ancha mide %d, want %d (el ancho del modal con sus bordes)", ancho, want)
+	if want := m.width; width != want {
+		t.Errorf("the widest box measures %d, want %d (the modal's width with its borders)", width, want)
 	}
 }
 
-// El límite de recorte del contenido es el ancho interior de la caja, dos menos
-// que el ancho del modal.
+// The content truncation limit is the box's inner width, two less than the
+// modal's width.
 //
-// El conteo de filas es lo que lo distingue, no el ancho de la línea: la caja
-// rellena con espacios hasta su borde, así que todas las líneas miden lo mismo
-// se recorten donde se recorten. Con dos columnas de más -- un límite por encima
-// del ancho interior -- lipgloss envuelve la línea y el modal crece una fila.
+// The row count is what tells it apart, not the line width: the box pads with
+// spaces up to its border, so all lines measure the same wherever they are
+// truncated. With two extra columns -- a limit above the inner width --
+// lipgloss wraps the line and the modal grows one row.
 //
-// Y conviene decir qué NO distingue este test: un límite más estrecho tampoco se
-// ve, porque el contenido cabe de sobra en la caja y da igual que sobre espacio.
-// Sólo el lado de arriba del ancho interior es observable, y es el lado que
-// importa -- es el que hace que el modal crezca.
+// And it is worth saying what this test does NOT tell apart: a narrower limit
+// is not visible either, because the content fits with room to spare in the
+// box and leftover space does not matter. Only the upper side of the inner
+// width is observable, and it is the side that matters -- the one that makes the modal grow.
 func TestDetailContentWrapRowCount(t *testing.T) {
 	tests := []struct {
-		name     string
-		preparar func(*Model)
+		name  string
+		setup func(*Model)
 	}{
-		{"descripción larga", func(m *Model) {
-			m.detailTask.Description = strings.Repeat("palabra ", 200)
+		{"long description", func(m *Model) {
+			m.detailTask.Description = strings.Repeat("word ", 200)
 		}},
-		{"comentario largo", func(m *Model) {
+		{"long comment", func(m *Model) {
 			m.detailComments = []model.Comment{{
 				ID:        1,
 				Body:      strings.Repeat("y", 400),
@@ -277,11 +277,11 @@ func TestDetailContentWrapRowCount(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newDetailWithTags(t)
-			tt.preparar(m)
+			tt.setup(m)
 
 			out := detailRender(t, m, 200)
 			if got := len(strings.Split(out, "\n")); got != 107 {
-				t.Errorf("el modal tiene %d filas, want 107", got)
+				t.Errorf("the modal has %d rows, want 107", got)
 			}
 		})
 	}

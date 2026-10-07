@@ -11,10 +11,10 @@ import (
 
 // --- Projects ---
 
-// TestOpenFilePersistsAndSkipsMigrations cubre el camino de fichero, que los
-// tests en :memory: no tocaban nunca: Open() debe escribir en disco (y no caer
-// al atajo de memoria) y, al reabrir, NO debe volver a ejecutar migraciones
-// (si se ejecutaran, los ALTER TABLE revientarían con "duplicate column").
+// TestOpenFilePersistsAndSkipsMigrations covers the file path, which the
+// :memory: tests never touched: Open() must write to disk (and not fall
+// into the memory shortcut) and, on reopening, must NOT run migrations
+// again (if they ran, the ALTER TABLEs would blow up with "duplicate column").
 func TestOpenFilePersistsAndSkipsMigrations(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tsk.db")
 
@@ -27,39 +27,39 @@ func TestOpenFilePersistsAndSkipsMigrations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// El fichero existe de verdad: si Open("<path>") se colara por el atajo de
-	// :memory:, aquí no habría nada en disco.
+	// The file really exists: if Open("<path>") slipped in through the
+	// :memory: shortcut, there would be nothing here on disk.
 	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("Open(%q) no creó el fichero: %v", path, err)
+		t.Fatalf("Open(%q) did not create the file: %v", path, err)
 	}
 
-	// Reabrir sobre el mismo fichero: las migraciones pendientes son ninguna.
+	// Reopen over the same file: the pending migrations are none.
 	db2, err := Open(path)
 	if err != nil {
-		t.Fatalf("reabrir no debe re-ejecutar migraciones: %v", err)
+		t.Fatalf("reopening must not re-run migrations: %v", err)
 	}
 	t.Cleanup(func() { _ = db2.Close() })
 
 	p, err := db2.GetProject("api")
 	if err != nil {
-		t.Fatalf("el proyecto no sobrevivió al cierre: %v", err)
+		t.Fatalf("the project did not survive the close: %v", err)
 	}
 	if p.Name != "api" {
 		t.Errorf("name = %q, want api", p.Name)
 	}
-	// El schema está completo tras reabrir (offdays = migración 007, tags = 008).
+	// The schema is complete after reopening (offdays = migration 007, tags = 008).
 	tasks, err := db2.ListTasks("api", "", "")
 	if err != nil {
-		t.Fatalf("schema incompleto tras reabrir: %v", err)
+		t.Fatalf("incomplete schema after reopening: %v", err)
 	}
 	if len(tasks) != 0 {
 		t.Errorf("tasks = %d, want 0", len(tasks))
 	}
 }
 
-// TestSchemaVersionIsRecordedAndStable verifica que la versión aplicada queda
-// persistida y que un segundo Open no la altera: es el estado del que depende
-// el salto de migraciones (v <= currentVersion).
+// TestSchemaVersionIsRecordedAndStable verifies that the applied version is
+// persisted and that a second Open does not alter it: it is the state the
+// migration skip depends on (v <= currentVersion).
 func TestSchemaVersionIsRecordedAndStable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tsk.db")
 
@@ -72,7 +72,7 @@ func TestSchemaVersionIsRecordedAndStable(t *testing.T) {
 		t.Fatal(err)
 	}
 	if first == "" {
-		t.Fatal("schema_version no se guardó tras las migraciones")
+		t.Fatal("schema_version was not saved after migrations")
 	}
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
@@ -89,16 +89,16 @@ func TestSchemaVersionIsRecordedAndStable(t *testing.T) {
 		t.Fatal(err)
 	}
 	if second != first {
-		t.Errorf("schema_version = %q tras reabrir, want %q", second, first)
+		t.Errorf("schema_version = %q after reopening, want %q", second, first)
 	}
 }
 
-// TestMigrationsRunExactlyOnce verifica que reabrir NO re-ejecute la última
-// migración. Es el único sitio donde se puede distinguir `v <= currentVersion`
-// de `v < currentVersion`: el mutant re-ejecutaría la última migración en cada
-// Open. Para que la re-ejecución sea observable, se añade una migración
-// contador; el resto son CREATE TABLE IF NOT EXISTS, que re-ejecutar no cambia
-// nada visible.
+// TestMigrationsRunExactlyOnce verifies that reopening does NOT re-run the last
+// migration. It is the only place where `v <= currentVersion` can be
+// distinguished from `v < currentVersion`: the mutant would re-run the last migration on every
+// Open. So that the re-run is observable, a counter
+// migration is added; the rest are CREATE TABLE IF NOT EXISTS, for which re-running changes
+// nothing visible.
 func TestMigrationsRunExactlyOnce(t *testing.T) {
 	orig := migrations
 	t.Cleanup(func() { migrations = orig })
@@ -130,24 +130,24 @@ func TestMigrationsRunExactlyOnce(t *testing.T) {
 	}
 
 	if applied != 1 {
-		t.Errorf("migración ejecutada %d veces en %d Open, want 1", applied, opens)
+		t.Errorf("migration ran %d times in %d Open, want 1", applied, opens)
 	}
 }
 
-// TestUpdateProjectForcePropagatesTaskUpdateError comprueba que el --force no
-// se traga un fallo al reasignar las tareas: con `err == nil` en vez de
-// `err != nil` el UPDATE fallaría en silencio, las tareas conservarían el
-// estado eliminado y el caller recibiría nil.
+// TestUpdateProjectForcePropagatesTaskUpdateError checks that --force does not
+// swallow a failure while reassigning the tasks: with `err == nil` instead of
+// `err != nil` the UPDATE would fail silently, the tasks would keep the
+// removed status and the caller would receive nil.
 //
-// El fallo se inyecta con un trigger que aborta SOLO ese UPDATE: es la única
-// forma de que una sentencia bien formada falle a través de la API pública
-// (cerrar la conexión no sirve, porque UpdateProject ya falla antes en su
-// primer SELECT). El trigger modela además la invariante real: una tarea no
-// puede quedar en un estado que el nuevo workflow ya no tiene.
+// The failure is injected with a trigger that aborts ONLY that UPDATE: it is the
+// only way for a well-formed statement to fail through the public API
+// (closing the connection does not work, because UpdateProject already fails earlier on its
+// first SELECT). The trigger also models the real invariant: a task cannot
+// end up in a status the new workflow no longer has.
 func TestUpdateProjectForcePropagatesTaskUpdateError(t *testing.T) {
 	database := newTestDB(t)
 	mustCreateProject(t, database, "api", []string{"backlog", "todo", "reviewing", "done"})
-	mustCreateTask(t, database, "api", "tarea", "", "@a", 0, "todo")
+	mustCreateTask(t, database, "api", "task", "", "@a", 0, "todo")
 
 	if _, err := database.conn.Exec(`
 		CREATE TRIGGER reject_move BEFORE UPDATE OF status ON tasks
@@ -162,16 +162,16 @@ func TestUpdateProjectForcePropagatesTaskUpdateError(t *testing.T) {
 		"force":    true,
 	})
 	if err == nil {
-		t.Fatal("UpdateProject(--force) debería propagar el fallo del UPDATE de tareas")
+		t.Fatal("UpdateProject(--force) should propagate the task UPDATE failure")
 	}
 	if !strings.Contains(err.Error(), "move rejected") {
 		t.Errorf("error = %q, want it to carry the UPDATE failure", err)
 	}
 }
 
-// TestUpdateProjectDuplicateNameAfterForce comprueba que el mensaje de
-// duplicado en un UPDATE (no en un INSERT) también sale de isUniqueViolation y
-// no de un error genérico: es el otro consumidor de esa función.
+// TestUpdateProjectDuplicateNameAfterForce checks that the duplicate
+// message in an UPDATE (not an INSERT) also comes from isUniqueViolation and
+// not from a generic error: it is the other consumer of that function.
 func TestUpdateProjectDuplicateNameAfterForce(t *testing.T) {
 	database := newTestDB(t)
 	mustCreateProject(t, database, "api", nil)
@@ -213,11 +213,11 @@ func TestCreateProjectDuplicate(t *testing.T) {
 	if _, err := db.CreateProject("api", nil); err != nil {
 		t.Fatal(err)
 	}
-	// El mensaje importa: el índice UNIQUE de `name` es lo que detecta el
-	// duplicado y isUniqueViolation lo traduce a "project already exists". Un
-	// "create project: UNIQUE constraint failed" significa que la traducción
-	// dejó de funcionar, que es justo lo queMutation no ve si sólo se comprueba
-	// que err != nil.
+	// The message matters: the UNIQUE index on `name` is what detects the
+	// duplicate and isUniqueViolation translates it to "project already exists". A
+	// "create project: UNIQUE constraint failed" means the translation
+	// stopped working, which is exactly what Mutation does not see if only
+	// err != nil is checked.
 	_, err := db.CreateProject("api", nil)
 	if err == nil {
 		t.Fatal("expected duplicate error")
@@ -284,7 +284,7 @@ func TestUpdateProjectListOrder(t *testing.T) {
 		t.Errorf("list_order = %v, want [reviewing backlog]", got.ListOrder)
 	}
 
-	// Limpiar con lista vacía.
+	// Clear with an empty list.
 	if err := db.UpdateProject("web", map[string]any{"list_order": []string{}}); err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +300,7 @@ func TestUpdateProjectWorkflowFiltersListOrder(t *testing.T) {
 		[]string{"todo", "doing", "reviewing", "done"},
 		[]string{"reviewing", "doing", "todo"})
 
-	// Quitar "doing" del workflow debe descartarlo también de list_order.
+	// Removing "doing" from the workflow must also drop it from list_order.
 	if err := db.UpdateProject("web", map[string]any{
 		"workflow": []string{"todo", "reviewing", "done"},
 	}); err != nil {
@@ -324,7 +324,7 @@ func TestListProjects(t *testing.T) {
 	if len(projects) != 2 {
 		t.Fatalf("count = %d, want 2", len(projects))
 	}
-	// Ordenado por nombre
+	// Ordered by name
 	if projects[0].Name != "a" || projects[1].Name != "b" {
 		t.Errorf("order = [%s %s], want [a b]", projects[0].Name, projects[1].Name)
 	}
@@ -373,7 +373,7 @@ func TestUpdateProjectForce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Tarea debe haberse movido al primer estado
+	// Task must have been moved to the first status
 	tasks, _ := db.ListTasks("api", "", "")
 	if len(tasks) != 1 {
 		t.Fatalf("tasks = %d, want 1", len(tasks))
@@ -397,7 +397,7 @@ func TestDeleteProject(t *testing.T) {
 	if len(projects) != 0 {
 		t.Errorf("projects = %d, want 0", len(projects))
 	}
-	// CASCADE: tareas también deben eliminarse
+	// CASCADE: tasks must also be deleted
 	tasks, _ := db.ListTasks("api", "", "")
 	if len(tasks) != 0 {
 		t.Errorf("tasks = %d, want 0 (cascade)", len(tasks))
@@ -454,7 +454,7 @@ func TestCreateTask(t *testing.T) {
 	db := newTestDB(t)
 	mustCreateProject(t, db, "api", nil)
 
-	task, err := db.CreateTask("api", "Fix auth", "description here", "@juan", 3, "")
+	task, err := db.CreateTask("api", "Fix auth", "description here", "@john", 3, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -467,8 +467,8 @@ func TestCreateTask(t *testing.T) {
 	if task.Priority != 3 {
 		t.Errorf("priority = %d, want 3", task.Priority)
 	}
-	if task.Assignee != "@juan" {
-		t.Errorf("assignee = %q, want @juan", task.Assignee)
+	if task.Assignee != "@john" {
+		t.Errorf("assignee = %q, want @john", task.Assignee)
 	}
 	if task.ProjectName != "api" {
 		t.Errorf("project = %q, want api", task.ProjectName)
@@ -509,7 +509,7 @@ func TestCreateTaskUnknownProject(t *testing.T) {
 func TestGetTask(t *testing.T) {
 	db := newTestDB(t)
 	mustCreateProject(t, db, "api", nil)
-	created, _ := db.CreateTask("api", "Fix N+1", "desc", "@juan", 3, "")
+	created, _ := db.CreateTask("api", "Fix N+1", "desc", "@john", 3, "")
 
 	got, err := db.GetTask(created.ID)
 	if err != nil {
@@ -535,9 +535,9 @@ func TestListTasksFilters(t *testing.T) {
 	db := newTestDB(t)
 	mustCreateProject(t, db, "api", nil)
 	mustCreateProject(t, db, "web", nil)
-	mustCreateTask(t, db, "api", "t1", "", "@juan", 3, "backlog")
-	mustCreateTask(t, db, "api", "t2", "", "@maria", 2, "doing")
-	mustCreateTask(t, db, "web", "t3", "", "@juan", 1, "todo")
+	mustCreateTask(t, db, "api", "t1", "", "@john", 3, "backlog")
+	mustCreateTask(t, db, "api", "t2", "", "@margo", 2, "doing")
+	mustCreateTask(t, db, "web", "t3", "", "@john", 1, "todo")
 
 	// Filter by project
 	tasks, _ := db.ListTasks("api", "", "")
@@ -552,13 +552,13 @@ func TestListTasksFilters(t *testing.T) {
 	}
 
 	// Filter by assignee
-	tasks, _ = db.ListTasks("", "", "@juan")
+	tasks, _ = db.ListTasks("", "", "@john")
 	if len(tasks) != 2 {
 		t.Errorf("assignee filter: %d, want 2", len(tasks))
 	}
 
 	// Combined
-	tasks, _ = db.ListTasks("api", "", "@juan")
+	tasks, _ = db.ListTasks("api", "", "@john")
 	if len(tasks) != 1 || tasks[0].Title != "t1" {
 		t.Errorf("combined filter: %v", tasks)
 	}
@@ -592,8 +592,8 @@ func TestListTasksOrderByPriorityStatusAssignee(t *testing.T) {
 	mustCreateTask(t, db, "api", "done", "", "@a", 2, "done")
 	mustCreateTask(t, db, "api", "low", "", "@a", 1, "todo")
 
-	// Prioridad desc, luego el orden literal del workflow (backlog > todo >
-	// doing > reviewing > done), luego assignee asc.
+	// Priority desc, then the literal order of the workflow (backlog > todo >
+	// doing > reviewing > done), then assignee asc.
 	tasks, _ := db.ListTasks("", "", "")
 	want := []string{"backlog-a", "backlog-b", "todo-a", "in-progress", "reviewing", "done", "low"}
 	if len(tasks) != len(want) {
@@ -608,7 +608,7 @@ func TestListTasksOrderByPriorityStatusAssignee(t *testing.T) {
 
 func TestListTasksOrderCustomWorkflow(t *testing.T) {
 	db := newTestDB(t)
-	// El array del proyecto define el orden del listado tal cual.
+	// The project's array defines the listing order as is.
 	mustCreateProject(t, db, "web", []string{"reviewing", "doing", "todo", "done"})
 	mustCreateTask(t, db, "web", "todo", "", "@a", 2, "todo")
 	mustCreateTask(t, db, "web", "doing", "", "@a", 2, "doing")
@@ -629,7 +629,7 @@ func TestListTasksOrderCustomWorkflow(t *testing.T) {
 
 func TestListTasksOrderByListOrder(t *testing.T) {
 	db := newTestDB(t)
-	// workflow = progresión (acciones); list_order = orden de presentación.
+	// workflow = progression (actions); list_order = presentation order.
 	mustCreateProjectWithListOrder(t, db, "web",
 		[]string{"todo", "doing", "reviewing", "done"},
 		[]string{"reviewing", "doing", "todo"})
@@ -640,8 +640,8 @@ func TestListTasksOrderByListOrder(t *testing.T) {
 	cancelled, _ := db.CreateTask("web", "cancelled", "", "@a", 2, "todo")
 	mustMoveTask(t, db, cancelled.ID, "cancelled")
 
-	// reviewing > doing > todo (list_order), luego done (no listado pero en el
-	// workflow) y al final cancelled (ni en list_order ni en workflow).
+	// reviewing > doing > todo (list_order), then done (not listed but in the
+	// workflow) and finally cancelled (neither in list_order nor in workflow).
 	tasks, _ := db.ListTasks("", "", "")
 	want := []string{"reviewing", "doing", "todo", "done", "cancelled"}
 	if len(tasks) != len(want) {
@@ -814,12 +814,12 @@ func TestReviewTaskNoReviewStatus(t *testing.T) {
 func TestUpdateTask(t *testing.T) {
 	db := newTestDB(t)
 	mustCreateProject(t, db, "api", nil)
-	task, _ := db.CreateTask("api", "old title", "old desc", "@juan", 1, "")
+	task, _ := db.CreateTask("api", "old title", "old desc", "@john", 1, "")
 
 	updated, err := db.UpdateTask(task.ID, map[string]any{
 		"title":    "new title",
 		"priority": 3,
-		"assignee": "@maria",
+		"assignee": "@margo",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -830,7 +830,7 @@ func TestUpdateTask(t *testing.T) {
 	if updated.Priority != 3 {
 		t.Errorf("priority = %d", updated.Priority)
 	}
-	if updated.Assignee != "@maria" {
+	if updated.Assignee != "@margo" {
 		t.Errorf("assignee = %q", updated.Assignee)
 	}
 	// Description unchanged
@@ -845,9 +845,9 @@ func TestStatsGlobal(t *testing.T) {
 	db := newTestDB(t)
 	mustCreateProject(t, db, "api", nil)
 	mustCreateProject(t, db, "web", nil)
-	mustCreateTask(t, db, "api", "t1", "", "@juan", 3, "backlog")
-	mustCreateTask(t, db, "api", "t2", "", "@maria", 2, "doing")
-	mustCreateTask(t, db, "web", "t3", "", "@juan", 1, "done")
+	mustCreateTask(t, db, "api", "t1", "", "@john", 3, "backlog")
+	mustCreateTask(t, db, "api", "t2", "", "@margo", 2, "doing")
+	mustCreateTask(t, db, "web", "t3", "", "@john", 1, "done")
 
 	stats, err := db.Stats("")
 	if err != nil {
@@ -863,7 +863,7 @@ func TestStatsGlobal(t *testing.T) {
 	}
 
 	byAssignee := stats["by_assignee"].(map[string]int)
-	if byAssignee["@juan"] != 2 || byAssignee["@maria"] != 1 {
+	if byAssignee["@john"] != 2 || byAssignee["@margo"] != 1 {
 		t.Errorf("by_assignee = %v", byAssignee)
 	}
 }
@@ -872,9 +872,9 @@ func TestStatsByProject(t *testing.T) {
 	db := newTestDB(t)
 	mustCreateProject(t, db, "api", nil)
 	mustCreateProject(t, db, "web", nil)
-	mustCreateTask(t, db, "api", "t1", "", "@juan", 0, "")
-	mustCreateTask(t, db, "api", "t2", "", "@maria", 0, "")
-	mustCreateTask(t, db, "web", "t3", "", "@juan", 0, "")
+	mustCreateTask(t, db, "api", "t1", "", "@john", 0, "")
+	mustCreateTask(t, db, "api", "t2", "", "@margo", 0, "")
+	mustCreateTask(t, db, "web", "t3", "", "@john", 0, "")
 
 	stats, err := db.Stats("api")
 	if err != nil {
@@ -891,8 +891,8 @@ func TestArchiveProjectHidesTasksAndStats(t *testing.T) {
 	db := newTestDB(t)
 	mustCreateProject(t, db, "api", nil)
 	mustCreateProject(t, db, "web", nil)
-	mustCreateTask(t, db, "api", "t1", "", "@juan", 0, "")
-	mustCreateTask(t, db, "web", "t2", "", "@maria", 0, "")
+	mustCreateTask(t, db, "api", "t1", "", "@john", 0, "")
+	mustCreateTask(t, db, "web", "t2", "", "@margo", 0, "")
 
 	if err := db.ArchiveProject("api"); err != nil {
 		t.Fatal(err)
@@ -984,7 +984,7 @@ func TestUpdateProjectRename(t *testing.T) {
 	if p.Name != "backend" {
 		t.Errorf("name = %q, want backend", p.Name)
 	}
-	// La tarea referencia project_id, así que sobrevive al rename.
+	// The task references project_id, so it survives the rename.
 	tasks, _ := db.ListTasks("", "", "")
 	if len(tasks) != 1 || tasks[0].ProjectName != "backend" {
 		t.Errorf("tasks after rename = %v", tasks)

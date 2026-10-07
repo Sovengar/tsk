@@ -9,39 +9,39 @@ import (
 	"tsk/internal/model"
 )
 
-// commentFinishedMsg se envía cuando el editor de comentarios termina.
+// commentFinishedMsg is sent when the comment editor finishes.
 type commentFinishedMsg struct {
 	err    error
 	taskID int64
 	body   string
 }
 
-// commentsLoadedMsg lleva la lista de comentarios de una tarea.
+// commentsLoadedMsg carries the comment list of a task.
 type commentsLoadedMsg struct {
 	taskID    int64
 	comments  []model.Comment
-	selectIdx int // índice a seleccionar tras recargar (-1 = ninguno)
+	selectIdx int // index to select after reload (-1 = none)
 }
 
-// crearTemporal es una variable y no una llamada directa a os.CreateTemp para
-// que un test pueda devolver un temporal que falla al escribirse. La escritura
-// sí es inyectable (escribirYcerrar toma una interfaz), pero sin esto el
-// llamador no se puede probar: crear el temporal de verdad nunca falla al
-// escribir, así que su rama de error no tiene otro camino.
-var crearTemporal = func(dir, pattern string) (archivoTemporal, error) {
+// createTemp is a variable and not a direct call to os.CreateTemp so that
+// a test can return a temp file that fails when written. The write
+// itself is injectable (writeAndClose takes an interface), but without this
+// the caller cannot be tested: creating a real temp file never fails on
+// write, so its error branch has no other path.
+var createTemp = func(dir, pattern string) (tempFile, error) {
 	return os.CreateTemp(dir, pattern)
 }
 
-// commentCmd abre el editor externo para escribir un comentario nuevo.
+// commentCmd opens the external editor to write a new comment.
 func commentCmd(taskID int64, editorCmd string) tea.Cmd {
-	tmpFile, err := crearTemporal("", "tsk-comment-*.md")
+	tmpFile, err := createTemp("", "tsk-comment-*.md")
 	if err != nil {
 		return func() tea.Msg {
 			return commentFinishedMsg{err: err, taskID: taskID}
 		}
 	}
 
-	if err := escribirYcerrar(tmpFile, ""); err != nil {
+	if err := writeAndClose(tmpFile, ""); err != nil {
 		return func() tea.Msg {
 			return commentFinishedMsg{err: err, taskID: taskID}
 		}
@@ -53,26 +53,26 @@ func commentCmd(taskID int64, editorCmd string) tea.Cmd {
 	return tea.ExecProcess(cmd, commentCallback(taskID, tmpFile.Name()))
 }
 
-// archivoTemporal es lo mínimo que escribirYcerrar necesita de un fichero.
-// Existe como interfaz y no como *os.File para que un test pueda pasar un
-// fichero que falla: los errores de escritura y de cierre no se pueden provocar
-// de otra forma -- harían falta un disco lleno o un doble cierre -- y sin este
-// punto de inyección esas dos ramas no tienen test posible.
-type archivoTemporal interface {
+// tempFile is the minimum that writeAndClose needs from a file.
+// It exists as an interface and not as *os.File so a test can pass a file
+// that fails: write and close errors cannot be provoked
+// any other way -- they would need a full disk or a double close -- and
+// without this injection point those two branches have no possible test.
+type tempFile interface {
 	Write(p []byte) (int, error)
 	Close() error
 	Name() string
 }
 
-// escribirYcerrar escribe el contenido en el temporal y lo cierra. Si algo
-// falla, borra el fichero: un temporal a medias en /tmp es basura que se queda
-// ahí para siempre, y el editor va a abrir el nombre que le demos.
+// writeAndClose writes the content to the temp file and closes it. If
+// anything fails, it deletes the file: a half-written temp file in /tmp is
+// trash that stays there forever, and the editor is going to open the name we give it.
 //
-// El comentario pasa la cadena vacía porque no lleva plantilla: se abre vacío
-// y lo escribe la persona. La ruta es la misma que la de la tarea para que las
-// dos compartan la mitad que falla.
-func escribirYcerrar(f archivoTemporal, contenido string) error {
-	if _, err := f.Write([]byte(contenido)); err != nil {
+// The comment passes the empty string because it carries no template: it opens
+// empty and the person writes it. The path is the same as the task's so that
+// the two share the half that fails.
+func writeAndClose(f tempFile, content string) error {
+	if _, err := f.Write([]byte(content)); err != nil {
 		_ = f.Close()
 		_ = os.Remove(f.Name())
 		return err
@@ -84,10 +84,10 @@ func escribirYcerrar(f archivoTemporal, contenido string) error {
 	return nil
 }
 
-// commentCallback es el final de commentCmd, fuera de él porque tea.ExecProcess
-// se traga la función dentro de un mensaje privado: desde un test no se puede
-// llegar al cuerpo de un cierre. Sacándolo, los tres desenlaces del editor --
-// falla, el fichero ya no está, escribió algo -- se comprueban directamente.
+// commentCallback is the tail of commentCmd, outside of it because tea.ExecProcess
+// swallows the function inside a private message: from a test you cannot
+// reach the body of a closure. By taking it out, the three outcomes of the
+// editor -- it fails, the file is gone, it wrote something -- are checked directly.
 func commentCallback(taskID int64, path string) tea.ExecCallback {
 	return func(execErr error) tea.Msg {
 		body, err := readEditedFile(path, execErr)
@@ -101,13 +101,13 @@ func commentCallback(taskID int64, path string) tea.ExecCallback {
 	}
 }
 
-// readEditedFile lee el fichero temporal que el editor acaba de editar y lo
-// borra, tanto si el editor funcionó como si no.
+// readEditedFile reads the temp file the editor has just edited and deletes
+// it, whether the editor worked or not.
 //
-// Se extrae de commentCmd y editTaskCmd porque los dos hacen exactamente esto y
-// lo que importa de su resultado -- qué pasa si el editor falla, si el fichero ya
-// no está, si el editor no escribió nada -- no necesita un Bubbletea alrededor
-// para comprobarse.
+// It is extracted from commentCmd and editTaskCmd because both do exactly this,
+// and what matters about their result -- what happens if the editor fails, if the
+// file is gone, if the editor wrote nothing -- does not need a Bubbletea around
+// it to be checked.
 func readEditedFile(path string, execErr error) (string, error) {
 	if execErr != nil {
 		_ = os.Remove(path)
@@ -122,7 +122,7 @@ func readEditedFile(path string, execErr error) (string, error) {
 	return string(data), nil
 }
 
-// loadCommentsCmd carga los comentarios de una tarea sin seleccionar ninguno.
+// loadCommentsCmd loads a task's comments without selecting any of them.
 func (m *Model) loadCommentsCmd(taskID int64) tea.Cmd {
 	return func() tea.Msg {
 		comments, err := m.database.ListComments(taskID)
@@ -133,7 +133,7 @@ func (m *Model) loadCommentsCmd(taskID int64) tea.Cmd {
 	}
 }
 
-// addCommentCmd crea un comentario y recarga la lista seleccionando el nuevo.
+// addCommentCmd creates a comment and reloads the list selecting the new one.
 func (m *Model) addCommentCmd(taskID int64, body string) tea.Cmd {
 	return func() tea.Msg {
 		if _, err := m.database.AddComment(taskID, body); err != nil {
@@ -147,8 +147,8 @@ func (m *Model) addCommentCmd(taskID int64, body string) tea.Cmd {
 	}
 }
 
-// deleteCommentCmd elimina un comentario y recarga la lista manteniendo una
-// selección válida (el que ocupaba su lugar, o el anterior si era el último).
+// deleteCommentCmd deletes a comment and reloads the list keeping a
+// valid selection (the one taking its place, or the previous one if it was the last).
 func (m *Model) deleteCommentCmd(taskID, commentID int64, sel int) tea.Cmd {
 	return func() tea.Msg {
 		if err := m.database.DeleteComment(commentID); err != nil {

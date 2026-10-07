@@ -12,743 +12,743 @@ import (
 	"tsk/internal/model"
 )
 
-// Los key handlers por vista son casi todos tablas de casos, y los tests
-// existentes pulsaban cuatro o cinco teclas por vista. Lo que faltaba era la
-// cola de la tabla: las teclas que sólo funcionan en un estado concreto
-// (archivados visibles, comentario seleccionado, columna vacía) y las que no
-// hacen nada. Estas son esas teclas.
+// The per-view key handlers are almost all case tables, and the existing
+// tests pressed four or five keys per view. What was missing was the tail
+// of the table: the keys that only work in a concrete state (archived
+// visible, comment selected, empty column) and the ones that do nothing.
+// These are those keys.
 
-// pulsar encadena una secuencia de teclas y devuelve el modelo resultante.
-func pulsar(t *testing.T, m *Model, teclas ...string) (*Model, tea.Cmd) {
+// pressKeys chains a sequence of keys and returns the resulting model.
+func pressKeys(t *testing.T, m *Model, keys ...string) (*Model, tea.Cmd) {
 	t.Helper()
 	var cmd tea.Cmd
-	for _, k := range teclas {
+	for _, k := range keys {
 		m, cmd = press(m, k)
 	}
 	return m, cmd
 }
 
 func TestDashboardKeys(t *testing.T) {
-	t.Run("k y j van en direcciones distintas", func(t *testing.T) {
+	t.Run("k and j go in different directions", func(t *testing.T) {
 		m := newDashModel(t, "api")
 		m.currentView = viewDashboard
 
-		// Con dos proyectos, +1 y -1 desde el índice 0 dan el mismo resultado y
-		// no se distinguen: hace falta un tercero para que las dos direcciones
-		// digamos cosas diferentes.
+		// With two projects, +1 and -1 from index 0 give the same result and
+		// are told apart: a third one is needed so that the two directions
+		// say different things.
 		mustCreateProject(t, m.database, "extra", model.DefaultWorkflow)
 		reloadProjects(t, m)
 		if len(m.dashProjectList()) < 3 {
-			t.Fatalf("el fixture ha dejado %d proyectos visibles", len(m.dashProjectList()))
+			t.Fatalf("the fixture left %d projects visible", len(m.dashProjectList()))
 		}
 
-		arriba, _ := pulsar(t, m, "k")
-		if arriba.dashProjectIdx != len(m.dashProjectList())-1 {
-			t.Errorf("k desde 0 ha dejado el índice en %d, want el último (%d)",
-				arriba.dashProjectIdx, len(m.dashProjectList())-1)
+		up, _ := pressKeys(t, m, "k")
+		if up.dashProjectIdx != len(m.dashProjectList())-1 {
+			t.Errorf("k from 0 left the index at %d, want the last (%d)",
+				up.dashProjectIdx, len(m.dashProjectList())-1)
 		}
 
-		abajo, _ := pulsar(t, arriba, "j")
-		if abajo.dashProjectIdx != 0 {
-			t.Errorf("j desde el último ha dejado el índice en %d, want 0 (dar la vuelta)", abajo.dashProjectIdx)
+		down, _ := pressKeys(t, up, "j")
+		if down.dashProjectIdx != 0 {
+			t.Errorf("j from the last left the index at %d, want 0 (wrap around)", down.dashProjectIdx)
 		}
 	})
 
-	t.Run("e abre el modal de edición del proyecto seleccionado", func(t *testing.T) {
+	t.Run("e opens the edit modal of the selected project", func(t *testing.T) {
 		m := newDashModel(t, "api")
 		m.currentView = viewDashboard
 
-		siguiente, cmd := pulsar(t, m, "e")
-		if !siguiente.projectModalOpen {
-			t.Fatal("e no ha abierto el modal de proyecto")
+		next, cmd := pressKeys(t, m, "e")
+		if !next.projectModalOpen {
+			t.Fatal("e did not open the project modal")
 		}
-		if !siguiente.projectModalEdit {
-			t.Error("el modal se ha abierto en modo creación, want edición")
+		if !next.projectModalEdit {
+			t.Error("the modal opened in create mode, want edit")
 		}
 		_ = cmd
 	})
 
-	t.Run("e sin proyecto seleccionado no hace nada", func(t *testing.T) {
+	t.Run("e with no project selected does nothing", func(t *testing.T) {
 		m := newDashModel(t, "api")
 		m.currentView = viewDashboard
 		m.dashProjectIdx = 9999
 		m.projects = nil
 
-		siguiente, _ := pulsar(t, m, "e")
-		if siguiente.projectModalOpen {
-			t.Error("e ha abierto el modal sin ningún proyecto seleccionado")
+		next, _ := pressKeys(t, m, "e")
+		if next.projectModalOpen {
+			t.Error("e opened the modal with no project selected")
 		}
 	})
 
-	t.Run("d pide confirmar el archivado", func(t *testing.T) {
+	t.Run("d asks for archive confirmation", func(t *testing.T) {
 		m := newDashModel(t, "api")
 		m.currentView = viewDashboard
 
-		siguiente, _ := pulsar(t, m, "d")
-		if !siguiente.confirmOpen || siguiente.confirmAction != "archive" {
-			t.Errorf("d no ha pedido confirmar el archivado: open=%v action=%q",
-				siguiente.confirmOpen, siguiente.confirmAction)
+		next, _ := pressKeys(t, m, "d")
+		if !next.confirmOpen || next.confirmAction != "archive" {
+			t.Errorf("d did not ask for archive confirmation: open=%v action=%q",
+				next.confirmOpen, next.confirmAction)
 		}
 	})
 
-	t.Run("d no hace nada con los archivados a la vista", func(t *testing.T) {
+	t.Run("d does nothing with the archived visible", func(t *testing.T) {
 		m := newDashModel(t, "api")
 		m.currentView = viewDashboard
 		m.showArchived = true
 		m.archivedProjects = m.projects
 
-		siguiente, _ := pulsar(t, m, "d")
-		if siguiente.confirmOpen {
-			t.Error("d ha archivado un proyecto que ya está en la lista de archivados")
+		next, _ := pressKeys(t, m, "d")
+		if next.confirmOpen {
+			t.Error("d archived a project that is already in the archived list")
 		}
 	})
 
-	t.Run("r desarchiva, pero sólo cuando los archivados están a la vista", func(t *testing.T) {
+	t.Run("r unarchives, but only when the archived are visible", func(t *testing.T) {
 		m := newDashModel(t, "api")
 		m.currentView = viewDashboard
 
-		oculto, _ := pulsar(t, m, "r")
-		if oculto.confirmOpen {
-			t.Error("r ha pedido desarchivar con la lista de archivados oculta")
+		hidden, _ := pressKeys(t, m, "r")
+		if hidden.confirmOpen {
+			t.Error("r asked to unarchive with the archived list hidden")
 		}
 
 		m.showArchived = true
 		m.archivedProjects = m.projects
-		visible, _ := pulsar(t, m, "r")
+		visible, _ := pressKeys(t, m, "r")
 		if !visible.confirmOpen || visible.confirmAction != "unarchive" {
-			t.Errorf("r no ha pedido confirmar el desarchivado: open=%v action=%q",
+			t.Errorf("r did not ask for unarchive confirmation: open=%v action=%q",
 				visible.confirmOpen, visible.confirmAction)
 		}
 	})
 
-	t.Run("m abre la gestión de off-days y carga las días libres", func(t *testing.T) {
+	t.Run("m opens the off-day manager and loads the days off", func(t *testing.T) {
 		m := newDashModel(t, "api")
 		m.currentView = viewDashboard
 
-		siguiente, cmd := pulsar(t, m, "m")
-		if !siguiente.assigneeModalOpen {
-			t.Fatal("m no ha abierto el modal de assignees")
+		next, cmd := pressKeys(t, m, "m")
+		if !next.assigneeModalOpen {
+			t.Fatal("m did not open the assignees modal")
 		}
 		if cmd == nil {
-			t.Error("m no ha lanzado la carga de off-days")
+			t.Error("m did not launch the off-days load")
 		}
 	})
 }
 
 func TestListKeys(t *testing.T) {
-	t.Run("ctrl+p sube la prioridad de la tarea del cursor", func(t *testing.T) {
+	t.Run("ctrl+p raises the priority of the task under the cursor", func(t *testing.T) {
 		m := newTestModel(t)
 		m.currentView = viewList
 		m.cursor = 0
 
 		id := m.filteredTasks()[0].ID
-		antes := m.filteredTasks()[0].Priority
-		if _, cmd := pulsar(t, m, "ctrl+p"); cmd == nil {
-			t.Fatal("ctrl+p no ha lanzado ninguna acción")
+		before := m.filteredTasks()[0].Priority
+		if _, cmd := pressKeys(t, m, "ctrl+p"); cmd == nil {
+			t.Fatal("ctrl+p did not launch any action")
 		} else {
 			mustRun(t, cmd)
 		}
 
-		despues, err := m.database.GetTask(id)
+		after, err := m.database.GetTask(id)
 		if err != nil {
 			t.Fatalf("GetTask(%d): %v", id, err)
 		}
-		if despues.Priority == antes {
-			t.Errorf("ctrl+p no ha cambiado la prioridad: sigue en %d", antes)
+		if after.Priority == before {
+			t.Errorf("ctrl+p did not change the priority: still %d", before)
 		}
 	})
 
-	t.Run("ctrl+p con el cursor fuera de rango no hace nada", func(t *testing.T) {
+	t.Run("ctrl+p with the cursor out of range does nothing", func(t *testing.T) {
 		m := newTestModel(t)
 		m.currentView = viewList
 		m.filteredT = nil
 		m.tasks = nil
 
-		siguiente, cmd := pulsar(t, m, "ctrl+p")
+		next, cmd := pressKeys(t, m, "ctrl+p")
 		if cmd != nil {
-			t.Error("ctrl+p sin tareas ha lanzado una acción")
+			t.Error("ctrl+p with no tasks launched an action")
 		}
-		if siguiente.cursor != 0 {
-			t.Error("ctrl+p sin tareas ha movido el cursor")
+		if next.cursor != 0 {
+			t.Error("ctrl+p with no tasks moved the cursor")
 		}
 	})
 }
 
 func TestKanbanKeys(t *testing.T) {
-	t.Run("d marca done la tarjeta enfocada", func(t *testing.T) {
+	t.Run("d marks the focused card as done", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 
 		id := m.kanbanColumns()[m.kanbanCol].tasks[m.kanbanRow].ID
-		_, cmd := pulsar(t, m, "d")
+		_, cmd := pressKeys(t, m, "d")
 		if cmd == nil {
-			t.Fatal("d no ha lanzado ninguna acción")
+			t.Fatal("d did not launch any action")
 		}
 		mustRun(t, cmd)
 
-		tarea, err := m.database.GetTask(id)
+		task, err := m.database.GetTask(id)
 		if err != nil {
 			t.Fatalf("GetTask(%d): %v", id, err)
 		}
-		if tarea.Status != "done" {
-			t.Errorf("la tarea quedó en %q, want done", tarea.Status)
+		if task.Status != "done" {
+			t.Errorf("the task ended up as %q, want done", task.Status)
 		}
 	})
 
-	t.Run("x cancela la tarjeta enfocada", func(t *testing.T) {
+	t.Run("x cancels the focused card", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 
 		id := m.kanbanColumns()[m.kanbanCol].tasks[m.kanbanRow].ID
-		_, cmd := pulsar(t, m, "x")
+		_, cmd := pressKeys(t, m, "x")
 		if cmd == nil {
-			t.Fatal("x no ha lanzado ninguna acción")
+			t.Fatal("x did not launch any action")
 		}
 		mustRun(t, cmd)
 
-		tarea, err := m.database.GetTask(id)
+		task, err := m.database.GetTask(id)
 		if err != nil {
 			t.Fatalf("GetTask(%d): %v", id, err)
 		}
-		if tarea.Status != "cancelled" {
-			t.Errorf("la tarea quedó en %q, want cancelled", tarea.Status)
+		if task.Status != "cancelled" {
+			t.Errorf("the task ended up as %q, want cancelled", task.Status)
 		}
 	})
 
-	t.Run("e abre el editor de descripción inline", func(t *testing.T) {
+	t.Run("e opens the inline description editor", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 
-		siguiente, _ := pulsar(t, m, "e")
-		if !siguiente.descEditOpen {
-			t.Error("e no ha abierto el editor de descripción")
+		next, _ := pressKeys(t, m, "e")
+		if !next.descEditOpen {
+			t.Error("e did not open the description editor")
 		}
 	})
 
-	t.Run("i abre el alta de tarea", func(t *testing.T) {
+	t.Run("i opens the new task form", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 
-		siguiente, _ := pulsar(t, m, "i")
-		if !siguiente.newTaskOpen {
-			t.Error("i no ha abierto el alta de tarea")
+		next, _ := pressKeys(t, m, "i")
+		if !next.newTaskOpen {
+			t.Error("i did not open the new task form")
 		}
 	})
 
-	t.Run("E abre el editor externo", func(t *testing.T) {
+	t.Run("E opens the external editor", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 
-		if _, cmd := pulsar(t, m, "E"); cmd == nil {
-			t.Error("E no ha lanzado ningún comando")
+		if _, cmd := pressKeys(t, m, "E"); cmd == nil {
+			t.Error("E did not launch any command")
 		}
 	})
 
-	t.Run("ctrl+p cambia la prioridad de la tarjeta enfocada", func(t *testing.T) {
+	t.Run("ctrl+p changes the priority of the focused card", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 
-		antes := m.kanbanColumns()[m.kanbanCol].tasks[m.kanbanRow].Priority
-		_, cmd := pulsar(t, m, "ctrl+p")
+		before := m.kanbanColumns()[m.kanbanCol].tasks[m.kanbanRow].Priority
+		_, cmd := pressKeys(t, m, "ctrl+p")
 		if cmd == nil {
-			t.Fatal("ctrl+p no ha lanzado ninguna acción")
+			t.Fatal("ctrl+p did not launch any action")
 		}
 		mustRun(t, cmd)
 		reloadTasks(t, m)
 
 		id := m.kanbanColumns()[m.kanbanCol].tasks[m.kanbanRow].ID
-		tarea, err := m.database.GetTask(id)
+		task, err := m.database.GetTask(id)
 		if err != nil {
 			t.Fatalf("GetTask(%d): %v", id, err)
 		}
-		if tarea.Priority == antes {
-			t.Error("ctrl+p no ha cambiado la prioridad de la tarjeta")
+		if task.Priority == before {
+			t.Error("ctrl+p did not change the card's priority")
 		}
 	})
 
-	t.Run("h en la primera columna no mueve el índice de columna", func(t *testing.T) {
+	t.Run("h in the first column does not move the column index", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 		m.kanbanCol = 0
 		m.kanbanRow = 1
 
-		siguiente, _ := pulsar(t, m, "h")
-		if siguiente.kanbanCol != 0 {
-			t.Errorf("h ha movido la columna a %d, want 0", siguiente.kanbanCol)
+		next, _ := pressKeys(t, m, "h")
+		if next.kanbanCol != 0 {
+			t.Errorf("h moved the column to %d, want 0", next.kanbanCol)
 		}
-		// La fila no se toca al no cambiar de columna: el índice es por columna.
-		if siguiente.kanbanRow != 1 {
-			t.Errorf("h ha movido la fila a %d, want 1 (no cambia de columna)", siguiente.kanbanRow)
+		// The row is not touched when the column does not change: the index is per column.
+		if next.kanbanRow != 1 {
+			t.Errorf("h moved the row to %d, want 1 (it does not change column)", next.kanbanRow)
 		}
 	})
 
-	t.Run("l cambia de columna y reinicia la fila", func(t *testing.T) {
+	t.Run("l changes the column and resets the row", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 		m.kanbanCol = 0
 		m.kanbanRow = 2
 
-		siguiente, _ := pulsar(t, m, "l")
-		if siguiente.kanbanCol != 1 {
-			t.Errorf("l ha dejado la columna en %d, want 1", siguiente.kanbanCol)
+		next, _ := pressKeys(t, m, "l")
+		if next.kanbanCol != 1 {
+			t.Errorf("l left the column at %d, want 1", next.kanbanCol)
 		}
-		if siguiente.kanbanRow != 0 {
-			t.Errorf("l no ha reiniciado la fila: %d, want 0", siguiente.kanbanRow)
+		if next.kanbanRow != 0 {
+			t.Errorf("l did not reset the row: %d, want 0", next.kanbanRow)
 		}
 	})
 
-	t.Run("sin columnas no hay nada que hacer", func(t *testing.T) {
+	t.Run("with no columns there is nothing to do", func(t *testing.T) {
 		bare := newBareModel(t, func(*config.Config) {})
 		m := &bare
 		m.currentView = viewKanban
 		m.filteredT = nil
 		m.tasks = nil
-		m.projects = []model.Project{{Name: "sin-estados"}}
-		m.filterProject = "sin-estados"
+		m.projects = []model.Project{{Name: "no-states"}}
+		m.filterProject = "no-states"
 		if cols := m.kanbanColumns(); len(cols) != 0 {
-			t.Fatalf("el fixture no ha dejado el board vacío: %d columnas", len(cols))
+			t.Fatalf("the fixture did not leave the board empty: %d columns", len(cols))
 		}
 
 		for _, k := range []string{"h", "l", "j", "k", "d", "x", "s", "S", "enter", "ctrl+p"} {
-			siguiente, cmd := pulsar(t, m, k)
+			next, cmd := pressKeys(t, m, k)
 			if cmd != nil {
-				t.Errorf("%q con el board vacío ha lanzado una acción", k)
+				t.Errorf("%q on the empty board launched an action", k)
 			}
-			if siguiente.kanbanCol != 0 || siguiente.kanbanRow != 0 {
-				t.Errorf("%q con el board vacío ha movido el cursor a [%d,%d]",
-					k, siguiente.kanbanCol, siguiente.kanbanRow)
+			if next.kanbanCol != 0 || next.kanbanRow != 0 {
+				t.Errorf("%q on the empty board moved the cursor to [%d,%d]",
+					k, next.kanbanCol, next.kanbanRow)
 			}
 		}
 	})
 }
 
 func TestDetailKeys(t *testing.T) {
-	t.Run("s arranca la tarea y cierra el detalle", func(t *testing.T) {
-		// StartStatus devuelve el segundo estado del workflow, así que sólo se
-		// nota desde "backlog": en cualquier otro estado mover a "s" es un
-		// no-op por diseño, no un fallo.
+	t.Run("s starts the task and closes the detail", func(t *testing.T) {
+		// StartStatus returns the second state of the workflow, so it is only
+		// noticed from "backlog": in any other status moving to "s" is a
+		// no-op by design, not a failure.
 		m := newDetailModel(t, 0)
 		m.detailTask = taskByStatus(t, m, "backlog")
 		m.detailOpen = true
 
 		id := m.detailTask.ID
-		siguiente, cmd := pulsar(t, m, "s")
-		if siguiente.detailOpen {
-			t.Error("s no ha cerrado el detalle")
+		next, cmd := pressKeys(t, m, "s")
+		if next.detailOpen {
+			t.Error("s did not close the detail")
 		}
-		if siguiente.detailTask != nil {
-			t.Error("s no ha vaciado la tarea del detalle")
+		if next.detailTask != nil {
+			t.Error("s did not clear the task from the detail")
 		}
 		if cmd == nil {
-			t.Fatal("s no ha lanzado la acción de arranque")
+			t.Fatal("s did not launch the start action")
 		}
-		_, _ = updateMsg(t, siguiente, mustMsg(t, cmd))
+		_, _ = updateMsg(t, next, mustMsg(t, cmd))
 
-		tarea, err := m.database.GetTask(id)
+		task, err := m.database.GetTask(id)
 		if err != nil {
 			t.Fatalf("GetTask(%d): %v", id, err)
 		}
-		// StartStatus devuelve el SEGUNDO estado del workflow, no el tercero: el
-		// nombre "doing" era una suposición mía y no el contrato.
-		if tarea.Status != "todo" {
-			t.Errorf("la tarea quedó en %q, want el segundo estado del workflow (todo)", tarea.Status)
+		// StartStatus returns the SECOND state of the workflow, not the third:
+		// the name "doing" was my own assumption and not the contract.
+		if task.Status != "todo" {
+			t.Errorf("the task ended up as %q, want the second workflow state (todo)", task.Status)
 		}
 	})
 
-	t.Run("x cancela la tarea y cierra el detalle", func(t *testing.T) {
+	t.Run("x cancels the task and closes the detail", func(t *testing.T) {
 		m := newDetailModel(t, 0)
 		m.detailOpen = true
 
 		id := m.detailTask.ID
-		siguiente, cmd := pulsar(t, m, "x")
-		if siguiente.detailOpen || siguiente.detailTask != nil {
-			t.Error("x no ha cerrado el detalle")
+		next, cmd := pressKeys(t, m, "x")
+		if next.detailOpen || next.detailTask != nil {
+			t.Error("x did not close the detail")
 		}
 		if cmd == nil {
-			t.Fatal("x no ha lanzado la acción de cancelación")
+			t.Fatal("x did not launch the cancel action")
 		}
-		_, _ = updateMsg(t, siguiente, mustMsg(t, cmd))
+		_, _ = updateMsg(t, next, mustMsg(t, cmd))
 
-		tarea, err := m.database.GetTask(id)
+		task, err := m.database.GetTask(id)
 		if err != nil {
 			t.Fatalf("GetTask(%d): %v", id, err)
 		}
-		if tarea.Status != "cancelled" {
-			t.Errorf("la tarea quedó en %q, want cancelled", tarea.Status)
+		if task.Status != "cancelled" {
+			t.Errorf("the task ended up as %q, want cancelled", task.Status)
 		}
 	})
 
-	t.Run("d sin comentario seleccionado marca la tarea como done", func(t *testing.T) {
+	t.Run("d with no comment selected marks the task as done", func(t *testing.T) {
 		m := newDetailModel(t, 3)
 		m.detailOpen = true
 		m.detailCommentSel = -1
 
 		id := m.detailTask.ID
-		siguiente, cmd := pulsar(t, m, "d")
-		if siguiente.detailOpen || siguiente.detailTask != nil {
-			t.Error("d no ha cerrado el detalle")
+		next, cmd := pressKeys(t, m, "d")
+		if next.detailOpen || next.detailTask != nil {
+			t.Error("d did not close the detail")
 		}
-		if siguiente.detailComments != nil {
-			t.Error("d no ha limpiado los comentarios cargados")
+		if next.detailComments != nil {
+			t.Error("d did not clear the loaded comments")
 		}
 		if cmd == nil {
-			t.Fatal("d no ha lanzado la acción de done")
+			t.Fatal("d did not launch the done action")
 		}
-		_, _ = updateMsg(t, siguiente, mustMsg(t, cmd))
+		_, _ = updateMsg(t, next, mustMsg(t, cmd))
 
-		tarea, err := m.database.GetTask(id)
+		task, err := m.database.GetTask(id)
 		if err != nil {
 			t.Fatalf("GetTask(%d): %v", id, err)
 		}
-		if tarea.Status != "done" {
-			t.Errorf("la tarea quedó en %q, want done", tarea.Status)
+		if task.Status != "done" {
+			t.Errorf("the task ended up as %q, want done", task.Status)
 		}
 	})
 
-	t.Run("d con un comentario seleccionado borra el comentario, no la tarea", func(t *testing.T) {
+	t.Run("d with a comment selected deletes the comment, not the task", func(t *testing.T) {
 		m := newDetailModel(t, 3)
 		m.detailOpen = true
 
 		m, _ = applyComments(t, m)
-		m, _ = pulsar(t, m, "j")
+		m, _ = pressKeys(t, m, "j")
 		if m.detailCommentSel < 0 || m.detailCommentSel >= len(m.detailComments) {
-			t.Fatalf("el fixture no ha dejado un comentario seleccionado (sel=%d, %d comentarios)",
+			t.Fatalf("the fixture did not leave a comment selected (sel=%d, %d comments)",
 				m.detailCommentSel, len(m.detailComments))
 		}
 		comment := m.detailComments[m.detailCommentSel]
 
-		siguiente, cmd := pulsar(t, m, "d")
-		if !siguiente.detailOpen {
-			t.Error("d con un comentario seleccionado ha cerrado el detalle")
+		next, cmd := pressKeys(t, m, "d")
+		if !next.detailOpen {
+			t.Error("d with a comment selected closed the detail")
 		}
-		if siguiente.detailTask == nil {
-			t.Error("d con un comentario seleccionado ha vaciado el detalle")
+		if next.detailTask == nil {
+			t.Error("d with a comment selected cleared the detail")
 		}
 		if cmd == nil {
-			t.Fatal("d no ha lanzado el borrado del comentario")
+			t.Fatal("d did not launch the comment deletion")
 		}
-		_, _ = updateMsg(t, siguiente, mustMsg(t, cmd))
+		_, _ = updateMsg(t, next, mustMsg(t, cmd))
 
-		restantes, err := m.database.ListComments(m.detailTask.ID)
+		remaining, err := m.database.ListComments(m.detailTask.ID)
 		if err != nil {
 			t.Fatalf("ListComments: %v", err)
 		}
-		for _, c := range restantes {
+		for _, c := range remaining {
 			if c.ID == comment.ID {
-				t.Errorf("el comentario %d sigue ahí", comment.ID)
+				t.Errorf("comment %d is still there", comment.ID)
 			}
 		}
-		// Y la tarea sigue viva: es un comentario, no la tarea.
+		// And the task is still alive: it is a comment, not the task.
 		if _, err := m.database.GetTask(m.detailTask.ID); err != nil {
-			t.Errorf("borrar un comentario ha borrado la tarea: %v", err)
+			t.Errorf("deleting a comment deleted the task: %v", err)
 		}
 	})
 
-	t.Run("d sin tarea en el detalle no hace nada", func(t *testing.T) {
+	t.Run("d with no task in the detail does nothing", func(t *testing.T) {
 		m := newDetailModel(t, 0)
 		m.detailOpen = true
 		m.detailTask = nil
 
-		siguiente, cmd := pulsar(t, m, "d")
+		next, cmd := pressKeys(t, m, "d")
 		if cmd != nil {
-			t.Error("d sin tarea ha lanzado una acción")
+			t.Error("d with no task launched an action")
 		}
-		if !siguiente.detailOpen {
-			t.Error("d sin tarea ha cerrado el detalle, want intacto")
+		if !next.detailOpen {
+			t.Error("d with no task closed the detail, want intact")
 		}
 	})
 
-	t.Run("t abre el modal de tags desde el detalle", func(t *testing.T) {
+	t.Run("t opens the tags modal from the detail", func(t *testing.T) {
 		m := newDetailModel(t, 0)
 		m.detailOpen = true
 
-		siguiente, _ := pulsar(t, m, "t")
-		if !siguiente.tagOpen {
-			t.Error("t no ha abierto el modal de tags")
+		next, _ := pressKeys(t, m, "t")
+		if !next.tagOpen {
+			t.Error("t did not open the tags modal")
 		}
-		if siguiente.tagSuggestIdx != -1 {
-			t.Errorf("tagSuggestIdx = %d, want -1 (sin sugerencias al abrir)", siguiente.tagSuggestIdx)
+		if next.tagSuggestIdx != -1 {
+			t.Errorf("tagSuggestIdx = %d, want -1 (no suggestions on open)", next.tagSuggestIdx)
 		}
 	})
 
-	t.Run("e y E necesitan una tarea", func(t *testing.T) {
+	t.Run("e and E need a task", func(t *testing.T) {
 		m := newDetailModel(t, 0)
 		m.detailOpen = true
 		m.detailTask = nil
 
-		if siguiente, _ := pulsar(t, m, "e"); siguiente.descEditOpen {
-			t.Error("e sin tarea ha abierto el editor de descripción")
+		if next, _ := pressKeys(t, m, "e"); next.descEditOpen {
+			t.Error("e with no task opened the description editor")
 		}
-		if siguiente, cmd := pulsar(t, m, "E"); cmd != nil || siguiente.detailOpen == false {
-			t.Error("E sin tarea ha cerrado el detalle")
+		if next, cmd := pressKeys(t, m, "E"); cmd != nil || next.detailOpen == false {
+			t.Error("E with no task closed the detail")
 		}
-		if _, cmd := pulsar(t, m, "c"); cmd != nil {
-			t.Error("c sin tarea ha lanzado un comando")
+		if _, cmd := pressKeys(t, m, "c"); cmd != nil {
+			t.Error("c with no task launched a command")
 		}
-		if siguiente, _ := pulsar(t, m, "t"); siguiente.tagOpen {
-			t.Error("t sin tarea ha abierto el modal de tags")
+		if next, _ := pressKeys(t, m, "t"); next.tagOpen {
+			t.Error("t with no task opened the tags modal")
 		}
-		if siguiente, _ := pulsar(t, m, "s"); siguiente.detailOpen == false {
-			t.Error("s sin tarea ha cerrado el detalle")
+		if next, _ := pressKeys(t, m, "s"); next.detailOpen == false {
+			t.Error("s with no task closed the detail")
 		}
-		if siguiente, _ := pulsar(t, m, "x"); siguiente.detailOpen == false {
-			t.Error("x sin tarea ha cerrado el detalle")
+		if next, _ := pressKeys(t, m, "x"); next.detailOpen == false {
+			t.Error("x with no task closed the detail")
 		}
 	})
 
-	t.Run("j con comentarios avanza el seleccionado y sin comentarios no", func(t *testing.T) {
+	t.Run("j with comments advances the selection and without comments it does not", func(t *testing.T) {
 		m := newDetailModel(t, 2)
 		m.detailOpen = true
 
-		vacio := *m
-		vacio.detailComments = nil
-		vacio.detailCommentSel = 0
-		if siguiente, cmd := pulsar(t, &vacio, "j"); cmd != nil || siguiente.detailCommentSel != 0 {
-			t.Errorf("j sin comentarios ha movido la selección a %d", siguiente.detailCommentSel)
+		empty := *m
+		empty.detailComments = nil
+		empty.detailCommentSel = 0
+		if next, cmd := pressKeys(t, &empty, "j"); cmd != nil || next.detailCommentSel != 0 {
+			t.Errorf("j with no comments moved the selection to %d", next.detailCommentSel)
 		}
 
 		m.detailCommentSel = -1
-		siguiente, _ := pulsar(t, m, "j")
-		if siguiente.detailCommentSel != 0 {
-			t.Errorf("j desde -1 ha dejado la selección en %d, want 0", siguiente.detailCommentSel)
+		next, _ := pressKeys(t, m, "j")
+		if next.detailCommentSel != 0 {
+			t.Errorf("j from -1 left the selection at %d, want 0", next.detailCommentSel)
 		}
 	})
 
-	t.Run("k retrocede y en el primero deselecciona", func(t *testing.T) {
+	t.Run("k goes back and deselects on the first one", func(t *testing.T) {
 		m := newDetailModel(t, 3)
 		m.detailOpen = true
 
 		m.detailCommentSel = 2
-		atras, _ := pulsar(t, m, "k")
-		if atras.detailCommentSel != 1 {
-			t.Errorf("k desde 2 ha dejado la selección en %d, want 1", atras.detailCommentSel)
+		back, _ := pressKeys(t, m, "k")
+		if back.detailCommentSel != 1 {
+			t.Errorf("k from 2 left the selection at %d, want 1", back.detailCommentSel)
 		}
 
-		primero, _ := pulsar(t, atras, "k")
-		if primero.detailCommentSel != 0 {
-			t.Errorf("k desde 1 ha dejado la selección en %d, want 0", primero.detailCommentSel)
+		first, _ := pressKeys(t, back, "k")
+		if first.detailCommentSel != 0 {
+			t.Errorf("k from 1 left the selection at %d, want 0", first.detailCommentSel)
 		}
 
-		nada, _ := pulsar(t, primero, "k")
-		primero = nada
-		if primero.detailCommentSel != -1 {
-			t.Errorf("k en el primero ha dejado la selección en %d, want -1 (nada seleccionado)",
-				primero.detailCommentSel)
+		none, _ := pressKeys(t, first, "k")
+		first = none
+		if first.detailCommentSel != -1 {
+			t.Errorf("k on the first left the selection at %d, want -1 (nothing selected)",
+				first.detailCommentSel)
 		}
 	})
 }
 
-// updateMsg es applyMsg pero devolviendo también el comando, porque varios de
-// estos tests necesitan comprobar que NO se lanzó ninguno.
+// updateMsg is applyMsg but also returning the command, because several of
+// these tests need to check that NONE was launched.
 func updateMsg(t *testing.T, m *Model, msg tea.Msg) (*Model, tea.Cmd) {
 	t.Helper()
 	next, cmd := m.Update(msg)
 	return asModel(next), cmd
 }
 
-// applyComments carga los comentarios del detalle como lo hace el Update al
-// recibir commentsLoadedMsg, para partir de un estado realista.
+// applyComments loads the detail's comments the way Update does it upon
+// receiving commentsLoadedMsg, to start from a realistic state.
 func applyComments(t *testing.T, m *Model) (*Model, tea.Cmd) {
 	t.Helper()
 	cmd := m.loadCommentsCmd(m.detailTask.ID)
 	if cmd == nil {
-		t.Fatal("loadCommentsCmd ha devuelto nil")
+		t.Fatal("loadCommentsCmd returned nil")
 	}
 	return updateMsg(t, m, mustMsg(t, cmd))
 }
 
 func TestGlobalKeys(t *testing.T) {
-	t.Run("esc cierra la ayuda y el filtro y el filtro activo", func(t *testing.T) {
+	t.Run("esc closes help, the open filter and the active filter", func(t *testing.T) {
 		for _, tc := range []struct {
-			nombre    string
-			preparar  func(*Model)
-			comprobar func(*testing.T, *Model)
+			name  string
+			setup func(*Model)
+			check func(*testing.T, *Model)
 		}{
-			{"ayuda", func(m *Model) { m.helpOpen = true },
+			{"help", func(m *Model) { m.helpOpen = true },
 				func(t *testing.T, m *Model) {
 					if m.helpOpen {
-						t.Error("esc no ha cerrado la ayuda")
+						t.Error("esc did not close the help")
 					}
 				}},
-			{"filtro abierto", func(m *Model) { m.filterOpen = true; m.filterActive = true },
+			{"open filter", func(m *Model) { m.filterOpen = true; m.filterActive = true },
 				func(t *testing.T, m *Model) {
 					if m.filterOpen {
-						t.Error("esc no ha cerrado el filtro")
+						t.Error("esc did not close the filter")
 					}
 				}},
-			{"filtro activo", func(m *Model) { m.filterActive = true; m.filterText = "algo" },
+			{"active filter", func(m *Model) { m.filterActive = true; m.filterText = "something" },
 				func(t *testing.T, m *Model) {
 					if m.filterActive {
-						t.Error("esc no ha desactivado el filtro")
+						t.Error("esc did not deactivate the filter")
 					}
 					if m.filterText != "" {
-						t.Errorf("esc no ha limpiado el texto del filtro: %q", m.filterText)
+						t.Errorf("esc did not clear the filter text: %q", m.filterText)
 					}
 				}},
 		} {
-			t.Run(tc.nombre, func(t *testing.T) {
+			t.Run(tc.name, func(t *testing.T) {
 				m := newTestModel(t)
-				tc.preparar(m)
+				tc.setup(m)
 
-				siguiente, _ := pulsar(t, m, "esc")
-				tc.comprobar(t, siguiente)
+				next, _ := pressKeys(t, m, "esc")
+				tc.check(t, next)
 			})
 		}
 	})
 
-	t.Run("? alterna la ayuda", func(t *testing.T) {
+	t.Run("? toggles the help", func(t *testing.T) {
 		m := newTestModel(t)
 
-		abierta, _ := pulsar(t, m, "?")
-		if !abierta.helpOpen {
-			t.Fatal("? no ha abierto la ayuda")
+		open, _ := pressKeys(t, m, "?")
+		if !open.helpOpen {
+			t.Fatal("? did not open the help")
 		}
 
-		cerrada, _ := pulsar(t, abierta, "?")
-		if cerrada.helpOpen {
-			t.Error("? no ha cerrado la ayuda")
+		closed, _ := pressKeys(t, open, "?")
+		if closed.helpOpen {
+			t.Error("? did not close the help")
 		}
 	})
 
 }
 
-// El pegado va a tres sitios según lo que esté abierto, y sólo a uno. El orden
-// importa: con el editor de descripción y el alta abiertos a la vez, gana el
-// editor porque se comprobó primero.
+// The paste goes to three places depending on what is open, and only to one.
+// The order matters: with the description editor and the form open at once,
+// the editor wins because it is checked first.
 func TestPasteRouting(t *testing.T) {
-	t.Run("nada abierto", func(t *testing.T) {
+	t.Run("nothing open", func(t *testing.T) {
 		m := newTestModel(t)
-		siguiente, cmd := updateMsg(t, m, tea.PasteMsg{Content: "texto"})
+		next, cmd := updateMsg(t, m, tea.PasteMsg{Content: "text"})
 		if cmd != nil {
-			t.Error("un pegado sin nada abierto ha lanzado un comando")
+			t.Error("a paste with nothing open launched a command")
 		}
-		if siguiente.tagInput != "" {
-			t.Errorf("el pegado ha escrito en el input de tags: %q", siguiente.tagInput)
+		if next.tagInput != "" {
+			t.Errorf("the paste wrote into the tags input: %q", next.tagInput)
 		}
 	})
 
-	t.Run("el modal de tags", func(t *testing.T) {
+	t.Run("the tags modal", func(t *testing.T) {
 		m := newTestModel(t)
 		m.tagOpen = true
 		m.detailTask = &m.tasks[0]
 
-		siguiente, _ := updateMsg(t, m, tea.PasteMsg{Content: "pegado"})
-		if siguiente.tagInput != "pegado" {
-			t.Errorf("tagInput = %q, want %q", siguiente.tagInput, "pegado")
+		next, _ := updateMsg(t, m, tea.PasteMsg{Content: "pasted"})
+		if next.tagInput != "pasted" {
+			t.Errorf("tagInput = %q, want %q", next.tagInput, "pasted")
 		}
 	})
 
-	t.Run("el alta de tarea", func(t *testing.T) {
+	t.Run("the new task form", func(t *testing.T) {
 		m := newTestModel(t)
 		m.newTaskOpen = true
 		m.newTaskFieldIdx = newTaskFieldTitle
 
-		siguiente, _ := updateMsg(t, m, tea.PasteMsg{Content: "pegado"})
-		if !strings.Contains(siguiente.newTaskTitle, "pegado") {
-			t.Errorf("el pegado no ha llegado al alta: %q", siguiente.newTaskTitle)
+		next, _ := updateMsg(t, m, tea.PasteMsg{Content: "pasted"})
+		if !strings.Contains(next.newTaskTitle, "pasted") {
+			t.Errorf("the paste did not reach the form: %q", next.newTaskTitle)
 		}
 	})
 }
 
-// Los tres mensajes que sólo existen para propagar errores: el editor externo
-// que falla, el alta que falla y un comentario vacío. Ninguno debe dejar el
-// modelo en un estado a medias.
+// The three messages that exist only to propagate errors: the external
+// editor that fails, the form that fails and an empty comment. None must
+// leave the model in a half-done state.
 func TestSilentMessagesLeaveTheModelIntact(t *testing.T) {
-	t.Run("el editor externo falla", func(t *testing.T) {
+	t.Run("the external editor fails", func(t *testing.T) {
 		m := newTestModel(t)
-		antes := ansi.Strip(m.View().Content)
+		before := ansi.Strip(m.View().Content)
 
-		siguiente, cmd := updateMsg(t, m, editorFinishedMsg{err: errAccionFallida, taskID: 1})
+		next, cmd := updateMsg(t, m, editorFinishedMsg{err: errActionFailed, taskID: 1})
 		if cmd != nil {
-			t.Error("un editor fallido ha lanzado un comando")
+			t.Error("a failed editor launched a command")
 		}
-		if despues := ansi.Strip(siguiente.View().Content); despues != antes {
-			t.Error("un editor fallido ha cambiado el render")
+		if after := ansi.Strip(next.View().Content); after != before {
+			t.Error("a failed editor changed the render")
 		}
 	})
 
-	t.Run("el editor externo no escribe nada", func(t *testing.T) {
+	t.Run("the external editor writes nothing", func(t *testing.T) {
 		m := newTestModel(t)
 
-		siguiente, cmd := updateMsg(t, m, editorFinishedMsg{taskID: m.tasks[0].ID})
+		next, cmd := updateMsg(t, m, editorFinishedMsg{taskID: m.tasks[0].ID})
 		if cmd != nil {
-			t.Error("un editor que no escribe nada ha lanzado un comando")
+			t.Error("an editor that writes nothing launched a command")
 		}
-		if len(siguiente.tasks) != len(m.tasks) {
-			t.Error("un editor vacío ha modificado las tareas")
-		}
-	})
-
-	t.Run("el alta falla con toast", func(t *testing.T) {
-		m := newTestModel(t)
-
-		siguiente, _ := updateMsg(t, m, taskCreateFailedMsg{err: errAccionFallida})
-		if !strings.Contains(ansi.Strip(siguiente.View().Content), errAccionFallida.Error()) {
-			t.Errorf("el error del alta no sale por la interfaz:\n%s",
-				ansi.Strip(siguiente.View().Content))
+		if len(next.tasks) != len(m.tasks) {
+			t.Error("an empty editor modified the tasks")
 		}
 	})
 
-	t.Run("el alta falla sin error", func(t *testing.T) {
+	t.Run("the creation fails with a toast", func(t *testing.T) {
 		m := newTestModel(t)
-		antes := ansi.Strip(m.View().Content)
 
-		siguiente, _ := updateMsg(t, m, taskCreateFailedMsg{})
-		if despues := ansi.Strip(siguiente.View().Content); despues != antes {
-			t.Error("un alta fallida sin error ha cambiado el render")
+		next, _ := updateMsg(t, m, taskCreateFailedMsg{err: errActionFailed})
+		if !strings.Contains(ansi.Strip(next.View().Content), errActionFailed.Error()) {
+			t.Errorf("the creation error does not show in the UI:\n%s",
+				ansi.Strip(next.View().Content))
 		}
 	})
 
-	t.Run("un comentario vacío no se guarda", func(t *testing.T) {
+	t.Run("the creation fails without an error", func(t *testing.T) {
+		m := newTestModel(t)
+		before := ansi.Strip(m.View().Content)
+
+		next, _ := updateMsg(t, m, taskCreateFailedMsg{})
+		if after := ansi.Strip(next.View().Content); after != before {
+			t.Error("a failed creation without an error changed the render")
+		}
+	})
+
+	t.Run("an empty comment is not saved", func(t *testing.T) {
 		m := newTestModel(t)
 
-		siguiente, cmd := updateMsg(t, m, commentFinishedMsg{taskID: m.tasks[0].ID, body: ""})
+		next, cmd := updateMsg(t, m, commentFinishedMsg{taskID: m.tasks[0].ID, body: ""})
 		if cmd != nil {
-			t.Error("un comentario vacío ha lanzado un guardado")
+			t.Error("an empty comment launched a save")
 		}
-		if len(siguiente.detailComments) != 0 {
-			t.Error("un comentario vacío ha cargado comentarios")
+		if len(next.detailComments) != 0 {
+			t.Error("an empty comment loaded comments")
 		}
 	})
 
-	t.Run("un comentario con error no se guarda", func(t *testing.T) {
+	t.Run("a comment with an error is not saved", func(t *testing.T) {
 		m := newTestModel(t)
 
-		if _, cmd := updateMsg(t, m, commentFinishedMsg{err: errAccionFallida, taskID: m.tasks[0].ID}); cmd != nil {
-			t.Error("un comentario fallido ha lanzado un guardado")
+		if _, cmd := updateMsg(t, m, commentFinishedMsg{err: errActionFailed, taskID: m.tasks[0].ID}); cmd != nil {
+			t.Error("a failed comment launched a save")
 		}
 	})
 }
 
-// El toggle de una tag que ya no está en la base de datos falla al leer y
-// devuelve nil, no un mensaje: no hay nada que actualizar.
+// Toggling a tag that is no longer in the database fails on read and
+// returns nil, not a message: there is nothing to update.
 func TestToggleTagOnAMissingTask(t *testing.T) {
 	m := newTestModel(t)
 
-	if msg := m.toggleTagCmd(9999, "nada")(); msg != nil {
-		t.Errorf("toggleTag sobre una tarea inexistente ha devuelto %T, want nil", msg)
+	if msg := m.toggleTagCmd(9999, "nothing")(); msg != nil {
+		t.Errorf("toggleTag on a missing task returned %T, want nil", msg)
 	}
 }
 
-// commonWorkflow cae al workflow por defecto cuando los proyectos no comparten
-// ningún estado, que es justo lo que pasa si cada proyecto define el suyo.
+// commonWorkflow falls back to the default workflow when the projects share
+// no status at all, which is exactly what happens if each project defines its own.
 func TestCommonWorkflowFallsBackWhenNothingIsShared(t *testing.T) {
 	m := newTestModel(t)
 	m.projects = []model.Project{
-		{Name: "a", Workflow: []string{"uno"}},
-		{Name: "b", Workflow: []string{"otro"}},
+		{Name: "a", Workflow: []string{"one"}},
+		{Name: "b", Workflow: []string{"other"}},
 	}
 
 	got := m.commonWorkflow()
 	if len(got) != len(model.DefaultWorkflow) {
-		t.Errorf("sin estados comunes el workflow es %v, want el default %v",
+		t.Errorf("with no common states the workflow is %v, want the default %v",
 			got, model.DefaultWorkflow)
 	}
 }
 
-// taskByStatus devuelve la primera tarea del modelo en ese estado, o falla el
-// test. Los estados importan: mover una tarea depende del estado en el que está,
-// no sólo de la tecla.
+// taskByStatus returns the model's first task in that status, or fails the
+// test. The statuses matter: moving a task depends on the status it is in,
+// not only on the key.
 func taskByStatus(t *testing.T, m *Model, status string) *model.Task {
 	t.Helper()
 	for i := range m.tasks {
@@ -756,49 +756,49 @@ func taskByStatus(t *testing.T, m *Model, status string) *model.Task {
 			return &m.tasks[i]
 		}
 	}
-	t.Fatalf("el fixture no tiene ninguna tarea en %q", status)
+	t.Fatalf("the fixture has no task in %q", status)
 	return nil
 }
 
-// El número de secuencia del toast tiene que cambiar en CADA toast, y cada tick
-// de expiración tiene que llevar el número del suyo.
+// The toast's sequence number has to change on EACH toast, and each
+// expiration tick has to carry its own number.
 //
-// No es un detalle interno: el tick compara su número con el actual antes de
-// borrar, y por eso es un tick VIEJO el que no debe tocar un toast nuevo. Si dos
-// toasts compartieran número, el tick del primero borraría el segundo; y si el
-// número no avanzara, todos los ticks viejos borrarían el toast vivo.
-func TestElNumeroDeSecuenciaDelToastAvanza(t *testing.T) {
+// It is not an internal detail: the tick compares its number with the current
+// one before deleting, and that is why an OLD tick is the one that must not
+// touch a new toast. If two toasts shared a number, the first one's tick
+// would erase the second; and if the number did not advance, all old ticks would erase the live toast.
+func TestToastSequenceNumberAdvances(t *testing.T) {
 	m := newTestModel(t)
 
-	// Tres toasts seguidos: tres números distintos.
-	var vistos []int
+	// Three toasts in a row: three different numbers.
+	var seen []int
 	for i := 0; i < 3; i++ {
 		m.setToast("toast "+itoa(i), "info")
-		vistos = append(vistos, m.toastSeq)
+		seen = append(seen, m.toastSeq)
 	}
-	for i := 1; i < len(vistos); i++ {
-		if vistos[i] == vistos[i-1] {
-			t.Fatalf("los toasts %d y %d comparten secuencia %d", i-1, i, vistos[i])
+	for i := 1; i < len(seen); i++ {
+		if seen[i] == seen[i-1] {
+			t.Fatalf("toasts %d and %d share sequence %d", i-1, i, seen[i])
 		}
 	}
 
-	// El tick del PRIMERO llega tarde, con un toast más nuevo en pantalla: no lo
-	// borra. Éste es el caso para el que existe el contador. Update tiene receptor
-	// por valor, así que el modelo devuelto es el que hay que mirar.
-	modelo, _ := m.Update(toastExpiredMsg{seq: vistos[0]})
-	conViejo := modelo.(Model)
-	if conViejo.toast == "" {
-		t.Error("el tick del primer toast ha borrado el tercer toast: un tick viejo no puede limpiar")
+	// The FIRST one's tick arrives late, with a newer toast on screen: it does
+	// not erase it. This is the case the counter exists for. Update has the
+	// receiver by value, so the returned model is the one to look at.
+	model, _ := m.Update(toastExpiredMsg{seq: seen[0]})
+	withOld := model.(Model)
+	if withOld.toast == "" {
+		t.Error("the first toast's tick erased the third toast: an old tick cannot clear")
 	}
 
-	// El tick del ÚLTIMO sí es el suyo: lo borra.
-	modelo, _ = conViejo.Update(toastExpiredMsg{seq: vistos[2]})
-	if modelo.(Model).toast != "" {
-		t.Errorf("el tick de su propio toast no lo ha borrado: %q", modelo.(Model).toast)
+	// The LAST one's tick is its own: it erases it.
+	model, _ = withOld.Update(toastExpiredMsg{seq: seen[2]})
+	if model.(Model).toast != "" {
+		t.Errorf("its own toast's tick did not erase it: %q", model.(Model).toast)
 	}
 }
 
-// jumps en sí: el salto es de uno en uno, y eso es lo que un test puede mirar.
+// jumps itself: the jump is one by one, and that is what a test can look at.
 func TestJumps(t *testing.T) {
 	for _, c := range []struct{ in, want int }{{0, 1}, {1, 2}, {41, 42}} {
 		if got := jumps(c.in); got != c.want {

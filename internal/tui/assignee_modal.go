@@ -7,15 +7,15 @@ import (
 	"tsk/internal/model"
 )
 
-// Límites de filas de los modales de assignees: acotan el alto para no crecer
-// sin control con muchos datos y no empujar los keybinds fuera de pantalla.
+// Row caps of the assignee modals: they bound the height so it does not grow
+// out of control with lots of data and does not push the keybinds off screen.
 const (
 	assigneeModalMaxRows  = 10
 	assigneeModalTaskRows = 5
 	assigneeModalOffRows  = 6
 )
 
-// assigneeSummary es una fila del roster: una persona y sus conteos.
+// assigneeSummary is a row of the roster: one person and their counts.
 type assigneeSummary struct {
 	Name        string
 	Total       int
@@ -23,31 +23,31 @@ type assigneeSummary struct {
 	OffDayCount int
 }
 
-// assigneeRoster arma la lista de personas del modal: la unión de assignees de
-// tareas, assignees con off-days y "Me" (siempre presente). Excluye el
-// placeholder de "sin responsable". Orden alfabético estable.
-// assigneeRoster delega en la función pura: la regla no depende del modelo.
+// assigneeRoster builds the modal's people list: the union of the assignees
+// of tasks, assignees with off-days and "Me" (always present). It excludes
+// the "no assignee" placeholder. Stable alphabetical order.
+// assigneeRoster delegates to the pure function: the rule does not depend on the model.
 func (m Model) assigneeRoster() []assigneeSummary {
 	return buildAssigneeRoster(m.tasks, m.offdays)
 }
 
-// currentAssignee devuelve la persona seleccionada en el modal, o "".
+// currentAssignee returns the person selected in the modal, or "".
 func (m *Model) currentAssignee() string {
 	return nameAt(m.assigneeRoster(), m.assigneeIdx)
 }
 
-// assigneeActiveTasks son las tareas no cerradas de una persona.
+// assigneeActiveTasks are the non-closed tasks of a person.
 func (m Model) assigneeActiveTasks(name string) []model.Task {
 	return tasksForAssignee(m.tasks, name)
 }
 
-// assigneeOffDays son los off-days de una persona, en el orden de carga (fecha
-// de inicio ascendente, que es como los devuelve la DB).
+// assigneeOffDays are the off-days of a person, in load order (ascending
+// start date, which is how the DB returns them).
 func (m Model) assigneeOffDays(name string) []model.OffDay {
 	return offDaysForAssignee(m.offdays, name)
 }
 
-// openAssigneeModal abre el modal en el nivel de lista.
+// openAssigneeModal opens the modal at the list level.
 func (m *Model) openAssigneeModal() {
 	m.assigneeModalOpen = true
 	m.assigneeDetail = false
@@ -55,7 +55,7 @@ func (m *Model) openAssigneeModal() {
 	m.assigneeOffdayIdx = 0
 }
 
-// openOffdayForm abre el formulario de alta vacío para la persona seleccionada.
+// openOffdayForm opens the empty creation form for the selected person.
 func (m *Model) openOffdayForm() tea.Cmd {
 	m.offdayFormOpen = true
 	m.offdayFormField = 0
@@ -65,17 +65,17 @@ func (m *Model) openOffdayForm() tea.Cmd {
 	return nil
 }
 
-// clampAssigneeIdx mantiene el índice del roster dentro de rango.
+// clampAssigneeIdx keeps the roster index in range.
 func (m *Model) clampAssigneeIdx() {
 	m.assigneeIdx = clampTo(m.assigneeIdx, len(m.assigneeRoster()))
 }
 
-// clampOffdayIdx mantiene el índice de off-days dentro de rango.
+// clampOffdayIdx keeps the off-days index in range.
 func (m *Model) clampOffdayIdx() {
 	m.assigneeOffdayIdx = clampTo(m.assigneeOffdayIdx, len(m.assigneeOffDays(m.currentAssignee())))
 }
 
-// selectionPrefix devuelve el indicador de fila seleccionada.
+// selectionPrefix returns the selected-row indicator.
 func selectionPrefix(selected bool) string {
 	if selected {
 		return "> "
@@ -83,8 +83,8 @@ func selectionPrefix(selected bool) string {
 	return "  "
 }
 
-// handleAssigneeModalKey procesa las teclas del modal, tanto en el nivel de
-// lista de personas como en el de detalle.
+// handleAssigneeModalKey processes the modal's keys, both at the level of the
+// people list and at the detail one.
 func (m Model) handleAssigneeModalKey(key string) (tea.Model, tea.Cmd) {
 	m.clampAssigneeIdx()
 
@@ -121,7 +121,7 @@ func (m Model) handleAssigneeModalKey(key string) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		m.assigneeIdx = shiftIndex(m.assigneeIdx, len(roster), -1)
 	case "enter":
-		// El roster nunca está vacío, así que siempre hay a quién entrar.
+		// The roster is never empty, so there is always somebody to enter.
 		m.assigneeDetail = true
 		m.assigneeOffdayIdx = 0
 	case "a":
@@ -130,7 +130,7 @@ func (m Model) handleAssigneeModalKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleOffdayFormKey procesa las teclas del formulario de alta de off-day.
+// handleOffdayFormKey processes the keys of the off-day creation form.
 func (m Model) handleOffdayFormKey(key string) (tea.Model, tea.Cmd) {
 	const numFields = 3
 
@@ -169,7 +169,7 @@ func (m Model) handleOffdayFormKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// addOffDayCmd persiste un off-day y emite offdaySavedMsg con el resultado.
+// addOffDayCmd persists an off-day and emits offdaySavedMsg with the result.
 func (m Model) addOffDayCmd(name, start, end, note string) tea.Cmd {
 	return func() tea.Msg {
 		if _, err := m.database.AddOffDay(name, start, end, note); err != nil {
@@ -179,7 +179,7 @@ func (m Model) addOffDayCmd(name, start, end, note string) tea.Cmd {
 	}
 }
 
-// deleteOffDayCmd elimina un off-day y emite offdaySavedMsg con el resultado.
+// deleteOffDayCmd deletes an off-day and emits offdaySavedMsg with the result.
 func (m Model) deleteOffDayCmd(id int64, name string) tea.Cmd {
 	return func() tea.Msg {
 		if err := m.database.DeleteOffDay(id); err != nil {
@@ -189,9 +189,9 @@ func (m Model) deleteOffDayCmd(id int64, name string) tea.Cmd {
 	}
 }
 
-// handleOffdaySaved aplica el resultado de un alta o baja de off-day. Ante error
-// reabre el formulario para no perder lo escrito; ante éxito recarga los
-// off-days para que el Gantt quede consistente.
+// handleOffdaySaved applies the result of an off-day create or delete. On
+// error it reopens the form so the written text is not lost; on success it
+// reloads the off-days so the Gantt stays consistent.
 func (m Model) handleOffdaySaved(msg offdaySavedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		if msg.action == "add" {
@@ -213,13 +213,13 @@ func (m Model) handleOffdaySaved(msg offdaySavedMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(m.setToast(text, "info"), m.loadOffDays())
 }
 
-// renderAssigneeModal dibuja el modal de assignees: lista de personas o, si se
-// entró a una, su detalle con tareas activas y off-days.
+// renderAssigneeModal draws the assignee modal: the people list or, if you
+// entered one, their detail with active tasks and off-days.
 func (m *Model) renderAssigneeModal(content string) string {
-	// El clamp va antes de la bifurcación: el detalle usa currentAssignee, que
-	// es el elemento del roster en assigneeIdx, y sin acotar el índice un
-	// assigneeIdx viejo pintaría un detalle sin nombre. Antes vivía después,
-	// y el camino del detalle depended de que otro lo hubiera ejecutado.
+	// The clamp goes before the fork: the detail uses currentAssignee, which
+	// is the roster element at assigneeIdx, and without bounding the index an
+	// old assigneeIdx would paint a detail without a name. It used to live
+	// after, and the detail path depended on somebody else having run it.
 	m.clampAssigneeIdx()
 
 	if m.assigneeDetail {
@@ -228,9 +228,9 @@ func (m *Model) renderAssigneeModal(content string) string {
 
 	roster := m.assigneeRoster()
 
-	// El roster nunca está vacío: buildAssigneeRoster mete siempre a "Me". Por
-	// eso no hay rama para el caso sin personas; el "(no assignees)" que había
-	// aquí era inalcanzable.
+	// The roster is never empty: buildAssigneeRoster always puts "Me" in.
+	// That is why there is no branch for the no-people case; the
+	// "(no assignees)" that was here was unreachable.
 	lines := []string{""}
 	start, end := visibleRange(m.assigneeIdx, len(roster), assigneeModalMaxRows)
 	for i, s := range roster[start:end] {
@@ -254,11 +254,11 @@ func (m *Model) renderAssigneeModal(content string) string {
 	return overlayModal(content, renderModalBox(" Assignees ", lines, totalWidth), totalWidth, m.width)
 }
 
-// renderAssigneeDetail dibuja el detalle de la persona seleccionada.
+// renderAssigneeDetail draws the detail of the selected person.
 func (m *Model) renderAssigneeDetail(content string) string {
-	// El roster nunca está vacío y el índice ya está acotado, así que hay
-	// persona. La rama que volvía a la lista cuando el nombre salía vacío era
-	// inalcanzable; lo que la sustituía, el clamp de arriba, sí hace falta.
+	// The roster is never empty and the index is already bounded, so there is
+	// a person. The branch that went back to the list when the name came out
+	// empty was unreachable; what replaced it, the clamp above, is needed.
 	name := m.currentAssignee()
 	m.clampOffdayIdx()
 
@@ -308,7 +308,7 @@ func (m *Model) renderAssigneeDetail(content string) string {
 	return overlayModal(content, renderModalBox(" Assignee · "+name+" ", lines, totalWidth), totalWidth, m.width)
 }
 
-// renderOffdayForm dibuja el formulario de alta sobre el modal de assignees.
+// renderOffdayForm draws the creation form over the assignee modal.
 func (m *Model) renderOffdayForm(content string) string {
 	start := m.offdayStartInput
 	if m.offdayFormField == 0 {

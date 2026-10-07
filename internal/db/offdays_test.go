@@ -6,7 +6,7 @@ func TestCreateTaskWithEstimate(t *testing.T) {
 	db := newTestDB(t)
 	mustCreateProject(t, db, "api", nil)
 
-	task, err := db.CreateTaskWithEstimate("api", "Fix auth", "", "@juan", 2, "", 0.5)
+	task, err := db.CreateTaskWithEstimate("api", "Fix auth", "", "@john", 2, "", 0.5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestAddAndListOffDays(t *testing.T) {
 		t.Errorf("single-day offday = %s→%s, want same date", o.StartDate, o.EndDate)
 	}
 
-	if _, err := db.AddOffDay("@bob", "2026-08-01", "2026-08-14", "vacaciones"); err != nil {
+	if _, err := db.AddOffDay("@bob", "2026-08-01", "2026-08-14", "vacation"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -83,13 +83,13 @@ func TestAddAndListOffDays(t *testing.T) {
 	if len(all) != 2 {
 		t.Fatalf("offdays = %d, want 2", len(all))
 	}
-	// Ordenados por fecha de inicio.
+	// Ordered by start date.
 	if all[0].Assignee != "@alice" || all[1].Assignee != "@bob" {
 		t.Errorf("order = %s, %s", all[0].Assignee, all[1].Assignee)
 	}
 
 	only, _ := db.ListOffDays("@bob")
-	if len(only) != 1 || only[0].Note != "vacaciones" {
+	if len(only) != 1 || only[0].Note != "vacation" {
 		t.Errorf("filtered offdays = %+v", only)
 	}
 }
@@ -110,18 +110,18 @@ func TestAddOffDayValidations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reversed range should be normalized, got %v", err)
 	}
-	// Normalizar NO es "no fallar": el rango tiene que quedar ordenado. Antes
-	// este caso sólo comprobaba que no hubiera error, así que el swap en sí
-	// podía desaparecer sin que nada se enterase.
+	// Normalizing is NOT "not failing": the range has to end up ordered. Before,
+	// this case only checked there was no error, so the swap itself
+	// could disappear without anyone noticing.
 	if o.StartDate != "2026-07-01" || o.EndDate != "2026-07-28" {
-		t.Errorf("rango invertido = %s→%s, want 2026-07-01→2026-07-28", o.StartDate, o.EndDate)
+		t.Errorf("reversed range = %s→%s, want 2026-07-01→2026-07-28", o.StartDate, o.EndDate)
 	}
 	got, err := db.ListOffDays("@a")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 1 || got[0].StartDate != "2026-07-01" || got[0].EndDate != "2026-07-28" {
-		t.Errorf("rango invertido persistido = %+v, want 2026-07-01→2026-07-28", got)
+		t.Errorf("reversed range persisted = %+v, want 2026-07-01→2026-07-28", got)
 	}
 }
 

@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// fuzzyScore puntúa qué tan bien query matchea target (case-insensitive).
-// Devuelve (score, ok); a mayor score, mejor match. Prioriza coincidencias por
-// substring (más cerca del inicio = mejor) y, si no hay, subsecuencias.
+// fuzzyScore scores how well query matches target (case-insensitive).
+// Returns (score, ok); the higher the score, the better the match. It prioritizes
+// substring matches (closer to the start = better) and, if there are none, subsequences.
 func fuzzyScore(query, target string) (int, bool) {
 	q := strings.ToLower(strings.TrimSpace(query))
 	t := strings.ToLower(target)
@@ -33,27 +33,27 @@ func fuzzyScore(query, target string) (int, bool) {
 	return 0, false
 }
 
-// topeDe devuelve cuántos elementos de n se quedan tras aplicar un tope.
+// cappedLen returns how many elements of n remain after applying a cap.
 //
-// Es un min() con la regla "tope cero (o negativo) significa sin tope", que es la
-// que usaban los llamadores y que estaba escrita tres veces como `if max > 0 &&
-// len(x) > max`. Con el if, el `len(x) > max` sólo se distinguía del `>=` cuando
-// len(x) == max, y ahí las dos ramas dan el mismo slice; el min no tiene borde que
-// mutar.
-func topeDe(n, max int) int {
+// It is a min() with the rule "zero (or negative) cap means no cap", which is
+// the one the callers used and that was written three times as `if max > 0 &&
+// len(x) > max`. With the if, the `len(x) > max` only differed from the `>=`
+// when len(x) == max, and there both branches give the same slice; the min has
+// no edge to mutate.
+func cappedLen(n, max int) int {
 	if max <= 0 {
 		return n
 	}
 	return min(n, max)
 }
 
-// fuzzyFilter devuelve hasta max items que matchean query, ordenados por score
-// descendente y nombre ascendente como desempate. Con query vacío devuelve los
-// primeros max en el orden original.
+// fuzzyFilter returns up to max items that match query, sorted by descending
+// score and ascending name as a tiebreaker. With an empty query it returns
+// the first max in the original order.
 func fuzzyFilter(items []string, query string, max int) []string {
-	// Sin query no hay ranking: se devuelve el orden original (el tope aplica).
+	// With no query there is no ranking: the original order is returned (the cap applies).
 	if strings.TrimSpace(query) == "" {
-		return append([]string(nil), items[:topeDe(len(items), max)]...)
+		return append([]string(nil), items[:cappedLen(len(items), max)]...)
 	}
 
 	type scored struct {
@@ -66,26 +66,26 @@ func fuzzyFilter(items []string, query string, max int) []string {
 			out = append(out, scored{it, s})
 		}
 	}
-	// slices.SortStableFunc con un cmp de tres Outcomes en vez de sort.SliceStable
-	// con un comparador booleano.
+	// slices.SortStableFunc with a cmp of three Outcomes instead of sort.SliceStable
+	// with a boolean comparator.
 	//
-	// Con el comparador booleano, dos líneas distintas --"menor puntuación" y
-	// "a igual puntuación, menor nombre"--Ggremlins las mutaba por separado, y las
-	// dos piezas tenían un `<` contra el que no se podía colocar un test: los
-	// nombres salen de una lista sin repetidos y las puntuaciones sólo se
-	// comparan cuando ya se sabe que no son iguales, así que en ambos bordes la
-	// rama opuesta daba el mismo resultado.
+	// With the boolean comparator, two distinct lines --"lower score" and
+	// "on equal score, lower name"--Ggremlins mutated them separately, and the
+	// two pieces had a `<` against which no test could be placed: the
+	// names come out of a list without repeats and the scores are only
+	// compared when it is already known they are not equal, so on both edges
+	// the opposite branch gave the same result.
 	//
-	// El cmp devuelve un número, y el desempate queda en la MISMA expresión que
-	// la comparación principal, así que no hay dos líneas que mutar sino una.
+	// The cmp returns a number, and the tiebreaker stays in the SAME expression as
+	// the main comparison, so there are not two lines to mutate but one.
 	slices.SortStableFunc(out, func(a, b scored) int {
 		if a.score != b.score {
-			// Descendente: el que tiene MÁS puntuación va antes.
+			// Descending: the one with MORE score goes first.
 			return cmp.Compare(b.score, a.score)
 		}
 		return strings.Compare(a.item, b.item)
 	})
-	out = out[:topeDe(len(out), max)]
+	out = out[:cappedLen(len(out), max)]
 	res := make([]string, len(out))
 	for i, s := range out {
 		res[i] = s.item
@@ -93,7 +93,7 @@ func fuzzyFilter(items []string, query string, max int) []string {
 	return res
 }
 
-// containsFold indica si la lista contiene value, ignorando mayúsculas.
+// containsFold tells whether the list contains value, ignoring case.
 func containsFold(items []string, value string) bool {
 	v := strings.ToLower(strings.TrimSpace(value))
 	for _, it := range items {

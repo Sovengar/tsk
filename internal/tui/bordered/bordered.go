@@ -14,24 +14,24 @@ const (
 	AlignRight
 )
 
-// minAnchoBorde es el ancho mínimo de una caja: dos columnas, una por cada
-// esquina. Por debajo no queda interior, así que la caja se dibujaría pero sin
-// hueco para el contenido.
-const minAnchoBorde = 2
+// minBorderWidth is the minimum width of a box: two columns, one for each
+// corner. Below that there is no interior left, so the box would be drawn but
+// with no room for the content.
+const minBorderWidth = 2
 
 func RenderWithTitleEx(border lipgloss.Border, borderFg color.Color, align int, title, content string, width int) string {
 	return RenderWithTitlesEx(border, borderFg, title, align, "", AlignLeft, content, width)
 }
 
-// RenderWithTitlesEx renderiza un borde con un título en la línea superior y
-// otro texto en la línea inferior, cada uno con su propia alineación. Un título
-// vacío no se dibuja (la línea queda rellena por completo).
+// RenderWithTitlesEx renders a border with a title on the top line and
+// other text on the bottom line, each with its own alignment. An empty title
+// is not drawn (the line is fully padded).
 func RenderWithTitlesEx(border lipgloss.Border, borderFg color.Color, topTitle string, topAlign int, bottomTitle string, bottomAlign int, content string, width int) string {
-	// El suelo son dos columnas, una por cada esquina del borde: por debajo, no
-	// queda interior donde dibujar nada. Se escribe con max y no con un if a
-	// propósito -- es una clamped y max dice lo que hace; el if hacía falta sólo
-	// porque no había forma de decirlo en una línea.
-	width = max(width, minAnchoBorde)
+	// The floor is two columns, one for each corner of the border: below that,
+	// there is no interior left to draw anything in. It is written with max
+	// and not with an if on purpose -- it is a clamp and max says what it does;
+	// the if was only needed because there was no way to say it in one line.
+	width = max(width, minBorderWidth)
 
 	topLeft := border.TopLeft
 	topRight := border.TopRight
@@ -58,11 +58,11 @@ func RenderWithTitlesEx(border lipgloss.Border, borderFg color.Color, topTitle s
 	tlW := ansi.StringWidth(topLeft)
 	trW := ansi.StringWidth(topRight)
 
-	// Suelo en cero porque strings.Repeat revienta con un número negativo, y
-	// porque un interior negativo no se puede rellenar. Con el suelo de width ya
-	// no es alcanzable -- tlW + trW son los caracteres de una esquina, uno cada
-	// uno -- pero el suelo se queda: las esquinas anchas de un borde de terceros
-	// podrían pasarse, y entonces el suelo es lo que evita el pánico.
+	// Floor at zero because strings.Repeat blows up with a negative number, and
+	// because a negative interior cannot be padded. With the width floor it is
+	// no longer reachable -- tlW + trW are the characters of a corner, one each
+	// -- but the floor stays: the wide corners of a third-party border could
+	// go past it, and then the floor is what prevents the panic.
 	innerWidth := max(width-tlW-trW, 0)
 
 	var borderStyle *ansi.Style
@@ -109,14 +109,14 @@ func buildBorderLine(style *ansi.Style, left, fill, right string, innerWidth, al
 	titleDisplay := ansi.Strip(title)
 	titleWidth := ansi.StringWidth(string(titleDisplay))
 
-	// El recorte va SIEMPRE, sin condición. ansi.Truncate es identidad cuando el
-	// texto ya cabe -- verificado con un texto de anchura exactamente igual al
-	// límite -- y por eso el `if titleWidth > innerWidth` que había aquí era una
-	// rama que sólo se distinguía de no-escribirla por un caso donde las dos
-	// dan lo mismo. Ahora no hay rama: se recorta, y si cabía no cambia nada.
+	// The truncation ALWAYS happens, with no condition. ansi.Truncate is an
+	// identity when the text already fits -- verified with a text of exactly
+	// the same width as the limit -- and that is why the
+	// `if titleWidth > innerWidth` that was here was a branch that only told
+	// itself apart from not writing it in a case where both give the same. Now there is no branch: it truncates, and if it fit nothing changes.
 	//
-	// El ancho se recorta con min y no reasignándolo dentro de un if, por el
-	// mismo motivo.
+	// The width is truncated with min and not by reassigning it inside an if,
+	// for the same reason.
 	title = ansi.Truncate(title, innerWidth, "")
 	titleWidth = min(titleWidth, innerWidth)
 
@@ -156,11 +156,11 @@ func buildContentLines(style *ansi.Style, leftChar, rightChar, content string, i
 		} else {
 			wrapped := wrapLine(line, innerWidth)
 			for _, wl := range wrapped {
-				// Cada línea envuelta cabe en innerWidth... o no: wrapLine corta
-				// por columnas y una palabra más larga que el interior se
-				// desborda. El suelo en cero es lo que evita el pánico de
-				// strings.Repeat, y el suelo en "<= 0" haría lo mismo porque
-				// padding negativo es lo único que hay que impedir.
+				// Each wrapped line fits innerWidth... or not: wrapLine cuts by
+				// columns and a word longer than the interior overflows. The floor
+				// at zero is what prevents the panic of strings.Repeat, and a floor
+				// at "<= 0" would do the same because negative padding is the only
+				// thing that has to be prevented.
 				padding := max(innerWidth-ansi.StringWidth(wl), 0)
 				result = append(result,
 					styledChar(style, leftChar)+wl+strings.Repeat(" ", padding)+styledChar(style, rightChar))
@@ -168,9 +168,9 @@ func buildContentLines(style *ansi.Style, leftChar, rightChar, content string, i
 		}
 	}
 
-	// El bucle siempre deja al menos una línea: strings.Split devuelve como
-	// mínimo un elemento, y cada vuelta del bucle añade uno al menos. La defensa
-	// que había aquí contra un resultado vacío era inalcanzable.
+	// The loop always leaves at least one line: strings.Split returns at
+	// least one element, and each turn of the loop adds at least one. The
+	// defense that was here against an empty result was unreachable.
 	return result
 }
 
@@ -179,34 +179,34 @@ type ansiSegment struct {
 	text  string
 }
 
-// isCSIFinalizer dice si r es el byte final de una secuencia CSI.
+// isCSIFinalizer tells whether r is the final byte of a CSI sequence.
 //
-// El rango 0x40..0x7E es el de los "final bytes" de ECMA-48: cualquier otro
-// byte de la secuencia es un parámetro.
+// The 0x40..0x7E range is the "final bytes" range of ECMA-48: any other
+// byte of the sequence is a parameter.
 func isCSIFinalizer(r rune) bool {
 	return r >= 0x40 && r <= 0x7E
 }
 
 const csiPrefix = "\x1b["
 
-// parseAnsiSegments parte una línea en segmentos de estilo y de texto.
+// parseAnsiSegments splits a line into style and text segments.
 //
-// Se resuelve con strings.Index e IndexFunc en vez de con bucles que avanzan un
-// índice a mano. No es un detalle estilístico: un bucle con `i++` garantiza el
-// progreso sólo porque nadie invierte el `++`, y esa es exactamente la clase de
-// mutante que sale aquí. Con un índice que avanza dentro de una librería, o con
-// un recorte de slice que siempre acorta, el progreso no depende de que una
-// expresión siga diciendo lo que dice hoy.
+// It is solved with strings.Index and IndexFunc instead of loops that advance
+// an index by hand. It is not a stylistic detail: a loop with `i++` guarantees
+// the progress only because nobody inverts the `++`, and that is exactly the
+// class of mutant that shows up here. With an index that advances inside a
+// library, or a slice truncation that always shortens, the progress does not
+// depend on an expression keeping saying what it says today.
 //
-// Las dos búsquedas son por BYTES, y aquí da igual: una CSI es ASCII y el byte
-// final también, así que cortar justo después de él nunca parte un glifo.
+// The two searches are by BYTES, and here it does not matter: a CSI is ASCII
+// and so is the final byte, so cutting right after it never splits a glyph.
 func parseAnsiSegments(s string) []ansiSegment {
 	var segments []ansiSegment
 
 	for len(s) > 0 {
 		if strings.HasPrefix(s, csiPrefix) {
-			// Primer final byte después del prefijo; si la secuencia está
-			// truncada, se consume entera.
+			// First final byte after the prefix; if the sequence is truncated,
+			// it is consumed whole.
 			end := len(s)
 			if k := strings.IndexFunc(s[len(csiPrefix):], isCSIFinalizer); k >= 0 {
 				end = len(csiPrefix) + k + 1
@@ -216,18 +216,17 @@ func parseAnsiSegments(s string) []ansiSegment {
 			continue
 		}
 
-		// Texto: hasta la siguiente CSI o hasta el final.
+		// Text: up to the next CSI or up to the end.
 		//
-		// La búsqueda empieza en s[1:], no en s. Aquí ya sabemos que s NO
-		// empieza por CSI -- el HasPrefix de arriba lo habría cogido -- así que
-		// buscarla desde el principio sólo podía dar 0, que es justo el valor que
-		// el `>= 0` no alcanzaba y por el que el mutante no se distinguía: con `k > 0`
-		// el caso k == 0 era inalcanzable y por lo mismo indistinguible.
+		// The search starts at s[1:], not at s. Here we already know s does NOT
+		// start with CSI -- the HasPrefix above would have caught it -- so
+		// searching it from the beginning could only give 0, which is exactly the
+		// value the `>= 0` did not reach and for which the mutant did not tell:
+		// with `k > 0` the k == 0 case was unreachable and for the same reason indistinguishable.
 		//
-		// Buscando desde el 1, un k == 0 significa "la CSI empieza justo después
-		// del primer carácter", que es el caso normal de un texto con color. Así
-		// el 0 es un valor de verdad y la comparación se puede comprobar por los
-		// dos lados.
+		// Searching from 1, a k == 0 means "the CSI starts right after the
+		// first character", which is the normal case of colored text. So the 0
+		// is a real value and the comparison can be checked from both sides.
 		end := len(s)
 		if k := strings.Index(s[1:], csiPrefix); k >= 0 {
 			end = 1 + k
