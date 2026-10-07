@@ -68,6 +68,12 @@ scripts/setup-repo-protection.sh --dry-run  # shows without mutating
 The script derives the default branch and the real check contexts; it does not
 hardcode `main` or check names.
 
+### Waiting for CI
+
+To follow a PR's checks, wait with `gh run watch <run-id> --exit-status`
+(or `gh pr checks <n> --watch`). Never `sleep` + `gh pr checks`: runs go
+stale after a force-push and you have to ask for the id again.
+
 ## Architecture
 
 ```
