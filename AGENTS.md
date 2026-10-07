@@ -68,6 +68,12 @@ scripts/setup-repo-protection.sh --dry-run  # muestra sin mutar
 El script deriva la rama por defecto y los contexts de los checks reales; no
 hardcodea `main` ni nombres de checks.
 
+### Esperar a la CI
+
+Para seguir los checks de un PR, esperar con `gh run watch <run-id> --exit-status`
+(o `gh pr checks <n> --watch`). Nunca `sleep` + `gh pr checks`: los runs quedan
+stale tras un force-push y hay que volver a pedir el id.
+
 ## Arquitectura
 
 ```
