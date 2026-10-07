@@ -7,8 +7,8 @@ import (
 	"tsk/internal/model"
 )
 
-// AddOffDay registra un día no laborable para una persona. endDate vacío
-// significa un solo día (endDate = startDate).
+// AddOffDay registers a non-working day for a person. An empty endDate
+// means a single day (endDate = startDate).
 func (db *DB) AddOffDay(assignee, startDate, endDate, note string) (*model.OffDay, error) {
 	assignee = strings.TrimSpace(assignee)
 	if assignee == "" || model.IsUnassigned(assignee) {
@@ -28,11 +28,11 @@ func (db *DB) AddOffDay(assignee, startDate, endDate, note string) (*model.OffDa
 	if _, err := model.ParseDate(endDate); err != nil {
 		return nil, fmt.Errorf("invalid end date %q (want YYYY-MM-DD)", endDate)
 	}
-	// Normaliza el rango con min/max en vez de con un
-	// `if endDate < startDate` + swap: cuando start == end el swap reasignaba
-	// el mismo valor a las dos variables, así que la rama era un mutant
-	// equivalente que ningún test podía matar. El RHS se evalúa entero antes
-	// de asignar, así que min y max leen los valores originales.
+	// Normalize the range with min/max instead of with an
+	// `if endDate < startDate` + swap: when start == end the swap reassigned
+	// the same value to both variables, so the branch was an equivalent
+	// mutant no test could kill. The RHS is evaluated entirely before
+	// assigning, so min and max read the original values.
 	startDate, endDate = min(startDate, endDate), max(startDate, endDate)
 
 	result, err := db.conn.Exec(
@@ -53,8 +53,8 @@ func (db *DB) AddOffDay(assignee, startDate, endDate, note string) (*model.OffDa
 	}, nil
 }
 
-// ListOffDays devuelve los off-days de una persona, o todos si assignee está
-// vacío, ordenados por fecha de inicio.
+// ListOffDays returns a person's off-days, or all of them if assignee is
+// empty, ordered by start date.
 func (db *DB) ListOffDays(assignee string) ([]model.OffDay, error) {
 	query := `SELECT id, assignee, start_date, end_date, note FROM offdays`
 	args := []any{}
@@ -81,7 +81,7 @@ func (db *DB) ListOffDays(assignee string) ([]model.OffDay, error) {
 	return offdays, rows.Err()
 }
 
-// DeleteOffDay elimina un off-day por ID.
+// DeleteOffDay deletes an off-day by ID.
 func (db *DB) DeleteOffDay(id int64) error {
 	result, err := db.conn.Exec(`DELETE FROM offdays WHERE id = ?`, id)
 	if err != nil {

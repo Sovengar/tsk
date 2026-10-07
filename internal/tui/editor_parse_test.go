@@ -8,10 +8,10 @@ import (
 	"tsk/internal/model"
 )
 
-// parseEditFile ya era una función pura, sólo que con tests débiles. El formato
-// es "# título\\n\\n<descripción>\\n\\n---\\nassignee: …\\npriority: …\\nestimate: …
-// \\ntags: …" y el parser es la frontera con el editor externo: lo que se
-// equivoca aquí se guarda en la base de datos sin que nadie se entere.
+// parseEditFile was already a pure function, only with weak tests. The format
+// is "# title\n\n<description>\n\n---\nassignee: …\npriority: …\nestimate: …
+// \ntags: …" and the parser is the boundary with the external editor: what it
+// gets wrong here is stored in the database without anyone noticing.
 
 type parsedEdit struct {
 	title, description, assignee string
@@ -27,17 +27,17 @@ func parse(t *testing.T, content string) parsedEdit {
 }
 
 func TestParseEditFileRoundTrip(t *testing.T) {
-	content := "# El título\n\nla descripción\n\n---\nassignee: @juan\npriority: 2\nestimate: 3.5\ntags: api,web\n"
+	content := "# The title\n\nthe description\n\n---\nassignee: @john\npriority: 2\nestimate: 3.5\ntags: api,web\n"
 	got := parse(t, content)
 
-	if got.title != "El título" {
-		t.Errorf("title = %q, want \"El título\"", got.title)
+	if got.title != "The title" {
+		t.Errorf("title = %q, want \"The title\"", got.title)
 	}
-	if got.description != "la descripción" {
-		t.Errorf("description = %q, want \"la descripción\"", got.description)
+	if got.description != "the description" {
+		t.Errorf("description = %q, want \"the description\"", got.description)
 	}
-	if got.assignee != "@juan" {
-		t.Errorf("assignee = %q, want @juan", got.assignee)
+	if got.assignee != "@john" {
+		t.Errorf("assignee = %q, want @john", got.assignee)
 	}
 	if got.priority != 2 {
 		t.Errorf("priority = %d, want 2", got.priority)
@@ -50,42 +50,42 @@ func TestParseEditFileRoundTrip(t *testing.T) {
 	}
 }
 
-// El título es sólo la primera línea tras el "# ": el resto no es título aunque
-// esté en la misma línea lógica.
+// The title is only the first line after the "# ": the rest is not the title
+// even if it is on the same logical line.
 func TestParseEditFileTitleStopsAtNewline(t *testing.T) {
-	got := parse(t, "# uno\ndos\ntres\n")
-	if got.title != "uno" {
-		t.Errorf("title = %q, want \"uno\" (sólo la primera línea)", got.title)
+	got := parse(t, "# one\ntwo\nthree\n")
+	if got.title != "one" {
+		t.Errorf("title = %q, want \"one\" (only the first line)", got.title)
 	}
 }
 
-// Sin "# " no hay título, pero la PRIMERA LÍNEA se descarta igualmente: el
-// parser la trata como la posición del título, no por el "# ". Eso significa que
-// un cuerpo que empiece sin almohadilla pierde su primera línea.
+// With no "# " there is no title, but the FIRST LINE is discarded anyway: the
+// parser treats it as the title's position, not because of the "# ". That
+// means a body starting without a hash loses its first line.
 func TestParseEditFileWithoutHashTitleDropsFirstLine(t *testing.T) {
-	got := parse(t, "sin almohadilla\nla segunda\n")
+	got := parse(t, "without hash\nthe second\n")
 	if got.title != "" {
-		t.Errorf("title = %q, want vacío sin \"# \"", got.title)
+		t.Errorf("title = %q, want empty without \"# \"", got.title)
 	}
-	if got.description != "la segunda" {
-		t.Errorf("description = %q, want \"la segunda\" (la 1ª línea es la del título)", got.description)
+	if got.description != "the second" {
+		t.Errorf("description = %q, want \"the second\" (the 1st line is the title's)", got.description)
 	}
 }
 
-// Las líneas en blanco entre el título y la descripción se saltan; las del
-// final se recortan con el TrimSpace.
+// The blank lines between the title and the description are skipped; the ones
+// at the end are trimmed with TrimSpace.
 func TestParseEditFileSkipsBlankLinesAfterTitle(t *testing.T) {
 	tests := []struct {
 		name    string
 		content string
 		want    string
 	}{
-		{"sin blancos", "# t\ndesc\n", "desc"},
-		{"un blanco", "# t\n\ndesc\n", "desc"},
-		{"varios blancos", "# t\n\n\n\ndesc\n", "desc"},
-		{"blancos con espacios", "# t\n   \n\t\ndesc\n", "desc"},
-		{"blanco al final", "# t\n\ndesc\n\n\n", "desc"},
-		{"descripción multilínea", "# t\nlinea 1\nlinea 2\n", "linea 1\nlinea 2"},
+		{"no blanks", "# t\ndesc\n", "desc"},
+		{"one blank", "# t\n\ndesc\n", "desc"},
+		{"several blanks", "# t\n\n\n\ndesc\n", "desc"},
+		{"blanks with spaces", "# t\n   \n\t\ndesc\n", "desc"},
+		{"blank at the end", "# t\n\ndesc\n\n\n", "desc"},
+		{"multiline description", "# t\nline 1\nline 2\n", "line 1\nline 2"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -97,64 +97,64 @@ func TestParseEditFileSkipsBlankLinesAfterTitle(t *testing.T) {
 	}
 }
 
-// Una sola línea NO es descripción: es el título.
+// A single line is NOT the description: it is the title.
 func TestParseEditFileSingleLineIsNotDescription(t *testing.T) {
-	got := parse(t, "# sólo título\n")
+	got := parse(t, "# only title\n")
 	if got.description != "" {
-		t.Errorf("description = %q, want vacía con una sola línea", got.description)
+		t.Errorf("description = %q, want empty with a single line", got.description)
 	}
 }
 
-// El separador "---" corta el cuerpo de los metadatos. Sin él, todo el
-// contenido cuenta como cuerpo.
+// The "---" separator cuts the body from the metadata. Without it, all the
+// content counts as body.
 func TestParseEditFileSeparatorSplitsBody(t *testing.T) {
 	got := parse(t, "# t\ndesc\n---\nassignee: @x\n")
 	if got.description != "desc" {
-		t.Errorf("description = %q, want \"desc\" (el separador la excluye)", got.description)
+		t.Errorf("description = %q, want \"desc\" (the separator excludes it)", got.description)
 	}
 	if got.assignee != "@x" {
 		t.Errorf("assignee = %q, want @x", got.assignee)
 	}
 }
 
-// Sin separador no hay metadatos: los campos quedan en su valor cero, no
-// heredados del cuerpo.
+// With no separator there is no metadata: the fields stay at their zero value,
+// not inherited from the body.
 func TestParseEditFileWithoutMetadata(t *testing.T) {
 	got := parse(t, "# t\ndesc\n")
 	if got.assignee != "" {
-		t.Errorf("assignee = %q, want vacío sin metadatos", got.assignee)
+		t.Errorf("assignee = %q, want empty without metadata", got.assignee)
 	}
 	if got.priority != 0 {
-		t.Errorf("priority = %d, want 0 sin metadatos", got.priority)
+		t.Errorf("priority = %d, want 0 without metadata", got.priority)
 	}
 	if got.estimate != 0 {
-		t.Errorf("estimate = %v, want 0 sin metadatos", got.estimate)
+		t.Errorf("estimate = %v, want 0 without metadata", got.estimate)
 	}
 	if len(got.tags) != 0 {
-		t.Errorf("tags = %v, want ninguno sin metadatos", got.tags)
+		t.Errorf("tags = %v, want none without metadata", got.tags)
 	}
 }
 
-// Los valores mal formados se ignoran y el campo queda en cero. Es lo
-// importante: un "priority: alto" no debe guardarse como prioridad.
+// Malformed values are ignored and the field stays at zero. That is the
+// important part: a "priority: high" must not be stored as a priority.
 func TestParseEditFileIgnoresMalformedValues(t *testing.T) {
 	tests := []struct {
-		name       string
-		metadata   string
-		wantPrio   int
-		wantEst    float64
-		wantAssign string
+		name         string
+		metadata     string
+		wantPrio     int
+		wantEstimate float64
+		wantAssign   string
 	}{
-		{"priority no numérica", "priority: alto\n", 0, 0, ""},
-		{"priority vacía", "priority:\n", 0, 0, ""},
-		{"priority negativa se acepta", "priority: -1\n", -1, 0, ""},
-		{"estimate no numérica", "estimate: mucho\n", 0, 0, ""},
-		{"estimate negativa se descarta", "estimate: -2\n", 0, 0, ""},
-		{"estimate cero se acepta", "estimate: 0\n", 0, 0, ""},
-		{"assignee vacía", "assignee:\n", 0, 0, ""},
-		{"assignee con espacios", "assignee:    @x   \n", 0, 0, "@x"},
-		{"clave desconocida", "status: doing\n", 0, 0, ""},
-		{"metadatos vacíos", "\n\n", 0, 0, ""},
+		{"non-numeric priority", "priority: high\n", 0, 0, ""},
+		{"empty priority", "priority:\n", 0, 0, ""},
+		{"negative priority is accepted", "priority: -1\n", -1, 0, ""},
+		{"non-numeric estimate", "estimate: much\n", 0, 0, ""},
+		{"negative estimate is discarded", "estimate: -2\n", 0, 0, ""},
+		{"zero estimate is accepted", "estimate: 0\n", 0, 0, ""},
+		{"empty assignee", "assignee:\n", 0, 0, ""},
+		{"assignee with spaces", "assignee:    @x   \n", 0, 0, "@x"},
+		{"unknown key", "status: doing\n", 0, 0, ""},
+		{"empty metadata", "\n\n", 0, 0, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -162,8 +162,8 @@ func TestParseEditFileIgnoresMalformedValues(t *testing.T) {
 			if got.priority != tt.wantPrio {
 				t.Errorf("priority = %d, want %d", got.priority, tt.wantPrio)
 			}
-			if got.estimate != tt.wantEst {
-				t.Errorf("estimate = %v, want %v", got.estimate, tt.wantEst)
+			if got.estimate != tt.wantEstimate {
+				t.Errorf("estimate = %v, want %v", got.estimate, tt.wantEstimate)
 			}
 			if got.assignee != tt.wantAssign {
 				t.Errorf("assignee = %q, want %q", got.assignee, tt.wantAssign)
@@ -172,20 +172,20 @@ func TestParseEditFileIgnoresMalformedValues(t *testing.T) {
 	}
 }
 
-// El estimate negativo se descarta pero la priority negativa no: son reglas
-// distintas y conviene que el test las distinga.
+// The negative estimate is discarded but the negative priority is not: they
+// are different rules and the test should tell them apart.
 func TestParseEditFileEstimateNegativeButPriorityNegativeAllowed(t *testing.T) {
 	got := parse(t, "# t\nd\n---\npriority: -3\nestimate: -1\n")
 	if got.priority != -3 {
-		t.Errorf("priority = %d, want -3 (se acepta)", got.priority)
+		t.Errorf("priority = %d, want -3 (accepted)", got.priority)
 	}
 	if got.estimate != 0 {
-		t.Errorf("estimate = %v, want 0 (un estimate negativo no sirve)", got.estimate)
+		t.Errorf("estimate = %v, want 0 (a negative estimate is no good)", got.estimate)
 	}
 }
 
-// El espacio alrededor de los dos puntos SÍ se tolera en el valor, y la
-// indentación de la línea se recorta antes de comparar la clave.
+// The space around the colon IS tolerated in the value, and the line's
+// indentation is trimmed before comparing the key.
 func TestParseEditFileToleratesSpacing(t *testing.T) {
 	tests := []string{
 		"# t\nd\n---\nassignee:@x\npriority:3\nestimate:2.5\ntags:a,b\n",
@@ -195,38 +195,38 @@ func TestParseEditFileToleratesSpacing(t *testing.T) {
 	for i, content := range tests {
 		got := parse(t, content)
 		if got.assignee != "@x" {
-			t.Errorf("caso %d: assignee = %q, want @x", i, got.assignee)
+			t.Errorf("case %d: assignee = %q, want @x", i, got.assignee)
 		}
 		if got.priority != 3 {
-			t.Errorf("caso %d: priority = %d, want 3", i, got.priority)
+			t.Errorf("case %d: priority = %d, want 3", i, got.priority)
 		}
 	}
 }
 
-// Un espacio ANTES del dos puntos rompe el reconocimiento de la clave. Está
-// fijado como comportamiento actual porque es como lo escribe editTemplate, y
-// porque cambiarlo relajaría el prefijo y aceptaría claves que no son del
-// formato.
+// A space BEFORE the colon breaks key recognition. It is pinned down as
+// current behavior because that is how editTemplate writes it, and because
+// changing it would loosen the prefix and accept keys that are not part of
+// the format.
 func TestParseEditFileNeedsColonAttached(t *testing.T) {
 	got := parse(t, "# t\nd\n---\nassignee : @x\npriority : 3\n")
 	if got.assignee != "" {
-		t.Errorf("assignee = %q, want vacío con espacio antes de los dos puntos", got.assignee)
+		t.Errorf("assignee = %q, want empty with a space before the colon", got.assignee)
 	}
 	if got.priority != 0 {
-		t.Errorf("priority = %d, want 0 con espacio antes de los dos puntos", got.priority)
+		t.Errorf("priority = %d, want 0 with a space before the colon", got.priority)
 	}
 }
 
-// La última vez que aparece una clave gana: el parser no aborta al primer
+// The last time a key appears wins: the parser does not abort on the first
 // match.
 func TestParseEditFileLastKeyWins(t *testing.T) {
-	got := parse(t, "# t\nd\n---\nassignee: @uno\nassignee: @dos\n")
-	if got.assignee != "@dos" {
-		t.Errorf("assignee = %q, want @dos (la última gana)", got.assignee)
+	got := parse(t, "# t\nd\n---\nassignee: @one\nassignee: @two\n")
+	if got.assignee != "@two" {
+		t.Errorf("assignee = %q, want @two (the last one wins)", got.assignee)
 	}
 }
 
-// El cuerpo no necesita separador para tener descripción: el "---" sólo corta.
+// The body does not need a separator to have a description: the "---" only cuts.
 func TestParseEditFileBodyWithoutTrailingNewline(t *testing.T) {
 	got := parse(t, "# t\nd")
 	if got.title != "t" {
@@ -237,25 +237,25 @@ func TestParseEditFileBodyWithoutTrailingNewline(t *testing.T) {
 	}
 }
 
-// Un "---" dentro de la descripción la corta, aunque sea lo que el usuario
-// escribiera. Es el comportamiento documentado del formato.
+// A "---" inside the description cuts it, even if it is what the user
+// wrote. It is the documented behavior of the format.
 func TestParseEditFileFirstSeparatorWins(t *testing.T) {
-	got := parse(t, "# t\nantes\n---\nassignee: @x\ndespués\n")
+	got := parse(t, "# t\nbefore\n---\nassignee: @x\nafter\n")
 	if got.assignee != "@x" {
 		t.Errorf("assignee = %q, want @x", got.assignee)
 	}
-	if strings.Contains(got.description, "después") {
-		t.Errorf("description = %q, no debería pasar del primer separador", got.description)
+	if strings.Contains(got.description, "after") {
+		t.Errorf("description = %q, must not go past the first separator", got.description)
 	}
 }
 
-// La salida de editTaskCmd se relee sin pérdida: el ciclo escribir/leer es lo
-// que hace el editor externo, y si el parser pierde un campo se pierde en
-// silencio.
+// editTaskCmd's output is read back without loss: the write/read cycle is
+// what the external editor does, and if the parser loses a field it is lost
+// silently.
 func TestParseEditFileSurvivesItsOwnOutput(t *testing.T) {
 	original := model.Task{
-		ID: 7, Title: "Título con acentos: ñ", Description: "línea 1\nlínea 2",
-		Assignee: "@juan", Priority: model.PriorityMedium, Estimate: 2.5,
+		ID: 7, Title: "Title with accents: ñ", Description: "line 1\nline 2",
+		Assignee: "@john", Priority: model.PriorityMedium, Estimate: 2.5,
 		Tags: []string{"api", "web"},
 	}
 	content := editTemplate(original)
@@ -281,7 +281,7 @@ func TestParseEditFileSurvivesItsOwnOutput(t *testing.T) {
 	}
 }
 
-// currentProjectName: el filtro manda en List y Kanban, y no en Dashboard.
+// currentProjectName: the filter rules in List and Kanban, and not in Dashboard.
 func TestCurrentProjectName(t *testing.T) {
 	projects := []model.Project{{Name: "api"}, {Name: "web"}}
 
@@ -291,15 +291,15 @@ func TestCurrentProjectName(t *testing.T) {
 		filter string
 		want   string
 	}{
-		{"list sin filtro usa el primero", viewList, "", "api"},
-		{"list con filtro usa el filtro", viewList, "web", "web"},
-		{"kanban sin filtro usa el primero", viewKanban, "", "api"},
-		{"kanban con filtro usa el filtro", viewKanban, "web", "web"},
-		// En Dashboard la selección va por otro lado, así que el filtro de la
-		// vista no aplica: el alta va sobre el primer proyecto.
-		{"dashboard ignora el filtro", viewDashboard, "web", "api"},
-		{"gantt ignora el filtro", viewGantt, "web", "api"},
-		{"sin proyectos pero con filtro", viewList, "web", "web"},
+		{"list without filter uses the first", viewList, "", "api"},
+		{"list with filter uses the filter", viewList, "web", "web"},
+		{"kanban without filter uses the first", viewKanban, "", "api"},
+		{"kanban with filter uses the filter", viewKanban, "web", "web"},
+		// In Dashboard the selection goes elsewhere, so the view's filter does
+		// not apply: the form goes on the first project.
+		{"dashboard ignores the filter", viewDashboard, "web", "api"},
+		{"gantt ignores the filter", viewGantt, "web", "api"},
+		{"no projects but with a filter", viewList, "web", "web"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -312,174 +312,174 @@ func TestCurrentProjectName(t *testing.T) {
 
 func TestCurrentProjectNameWithoutProjects(t *testing.T) {
 	if got := currentProjectName(viewList, "", nil); got != "" {
-		t.Errorf("got %q, want vacío sin proyectos", got)
+		t.Errorf("got %q, want empty with no projects", got)
 	}
 	if got := currentProjectName(viewList, "solo", nil); got != "solo" {
-		t.Errorf("got %q, want \"solo\": el filtro no depende de la lista", got)
+		t.Errorf("got %q, want \"solo\": the filter does not depend on the list", got)
 	}
 }
 
-// El separador cuenta aunque esté en la posición 0: un archivo que empieza
-// directamente por él tiene cuerpo vacío y todo metadato.
+// The separator counts even at position 0: a file that starts directly with
+// it has an empty body and all metadata.
 func TestParseEditFileSeparatorAtPositionZero(t *testing.T) {
 	got := parse(t, "---\nassignee: @x\npriority: 2\n")
 	if got.assignee != "@x" {
-		t.Errorf("assignee = %q, want @x con el separador al principio", got.assignee)
+		t.Errorf("assignee = %q, want @x with the separator at the start", got.assignee)
 	}
 	if got.priority != 2 {
-		t.Errorf("priority = %d, want 2 con el separador al principio", got.priority)
+		t.Errorf("priority = %d, want 2 with the separator at the start", got.priority)
 	}
 	if got.description != "" {
-		t.Errorf("description = %q, want vacía: no hay cuerpo antes del separador", got.description)
+		t.Errorf("description = %q, want empty: there is no body before the separator", got.description)
 	}
 }
 
-// Corta por el PRIMER separador, no por el último. Con dos separadores, el
-// primero es el que divide: los metadatos son todo lo que viene detrás,
-// incluido el segundo "---", que no vuelve a cortar nada.
+// It cuts at the FIRST separator, not the last one. With two separators, the
+// first one is what divides: the metadata is everything that comes after,
+// including the second "---", which does not cut anything again.
 func TestParseEditFileFirstSeparatorNotLast(t *testing.T) {
-	got := parse(t, "# t\ncuerpo\n---\nassignee: @x\n---\nalgo más\n")
+	got := parse(t, "# t\nbody\n---\nassignee: @x\n---\nsomething else\n")
 
 	if got.assignee != "@x" {
-		t.Errorf("assignee = %q, want @x (el primer separador divide)", got.assignee)
+		t.Errorf("assignee = %q, want @x (the first separator divides)", got.assignee)
 	}
-	if got.description != "cuerpo" {
-		t.Errorf("description = %q, want \"cuerpo\"", got.description)
+	if got.description != "body" {
+		t.Errorf("description = %q, want \"body\"", got.description)
 	}
 	if got.priority != 0 {
-		t.Errorf("priority = %d, want 0: lo que sigue al primer separador es metadato, no cuerpo", got.priority)
+		t.Errorf("priority = %d, want 0: what follows the first separator is metadata, not body", got.priority)
 	}
 }
 
-// La almohadilla necesita su espacio detrás: "#sin espacio" no es un título.
+// The hash needs its space after it: "#no space" is not a title.
 func TestParseEditFileHashNeedsTrailingSpace(t *testing.T) {
-	got := parse(t, "#sin espacio\ncuerpo\n")
+	got := parse(t, "#no space\nbody\n")
 	if got.title != "" {
-		t.Errorf("title = %q, want vacío: '#' sin espacio no abre título", got.title)
+		t.Errorf("title = %q, want empty: '#' without a space does not open a title", got.title)
 	}
-	// Y al no haber título, la línea 0 sigue siendo la posición del título.
-	if got.description != "cuerpo" {
-		t.Errorf("description = %q, want \"cuerpo\"", got.description)
+	// And with no title, line 0 is still the title's position.
+	if got.description != "body" {
+		t.Errorf("description = %q, want \"body\"", got.description)
 	}
 }
 
-// Una descripción que empieza por "---" en línea propia se interpreta como
-// separador: es el precio de un formatobased en un marcador de texto.
+// A description starting with "---" on its own line is interpreted as a
+// separator: it is the price of a format based on a text marker.
 func TestParseEditFileDescriptionWithSeparator(t *testing.T) {
-	got := parse(t, "# t\ndesc\n\n---\nnota del usuario\n")
+	got := parse(t, "# t\ndesc\n\n---\nuser note\n")
 	if got.description != "desc" {
 		t.Errorf("description = %q, want \"desc\"", got.description)
 	}
 	if got.assignee != "" {
-		t.Errorf("assignee = %q, want vacío: lo de después del separador no es una clave", got.assignee)
+		t.Errorf("assignee = %q, want empty: what comes after the separator is not a key", got.assignee)
 	}
 }
 
-// Un bloque "# " con una sola línea no inventa una segunda: el cuerpo entero se
-// queda vacío en vez de repetir el título.
+// A "# " block with a single line does not invent a second one: the whole
+// body stays empty instead of repeating the title.
 func TestParseEditFileSingleLineTitleLeavesNoBody(t *testing.T) {
-	got := parse(t, "# Sólo título")
-	if got.title != "Sólo título" {
+	got := parse(t, "# Only title")
+	if got.title != "Only title" {
 		t.Errorf("title = %q", got.title)
 	}
 	if strings.TrimSpace(got.description) != "" {
-		t.Errorf("description = %q, want vacía", got.description)
+		t.Errorf("description = %q, want empty", got.description)
 	}
 }
 
-// descEditorWidth descuenta los bordes y la indentación, con un suelo de 1: un
-// ancho de cero dejaría el textarea sin sitio, que es peor que uno estreñísimo.
+// descEditorWidth discounts the borders and the indentation, with a floor of
+// 1: a width of zero would leave the textarea with no room, which is worse than a very narrow one.
 func TestDescEditorWidth(t *testing.T) {
 	tests := []struct {
 		name  string
 		width int
 		want  int
 	}{
-		{"holgada", 100, 96},
-		{"justa", 5, 1},
-		{"una menos", 4, 1},
-		{"cero", 0, 1},
-		{"negativa", -20, 1},
+		{"roomy", 100, 96},
+		{"tight", 5, 1},
+		{"one less", 4, 1},
+		{"zero", 0, 1},
+		{"negative", -20, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			m := Model{width: tt.width}
 			if got := m.descEditorWidth(); got != tt.want {
-				t.Errorf("descEditorWidth con %d = %d, want %d", tt.width, got, tt.want)
+				t.Errorf("descEditorWidth with %d = %d, want %d", tt.width, got, tt.want)
 			}
 		})
 	}
 }
 
-// Un título que empieza por un salto de línea se recorta igual que cualquier
-// otro: el resultado no puede llevar el salto dentro, porque el título acaba en
-// una fila de la lista. Es el caso donde el índice del salto es exactamente
-// cero, que es lo que distingue `>= 0` de `> 0`.
+// A title starting with a line break is truncated like any other: the result
+// cannot carry the break inside, because the title ends up in a row of the list.
+// It is the case where the break's index is exactly zero, which is what tells
+// `>= 0` from `> 0`.
 func TestParseEditFileTitleStartingWithNewline(t *testing.T) {
-	got := parse(t, "# \ncontenido en la segunda línea")
+	got := parse(t, "# \ncontent on the second line")
 
 	if got.title != "" {
-		t.Errorf("el título es %q, want vacío: la línea del título sólo tenía el prefijo", got.title)
+		t.Errorf("the title is %q, want empty: the title line only had the prefix", got.title)
 	}
-	if !strings.Contains(got.description, "contenido en la segunda línea") {
-		t.Errorf("el contenido no se recuperó:\\n%s", got.description)
+	if !strings.Contains(got.description, "content on the second line") {
+		t.Errorf("the content was not recovered:\\n%s", got.description)
 	}
 }
 
-// Un estimate negativo en el fichero no se aplica. Es lo que hace que el `e >= 0`
-// de la línea no tenga un segundo lado por el que morir: la base de datos
-// rechaza el negativo, así que la rama de dentro no se puede llegar a usar.
+// A negative estimate in the file is not applied. That is what makes the
+// `e >= 0` of the line have no second side to die on: the database rejects
+// the negative, so the inner branch can never be used.
 func TestParseEditFileIgnoresNegativeEstimate(t *testing.T) {
-	got := parse(t, "# t\n\ndesc\n\n---\nassignee: @juan\npriority: 2\nestimate: -3\n")
+	got := parse(t, "# t\n\ndesc\n\n---\nassignee: @john\npriority: 2\nestimate: -3\n")
 
 	if got.estimate < 0 {
-		t.Errorf("estimate = %v, want no negativo", got.estimate)
+		t.Errorf("estimate = %v, want not negative", got.estimate)
 	}
 	if got.estimate != 0 {
-		t.Errorf("estimate = %v, want 0: un negativo no es un estimate válido", got.estimate)
+		t.Errorf("estimate = %v, want 0: a negative is not a valid estimate", got.estimate)
 	}
 }
 
-// Y uno válido, con decimales, sí pasa tal cual.
+// And a valid one, with decimals, does pass as-is.
 func TestParseEditFileKeepsValidEstimate(t *testing.T) {
-	got := parse(t, "# t\n\ndesc\n\n---\nassignee: @juan\npriority: 2\nestimate: 2.5\n")
+	got := parse(t, "# t\n\ndesc\n\n---\nassignee: @john\npriority: 2\nestimate: 2.5\n")
 	if got.estimate != 2.5 {
 		t.Errorf("estimate = %v, want 2.5", got.estimate)
 	}
 }
 
-// Un estimate de cero en el fichero SÍ se aplica, y es el caso que distingue
-// `e >= 0` de `e > 0`: los dos aceptan un positivo, los dos rechazan un
-// negativo, y sólo el cero los separa.
+// An estimate of zero in the file IS applied, and it is the case that tells
+// `e >= 0` from `e > 0`: both accept a positive, both reject a negative,
+// and only zero separates them.
 //
-// La tarea de partida tiene 2 días y el fichero dice cero, así que el resultado
-// observable es 0 y no el 0 por defecto de una tarea sin estimate.
+// The starting task has 2 days and the file says zero, so the observable
+// result is 0 and not the default 0 of a task with no estimate.
 func TestParseEditFileAppliesZeroEstimate(t *testing.T) {
-	conCero := parse(t, "# t\n\ndesc\n\n---\nassignee: @juan\npriority: 2\nestimate: 0\n")
-	if conCero.estimate != 0 {
-		t.Fatalf("estimate del parseo = %v, want 0", conCero.estimate)
+	withZero := parse(t, "# t\n\ndesc\n\n---\nassignee: @john\npriority: 2\nestimate: 0\n")
+	if withZero.estimate != 0 {
+		t.Fatalf("parsed estimate = %v, want 0", withZero.estimate)
 	}
 
-	// Y el viaje completo: editar una tarea con estimate y dejarlo en cero la
-	// guarda con cero, no con el valor anterior.
+	// And the full trip: editing a task with an estimate and leaving it at zero
+	// stores it with zero, not with the previous value.
 	m := newTestModel(t)
 	task := m.tasks[0]
 	if _, err := m.database.UpdateTask(task.ID, map[string]any{"estimate": 2}); err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
-	conDos, err := m.database.GetTask(task.ID)
+	withTwo, err := m.database.GetTask(task.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	if conDos.Estimate != 2 {
-		t.Fatalf("el estimate de partida es %v, want 2: el test necesita una tarea con estimate", conDos.Estimate)
+	if withTwo.Estimate != 2 {
+		t.Fatalf("the starting estimate is %v, want 2: the test needs a task with an estimate", withTwo.Estimate)
 	}
 
-	contenido := fmt.Sprintf("# %s\n\n%s\n\n---\nassignee: %s\npriority: %d\nestimate: 0\ntags: \n",
+	content := fmt.Sprintf("# %s\n\n%s\n\n---\nassignee: %s\npriority: %d\nestimate: 0\ntags: \n",
 		task.Title, task.Description, task.Assignee, task.Priority)
-	title, desc, assignee, priority, estimate, _ := parseEditFile(contenido)
-	// El camino de aplicación real de una edición vive en la DB, así que se usa el
-	// mismo mapa que ella construye por debajo.
+	title, desc, assignee, priority, estimate, _ := parseEditFile(content)
+	// The real application path of an edit lives in the DB, so the same map
+	// that it builds underneath is used.
 	if _, err := m.database.UpdateTask(task.ID, map[string]any{
 		"title": title, "description": desc, "assignee": assignee,
 		"priority": priority, "estimate": estimate,
@@ -487,11 +487,11 @@ func TestParseEditFileAppliesZeroEstimate(t *testing.T) {
 		t.Fatalf("UpdateTask: %v", err)
 	}
 
-	guardada, err2 := m.database.GetTask(task.ID)
+	saved, err2 := m.database.GetTask(task.ID)
 	if err2 != nil {
 		t.Fatalf("GetTask: %v", err2)
 	}
-	if guardada.Estimate != 0 {
-		t.Errorf("el estimate guardado es %v, want 0: un cero explícito se aplica", guardada.Estimate)
+	if saved.Estimate != 0 {
+		t.Errorf("the saved estimate is %v, want 0: an explicit zero is applied", saved.Estimate)
 	}
 }

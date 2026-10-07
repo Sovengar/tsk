@@ -1,4 +1,4 @@
-# Binarios
+# Binaries
 /tsk
 /taskd
 *.exe
@@ -31,22 +31,22 @@ Thumbs.db
 /bin/
 /dist/
 
-# SQLite DB local
+# Local SQLite DB
 *.db
 *.db-journal
 *.db-wal
 *.db-shm
 
-# Worktrees de Worktrunk (wt): el worktree-path del config global es
-# relativo, asi que caen dentro del repo en .worktrees/.
+# Worktrunk (wt) worktrees: the global config's worktree-path is
+# relative, so they land inside the repo under .worktrees/.
 .worktrees/
 
 # Mutation testing (gremlins)
 report.json
 .gremlins*
 
-# Artefactos de SQLite que sueltan los tests de internal/db al probar DSNs
-# inválidos: el driver crea ficheros con el DSN como nombre.
+# SQLite artifacts left behind by the internal/db tests when probing
+# invalid DSNs: the driver creates files named after the DSN.
 /internal/db/tsk*
 /internal/db/sqlite:*
 /internal/db/::memory:*

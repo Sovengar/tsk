@@ -9,42 +9,42 @@ import (
 
 func TestKeybindsBarNormalViewShowsCommonAndViewKeys(t *testing.T) {
 	var kb KeybindsBar
-	// Ancho amplio para que cada fila de keybinds no se parta al envolver.
+	// Wide enough so no keybind row splits when wrapping.
 	kb.SetWidth(200)
 	kb.SetView(viewList)
 
 	out := ansi.Strip(kb.View())
-	// Teclas comunes, ahora parte de la lista de la vista.
+	// Common keys, now part of the view's list.
 	if !strings.Contains(out, "quit") {
-		t.Errorf("la vista normal debe mostrar las teclas comunes:\n%s", out)
+		t.Errorf("the normal view must show the common keys:\n%s", out)
 	}
 	if !strings.Contains(out, "insert task") {
-		t.Errorf("la vista List debe mostrar sus keybinds:\n%s", out)
+		t.Errorf("the List view must show its keybinds:\n%s", out)
 	}
-	// List usa Tab para ciclar proyectos.
+	// List uses Tab to cycle projects.
 	if !strings.Contains(out, "cycle project") {
-		t.Errorf("List debe mostrar Tab como cycle projects:\n%s", out)
+		t.Errorf("List must show Tab as cycle projects:\n%s", out)
 	}
 	if !strings.Contains(out, "Keybinds") {
-		t.Errorf("falta el título del pane:\n%s", out)
+		t.Errorf("the pane's title is missing:\n%s", out)
 	}
 }
 
-// TestKeybindsForViewCommonFirst verifica que las teclas antes globales
-// encabezan la lista (son las más repetidas) en todas las vistas.
+// TestKeybindsForViewCommonFirst verifies that the formerly global keys
+// head the list (they are the most repeated ones) in every view.
 func TestKeybindsForViewCommonFirst(t *testing.T) {
 	for _, v := range []viewKind{viewDashboard, viewList, viewKanban, viewGantt} {
 		want := []string{"1/2/3/4", "hjkl", "?", "q"}
 		kbs := keybindsForView(v)
 		for i, key := range want {
 			if i >= len(kbs) || kbs[i].key != key {
-				t.Fatalf("vista %s: keybind[%d].key = %q, want %q", v, i, kbs[i].key, key)
+				t.Fatalf("view %s: keybind[%d].key = %q, want %q", v, i, kbs[i].key, key)
 			}
 		}
 	}
 }
 
-// TestKeybindsBarMaxSevenPerRow verifica que ninguna fila supera 7 acciones.
+// TestKeybindsBarMaxSevenPerRow verifies that no row exceeds 7 actions.
 func TestKeybindsBarMaxSevenPerRow(t *testing.T) {
 	for _, v := range []viewKind{viewDashboard, viewList, viewKanban, viewGantt} {
 		var kb KeybindsBar
@@ -53,16 +53,16 @@ func TestKeybindsBarMaxSevenPerRow(t *testing.T) {
 
 		out := ansi.Strip(kb.View())
 		for _, line := range strings.Split(out, "\n") {
-			// 7 acciones => 6 separadores "·".
+			// 7 actions => 6 "·" separators.
 			if n := strings.Count(line, "·"); n > keybindsPerRow-1 {
-				t.Errorf("vista %s: fila con más de %d acciones:\n%s", v, keybindsPerRow, line)
+				t.Errorf("view %s: row with more than %d actions:\n%s", v, keybindsPerRow, line)
 			}
 		}
 	}
 }
 
-// TestKeybindsBarDetailAllActions verifica que el detalle muestre todas sus
-// acciones repartidas en filas de a lo sumo keybindsPerRow.
+// TestKeybindsBarDetailAllActions verifies that the detail shows all of its
+// actions spread over rows of at most keybindsPerRow.
 func TestKeybindsBarDetailAllActions(t *testing.T) {
 	var kb KeybindsBar
 	kb.SetWidth(200)
@@ -72,12 +72,12 @@ func TestKeybindsBarDetailAllActions(t *testing.T) {
 	out := ansi.Strip(kb.View())
 	for _, line := range strings.Split(out, "\n") {
 		if n := strings.Count(line, "·"); n > keybindsPerRow-1 {
-			t.Errorf("fila del detalle con más de %d acciones:\n%s", keybindsPerRow, line)
+			t.Errorf("detail row with more than %d actions:\n%s", keybindsPerRow, line)
 		}
 	}
 	for _, want := range []string{"j/k", "select comment", "new comment", "tags", "delete/done", "edit/editor", "start", "cancel", "close"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("falta %q en el detalle:\n%s", want, out)
+			t.Errorf("%q is missing in the detail:\n%s", want, out)
 		}
 	}
 }
@@ -89,20 +89,20 @@ func TestKeybindsBarDetailOverlay(t *testing.T) {
 	kb.SetOverlay(overlayDetail)
 
 	out := ansi.Strip(kb.View())
-	// Solo teclas del modal de detalle.
+	// Only detail modal keys.
 	for _, want := range []string{"comment", "select", "delete/done", "edit", "start", "cancel", "close"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("falta %q en el overlay de detalle:\n%s", want, out)
+			t.Errorf("%q is missing in the detail overlay:\n%s", want, out)
 		}
 	}
-	// Las comunes y de la vista ya no aplican.
+	// The common and view ones no longer apply.
 	for _, unwanted := range []string{"quit", "insert task", "filter"} {
 		if strings.Contains(out, unwanted) {
-			t.Errorf("no debería mostrarse %q en el detalle:\n%s", unwanted, out)
+			t.Errorf("%q should not be shown in the detail:\n%s", unwanted, out)
 		}
 	}
 	if !strings.Contains(out, "Keybinds · Detail") {
-		t.Errorf("el título debe indicar el contexto Detail:\n%s", out)
+		t.Errorf("the title must indicate the Detail context:\n%s", out)
 	}
 }
 
@@ -113,7 +113,7 @@ func TestKeybindsBarNewTaskOverlay(t *testing.T) {
 
 	out := ansi.Strip(kb.View())
 	if !strings.Contains(out, "create") || strings.Contains(out, "quit") {
-		t.Errorf("overlay de nueva tarea incorrecto:\n%s", out)
+		t.Errorf("wrong new task overlay:\n%s", out)
 	}
 }
 
@@ -124,7 +124,7 @@ func TestKeybindsBarFilterOverlay(t *testing.T) {
 
 	out := ansi.Strip(kb.View())
 	if !strings.Contains(out, "cycle") || strings.Contains(out, "quit") {
-		t.Errorf("overlay de filtros incorrecto:\n%s", out)
+		t.Errorf("wrong filter overlay:\n%s", out)
 	}
 }
 
@@ -132,47 +132,47 @@ func TestOverlayKindPriority(t *testing.T) {
 	m := newTestModel(t)
 
 	if m.overlayKind() != overlayNone {
-		t.Errorf("sin modales: %v, want overlayNone", m.overlayKind())
+		t.Errorf("with no modals: %v, want overlayNone", m.overlayKind())
 	}
 
 	m.detailOpen = true
 	if m.overlayKind() != overlayDetail {
-		t.Errorf("con detalle: %v, want overlayDetail", m.overlayKind())
+		t.Errorf("with detail: %v, want overlayDetail", m.overlayKind())
 	}
 
-	// La nueva tarea tiene prioridad sobre el detalle (igual que handleKey).
+	// The new task takes priority over the detail (same as handleKey).
 	m.newTaskOpen = true
 	m.filterOpen = true
 	if m.overlayKind() != overlayNewTask {
-		t.Errorf("con nueva tarea: %v, want overlayNewTask", m.overlayKind())
+		t.Errorf("with new task: %v, want overlayNewTask", m.overlayKind())
 	}
 
 	m.newTaskOpen = false
 	if m.overlayKind() != overlayDetail {
-		t.Errorf("detalle antes que filtros: %v, want overlayDetail", m.overlayKind())
+		t.Errorf("detail before filters: %v, want overlayDetail", m.overlayKind())
 	}
 
 	m.detailOpen = false
 	if m.overlayKind() != overlayFilter {
-		t.Errorf("con filtros: %v, want overlayFilter", m.overlayKind())
+		t.Errorf("with filters: %v, want overlayFilter", m.overlayKind())
 	}
 }
 
-// TestDetailOpenSwitchesKeybinds verifica que abrir el detalle cambia el
-// contexto de la barra de keybinds.
+// TestDetailOpenSwitchesKeybinds verifies that opening the detail changes the
+// context of the keybinds bar.
 func TestDetailOpenSwitchesKeybinds(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "1")
 
 	if m.overlayKind() != overlayNone {
-		t.Fatalf("antes de abrir: %v, want overlayNone", m.overlayKind())
+		t.Fatalf("before opening: %v, want overlayNone", m.overlayKind())
 	}
 
 	m, _ = press(m, "enter")
 	if !m.detailOpen {
-		t.Fatal("enter debe abrir el detalle")
+		t.Fatal("enter must open the detail")
 	}
 	if m.overlayKind() != overlayDetail {
-		t.Errorf("con el detalle abierto: %v, want overlayDetail", m.overlayKind())
+		t.Errorf("with the detail open: %v, want overlayDetail", m.overlayKind())
 	}
 }

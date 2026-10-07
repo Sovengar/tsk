@@ -6,38 +6,38 @@ import (
 	"tsk/internal/model"
 )
 
-// Estas funciones se extrajeron del render del Dashboard, que repetía la misma
-// cuenta sobre m.tasks cinco veces con su propio filtro de proyecto dentro. Como
-// son puras, se prueban sin modelo, sin base de datos y sin renderizar nada.
+// These functions were extracted from the Dashboard render, which repeated the
+// same count over m.tasks five times with its own project filter inside. Since
+// they are pure, they are tested without a model, without a database and without rendering anything.
 
 func dashTasks(fixture ...model.Task) []model.Task { return fixture }
 
 var dashFixture = dashTasks(
-	model.Task{ID: 1, ProjectName: "api", Assignee: "@juan", Status: "todo"},
-	model.Task{ID: 2, ProjectName: "api", Assignee: "@juan", Status: "doing"},
-	model.Task{ID: 3, ProjectName: "api", Assignee: "@maria", Status: "done"},
-	model.Task{ID: 4, ProjectName: "web", Assignee: "@juan", Status: "todo"},
-	model.Task{ID: 5, ProjectName: "web", Assignee: "@ana", Status: "cancelled"},
-	model.Task{ID: 6, ProjectName: "web", Assignee: "@ana", Status: "reviewing"},
+	model.Task{ID: 1, ProjectName: "api", Assignee: "@john", Status: "todo"},
+	model.Task{ID: 2, ProjectName: "api", Assignee: "@john", Status: "doing"},
+	model.Task{ID: 3, ProjectName: "api", Assignee: "@margo", Status: "done"},
+	model.Task{ID: 4, ProjectName: "web", Assignee: "@john", Status: "todo"},
+	model.Task{ID: 5, ProjectName: "web", Assignee: "@ann", Status: "cancelled"},
+	model.Task{ID: 6, ProjectName: "web", Assignee: "@ann", Status: "reviewing"},
 )
 
-// dashProjectTasks cuenta las activas de un proyecto; "" cuenta el entero.
+// dashProjectTasks counts the active ones of a project; "" counts the whole thing.
 func TestDashProjectTasks(t *testing.T) {
 	tests := []struct {
 		name    string
 		project string
 		want    int
 	}{
-		{"api tiene 2 activas de 3", "api", 2},
-		{"web tiene 2 activas de 3", "web", 2},
-		{"sin proyecto cuenta todas las activas", "", 4},
-		{"proyecto inexistente", "nope", 0},
-		{"sin tareas", "", 0},
+		{"api has 2 active of 3", "api", 2},
+		{"web has 2 active of 3", "web", 2},
+		{"no project counts all the active ones", "", 4},
+		{"nonexistent project", "nope", 0},
+		{"no tasks", "", 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tasks := dashFixture
-			if tt.name == "sin tareas" {
+			if tt.name == "no tasks" {
 				tasks = nil
 			}
 			if got := dashProjectTasks(tasks, tt.project); got != tt.want {
@@ -47,28 +47,28 @@ func TestDashProjectTasks(t *testing.T) {
 	}
 }
 
-// Sólo cuenta las activas: done y cancelled quedan fuera aunque pertenezcan al
-// proyecto. Es lo que distingue esta cuenta de la de estados.
+// It only counts the active ones: done and cancelled stay out even if they
+// belong to the project. That is what sets this count apart from the status one.
 func TestDashProjectTasksOnlyActive(t *testing.T) {
 	all := dashProjectTasks(dashFixture, "")
 	_, done, cancelled, _ := dashStatusCounts(dashFixture, "")
 	if all+done+cancelled != len(dashFixture) {
-		t.Errorf("activas(%d) + done(%d) + cancelled(%d) = %d, want %d tareas",
+		t.Errorf("active(%d) + done(%d) + cancelled(%d) = %d, want %d tasks",
 			all, done, cancelled, all+done+cancelled, len(dashFixture))
 	}
 }
 
-// dashStatusCounts: done y cancelled aparte, todo lo demás activa.
+// dashStatusCounts: done and cancelled apart, everything else active.
 func TestDashStatusCounts(t *testing.T) {
 	tests := []struct {
 		name                             string
 		project                          string
 		wantActive, wantDone, wantCancel int
 	}{
-		{"todo el conjunto", "", 4, 1, 1},
-		{"sólo api", "api", 2, 1, 0},
-		{"sólo web", "web", 2, 0, 1},
-		{"proyecto inexistente", "nope", 0, 0, 0},
+		{"the whole set", "", 4, 1, 1},
+		{"only api", "api", 2, 1, 0},
+		{"only web", "web", 2, 0, 1},
+		{"nonexistent project", "nope", 0, 0, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -77,8 +77,8 @@ func TestDashStatusCounts(t *testing.T) {
 				t.Errorf("dashStatusCounts(%q) = (%d,%d,%d), want (%d,%d,%d)",
 					tt.project, active, done, cancelled, tt.wantActive, tt.wantDone, tt.wantCancel)
 			}
-			// El mapa porStatus lleva TODOS los estados, no sólo activas:
-			// son las barras del Overview, una por estado del workflow.
+			// The byStatus map carries ALL statuses, not only active ones:
+			// they are the Overview bars, one per workflow status.
 			sum := 0
 			for _, n := range byStatus {
 				sum += n
@@ -93,94 +93,94 @@ func TestDashStatusCounts(t *testing.T) {
 				want = 6
 			}
 			if sum != want {
-				t.Errorf("byStatus suma %d, want %d (%v)", sum, want, byStatus)
+				t.Errorf("byStatus sums %d, want %d (%v)", sum, want, byStatus)
 			}
 		})
 	}
 }
 
-// El mapa porStatus incluye los estados done y cancelled, no sólo los activos:
-// las barras del Overview se pintan para todo el workflow.
+// The byStatus map includes the done and cancelled statuses, not only the
+// active ones: the Overview bars are painted for the whole workflow.
 func TestDashStatusCountsMapIncludesDoneAndCancelled(t *testing.T) {
 	_, _, _, byStatus := dashStatusCounts(dashFixture, "")
 	for _, want := range []string{"todo", "doing", "done", "cancelled", "reviewing"} {
 		if _, ok := byStatus[want]; !ok {
-			t.Errorf("byStatus no tiene %q: %v", want, byStatus)
+			t.Errorf("byStatus does not have %q: %v", want, byStatus)
 		}
 	}
 	if byStatus["done"] != 1 || byStatus["cancelled"] != 1 {
-		t.Errorf("done/cancelled mal contados: %v", byStatus)
+		t.Errorf("done/cancelled wrongly counted: %v", byStatus)
 	}
 }
 
-// Un estado desconocido cuenta como activa: no está en done ni en cancelled.
+// An unknown status counts as active: it is neither in done nor in cancelled.
 func TestDashStatusCountsUnknownStatusIsActive(t *testing.T) {
 	tasks := dashTasks(model.Task{ProjectName: "api", Status: "backlog"})
 	active, done, cancelled, byStatus := dashStatusCounts(tasks, "")
 	if active != 1 || done != 0 || cancelled != 0 {
-		t.Errorf("un estado propio del workflow debe contar como activa, dio (%d,%d,%d)", active, done, cancelled)
+		t.Errorf("a status of the workflow itself must count as active, it gave (%d,%d,%d)", active, done, cancelled)
 	}
 	if byStatus["backlog"] != 1 {
 		t.Errorf("byStatus[backlog] = %d, want 1", byStatus["backlog"])
 	}
 }
 
-// dashAssigneeCounts: total y subcuenta de activas por persona.
+// dashAssigneeCounts: total and active subcount per person.
 func TestDashAssigneeCounts(t *testing.T) {
 	total, active := dashAssigneeCounts(dashFixture, "")
-	if total["@juan"] != 3 {
-		t.Errorf("total[@juan] = %d, want 3", total["@juan"])
+	if total["@john"] != 3 {
+		t.Errorf("total[@john] = %d, want 3", total["@john"])
 	}
-	// Las tres de @juan están activas; la única done del fixture es de @maria.
-	if active["@juan"] != 3 {
-		t.Errorf("activas[@juan] = %d, want 3 (ninguna suya está cerrada)", active["@juan"])
+	// The three of @john are active; the only done one in the fixture is @margo's.
+	if active["@john"] != 3 {
+		t.Errorf("active[@john] = %d, want 3 (none of theirs is closed)", active["@john"])
 	}
-	if total["@maria"] != 1 || active["@maria"] != 0 {
-		t.Errorf("@maria = %d total / %d activas, want 1/0", total["@maria"], active["@maria"])
+	if total["@margo"] != 1 || active["@margo"] != 0 {
+		t.Errorf("@margo = %d total / %d active, want 1/0", total["@margo"], active["@margo"])
 	}
-	if total["@ana"] != 2 || active["@ana"] != 1 {
-		t.Errorf("@ana = %d total / %d activas, want 2/1 (una está cancelled)", total["@ana"], active["@ana"])
+	if total["@ann"] != 2 || active["@ann"] != 1 {
+		t.Errorf("@ann = %d total / %d active, want 2/1 (one is cancelled)", total["@ann"], active["@ann"])
 	}
 }
 
-// El filtro de proyecto recorta las dos cuentas a la vez, no sólo el total.
+// The project filter trims both counts at once, not only the total.
 func TestDashAssigneeCountsFilterByProject(t *testing.T) {
 	total, active := dashAssigneeCounts(dashFixture, "api")
-	if total["@juan"] != 2 || active["@juan"] != 2 {
-		t.Errorf("en api @juan = %d/%d, want 2/2", total["@juan"], active["@juan"])
+	if total["@john"] != 2 || active["@john"] != 2 {
+		t.Errorf("in api @john = %d/%d, want 2/2", total["@john"], active["@john"])
 	}
-	if _, ok := total["@ana"]; ok {
-		t.Errorf("@ana no tiene tareas en api, pero aparece: %v", total)
+	if _, ok := total["@ann"]; ok {
+		t.Errorf("@ann has no tasks in api, but appears: %v", total)
 	}
 }
 
-// Ninguna persona puede tener más activas que totales.
+// No person can have more active ones than totals.
 func TestDashAssigneeCountsActiveNeverExceedsTotal(t *testing.T) {
 	total, active := dashAssigneeCounts(dashFixture, "")
 	for person, n := range active {
 		if n > total[person] {
-			t.Errorf("%s: %d activas sobre %d totales", person, n, total[person])
+			t.Errorf("%s: %d active over %d total", person, n, total[person])
 		}
 	}
 }
 
-// dashRowsAvailable: lo que queda tras lo usado y la cabecera. El suelo es 0.
+// dashRowsAvailable: what is left after the used ones and the header. The floor is 0.
 func TestDashRowsAvailable(t *testing.T) {
 	tests := []struct {
 		name                       string
 		colLines, used, headerRows int
 		want                       int
 	}{
-		{"con sitio de sobra", 20, 5, 3, 12},
-		{"justo", 10, 5, 3, 2},
-		{"cabe justo una fila", 9, 5, 3, 1},
-		{"sin filas", 8, 5, 3, 0},
-		{"sobrepasado da 0", 3, 5, 3, 0},
-		{"muy sobrepasado da 0", 0, 50, 3, 0},
-		// Con alturas negativas la resta da un número positivo: el suelo protege
-		// del caso real (la columna se quedó sin espacio), no de entradas
-		// imposibles.
-		{"restas que dan positivo", -5, -8, -2, 5},
+		{"with plenty of room", 20, 5, 3, 12},
+		{"exact", 10, 5, 3, 2},
+		{"exactly one row fits", 9, 5, 3, 1},
+		{"no rows", 8, 5, 3, 0},
+		{"overshooting gives 0", 3, 5, 3, 0},
+		{"heavily overshooting gives 0", 0, 50, 3, 0},
+		// With negative heights the subtraction gives a positive number: the
+		// floor protects against the real case (the column ran out of space),
+		// not against impossible entries.
+		{"subtractions that give a positive", -5, -8, -2, 5},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -190,38 +190,38 @@ func TestDashRowsAvailable(t *testing.T) {
 					tt.colLines, tt.used, tt.headerRows, got, tt.want)
 			}
 			if got < 0 {
-				t.Errorf("nunca puede ser negativo, dio %d", got)
+				t.Errorf("it can never be negative, it gave %d", got)
 			}
 		})
 	}
 }
 
-// Un presupuesto de 0 significa "no cabe nada más", y por eso el suelo es 0 y no
-// 1: con 1 el bloque crecería una línea sobre el alto calculado.
+// A budget of 0 means "nothing else fits", and that is why the floor is 0
+// and not 1: with 1 the block would grow one line beyond the calculated height.
 func TestDashRowsAvailableZeroMeansNothing(t *testing.T) {
 	if got := dashRowsAvailable(8, 5, 3); got != 0 {
-		t.Fatalf("presupuesto 0 esperado, dio %d", got)
+		t.Fatalf("budget 0 expected, it gave %d", got)
 	}
 	if got := dashRowsAvailable(9, 5, 3); got != 1 {
-		t.Fatalf("presupuesto 1 esperado, dio %d", got)
+		t.Fatalf("budget 1 expected, it gave %d", got)
 	}
 }
 
-// dashColumnWidths: dos columnas iguales con un hueco de 1 en medio.
+// dashColumnWidths: two equal columns with a gap of 1 in between.
 func TestDashColumnWidths(t *testing.T) {
 	tests := []struct {
 		name                string
 		innerW              int
 		wantLeft, wantRight int
 	}{
-		{"ancho normal", 78, 38, 38},
-		{"impar", 79, 38, 38},
-		{"muy par", 80, 39, 39},
-		{"estrecho", 10, 4, 4},
-		{"mínimamente útil", 6, 2, 2},
-		{"insuficiente", 4, 1, 1},
-		{"cero", 0, -1, -1},
-		{"negativo", -10, -6, -6},
+		{"normal width", 78, 38, 38},
+		{"odd", 79, 38, 38},
+		{"even", 80, 39, 39},
+		{"narrow", 10, 4, 4},
+		{"minimally useful", 6, 2, 2},
+		{"insufficient", 4, 1, 1},
+		{"zero", 0, -1, -1},
+		{"negative", -10, -6, -6},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -231,7 +231,7 @@ func TestDashColumnWidths(t *testing.T) {
 					tt.innerW, left, right, tt.wantLeft, tt.wantRight)
 			}
 			if left != right {
-				t.Errorf("las columnas deben ser iguales, dio %d y %d", left, right)
+				t.Errorf("the columns must be equal, it gave %d and %d", left, right)
 			}
 		})
 	}

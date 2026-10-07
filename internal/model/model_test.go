@@ -26,13 +26,13 @@ func TestParseWorkflowWithSpaces(t *testing.T) {
 	}
 }
 
-func TestParseWorkflowSoloEspacios(t *testing.T) {
-	// Separadores y blanks: no queda ningún estado, así que es un workflow
-	// inválido. Los blanks descartados aquí son los que se quedaban por
-	// completo compuestos de espacios, así que este caso también cubre el
-	// trim en sus dos extremos.
+func TestParseWorkflowOnlySpaces(t *testing.T) {
+	// Separators and blanks: no state remains, so it is an
+	// invalid workflow. The blanks discarded here are the ones that were left
+	// entirely composed of spaces, so this case also covers the
+	// trim at both of its ends.
 	if _, err := ParseWorkflow("  ,  ,"); err == nil {
-		t.Error("workflow sólo con espacios debería fallar")
+		t.Error("workflow with only spaces should fail")
 	}
 }
 
@@ -85,10 +85,10 @@ func TestFindStatusContaining(t *testing.T) {
 	}
 }
 
-// TestFindStatusContainingBordes cubre los bordes de la búsqueda parcial: el
-// sufijo, la cadena vacía y la coincidencia de la misma longitud que el
-// status. Ninguno debe depender de un recorrido con off-by-one.
-func TestFindStatusContainingBordes(t *testing.T) {
+// TestFindStatusContainingEdges covers the edges of the partial search: the
+// suffix, the empty string, and the match as long as the
+// status. None should depend on an off-by-one traversal.
+func TestFindStatusContainingEdges(t *testing.T) {
 	tests := []struct {
 		name   string
 		wf     []string
@@ -96,10 +96,10 @@ func TestFindStatusContainingBordes(t *testing.T) {
 		want   string
 		wantOK bool
 	}{
-		{"sufijo", []string{"in_review"}, "review", "in_review", true},
-		{"estado completo", []string{"todo", "done"}, "todo", "todo", true},
-		{"substr más largo que el status", []string{"todo"}, "todo_y_mas", "", false},
-		{"substr vacío no matchea", []string{"todo", "done"}, "", "", false},
+		{"suffix", []string{"in_review"}, "review", "in_review", true},
+		{"full status", []string{"todo", "done"}, "todo", "todo", true},
+		{"substr longer than the status", []string{"todo"}, "todo_and_more", "", false},
+		{"empty substr does not match", []string{"todo", "done"}, "", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -131,34 +131,34 @@ func TestStartStatus(t *testing.T) {
 		t.Errorf("StartStatus = %q, want todo", got)
 	}
 
-	// Sin backlog
+	// No backlog
 	wf2 := []string{"todo", "done"}
 	if got := StartStatus(wf2); got != "todo" {
 		t.Errorf("StartStatus (no backlog) = %q, want todo", got)
 	}
 
-	// Solo un elemento
+	// Only one element
 	wf3 := []string{"done"}
 	if got := StartStatus(wf3); got != "done" {
 		t.Errorf("StartStatus (single) = %q, want done", got)
 	}
 }
 
-// TestStartStatusWorkflowsCortosFixed el arranque con un workflow degenerado:
-// vacío, de un solo estado o de exactamente [backlog, X]. El contrato es que
-// nunca se devuelve un estado que no exista en el workflow, salvo el terminal.
-func TestStartStatusWorkflowsCortos(t *testing.T) {
+// TestStartStatusShortWorkflows covers startup with a degenerate workflow:
+// empty, single-state, or exactly [backlog, X]. The contract is that
+// a state that does not exist in the workflow is never returned, except the terminal one.
+func TestStartStatusShortWorkflows(t *testing.T) {
 	tests := []struct {
 		name string
 		wf   []string
 		want string
 	}{
-		{"vacío", nil, "done"},
-		{"un solo estado no terminal", []string{"todo"}, "done"},
-		{"backlog + exactamente uno", []string{"backlog", "todo"}, "todo"},
-		// El arranque es el segundo elemento tal cual: no se salta al terminal.
+		{"empty", nil, "done"},
+		{"a single non-terminal status", []string{"todo"}, "done"},
+		{"backlog + exactly one", []string{"backlog", "todo"}, "todo"},
+		// The startup is the second element as-is: it does not jump to the terminal.
 		{"backlog + done", []string{"backlog", "done"}, "done"},
-		{"sin backlog, un estado más", []string{"todo", "done"}, "todo"},
+		{"without backlog, one more status", []string{"todo", "done"}, "todo"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -205,18 +205,18 @@ func TestValidateWorkflow(t *testing.T) {
 	}
 }
 
-// TestDefaultWorkflowAndListOrderMismaComposicion verifica que ambos defaults
-// tengan los mismos estados, en distinto orden.
-func TestDefaultWorkflowAndListOrderMismaComposicion(t *testing.T) {
+// TestDefaultWorkflowAndListOrderSameComposition verifies that both defaults
+// have the same states, in a different order.
+func TestDefaultWorkflowAndListOrderSameComposition(t *testing.T) {
 	if len(DefaultWorkflow) != len(DefaultListOrder) {
-		t.Fatalf("len workflow=%d, list_order=%d, quieren iguales",
+		t.Fatalf("len workflow=%d, list_order=%d, they want the same",
 			len(DefaultWorkflow), len(DefaultListOrder))
 	}
 	if err := ValidateWorkflow(DefaultWorkflow); err != nil {
-		t.Errorf("DefaultWorkflow inválido: %v", err)
+		t.Errorf("invalid DefaultWorkflow: %v", err)
 	}
 	if err := ValidateListOrder(DefaultWorkflow, DefaultListOrder); err != nil {
-		t.Errorf("DefaultListOrder inválido: %v", err)
+		t.Errorf("invalid DefaultListOrder: %v", err)
 	}
 	seen := map[string]int{}
 	for _, s := range DefaultWorkflow {
@@ -227,7 +227,7 @@ func TestDefaultWorkflowAndListOrderMismaComposicion(t *testing.T) {
 	}
 	for s, n := range seen {
 		if n != 0 {
-			t.Errorf("estado %q no está en ambos defaults", s)
+			t.Errorf("status %q is not in both defaults", s)
 		}
 	}
 }

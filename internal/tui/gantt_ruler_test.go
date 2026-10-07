@@ -8,39 +8,39 @@ import (
 	"tsk/internal/model"
 )
 
-// renderGanttRuler construye una línea de labelW + 1 + dayCols columnas: la
-// etiqueta de cada semana alineada a su lunes, sobre una rejilla de espacios.
+// renderGanttRuler builds a line of labelW + 1 + dayCols columns: each
+// week's label aligned to its Monday, over a grid of spaces.
 //
-// El "+1" del medio es la columna separadora entre las etiquetas y el calendario.
-// Cambiarlo por "*1" quita una columna de la rejilla, y el resultado sale IGUAL
-// mientras la última columna quede vacía -- TrimRight se la come. Por eso un
-// test que mide el ancho de la línea no distingue nada, y por eso el mutante
-// sobrevivía: con cualquier número normal de días visibles la etiqueta de la
-// semana (4 letras, en columnas de 7) siempre tiene sitio de sobra.
+// The "+1" in the middle is the separator column between the labels and the
+// calendar. Changing it to "*1" removes a column from the grid, and the result
+// comes out THE SAME as long as the last column stays empty -- TrimRight eats
+// it. That is why a test that measures the width of the line tells nothing
+// apart, and that is why the mutant survived: with any normal number of
+// visible days the week label (4 letters, in columns of 7) always has room to spare.
 //
-// El caso que separa las dos cosas es dayCols == 1: la rejilla es de
-// labelW+2 columnas y la etiqueta se escribe en la columna labelW+1, que es la
-// última. Ahí el "+1" es justo lo que le da sitio al primer carácter. Sin él,
-// la condición `at+i < len(ruler)` descarta la etiqueta entera y el gantt se
-// queda sin los lunes rotulados.
+// The case that separates the two is dayCols == 1: the grid is of
+// labelW+2 columns and the label is written at column labelW+1, which is the
+// last one. There the "+1" is exactly what gives the first character room.
+// Without it, the condition `at+i < len(ruler)` discards the whole label and
+// the gantt is left without the labeled Mondays.
 
-func rulerDe(labelW, dayCols int) string {
-	lunes := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
+func rulerOf(labelW, dayCols int) string {
+	monday := time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC)
 	m := &Model{}
-	return sinANSI(m.renderGanttRuler(lunes, 0, labelW, dayCols))
+	return stripANSI(m.renderGanttRuler(monday, 0, labelW, dayCols))
 }
 
-// sinANSI quita los códigos de color para poder medir la línea.
-func sinANSI(s string) string {
+// stripANSI removes the color codes so the line can be measured.
+func stripANSI(s string) string {
 	var b strings.Builder
-	enEscape := false
+	inEscape := false
 	for _, r := range s {
 		switch {
 		case r == '\x1b':
-			enEscape = true
-		case enEscape:
+			inEscape = true
+		case inEscape:
 			if r == 'm' {
-				enEscape = false
+				inEscape = false
 			}
 		default:
 			b.WriteRune(r)
@@ -49,71 +49,71 @@ func sinANSI(s string) string {
 	return b.String()
 }
 
-// Cuatro días visibles: la etiqueta del lunes (cuatro letras) ocupa la columna
-// labelW+1 y las cuatro siguientes, así que su ÚLTIMO carácter cae en la última
-// columna de la rejilla. Esa columna existe por el "+1": sin él, la condición
-// `at+i < len(ruler)` descarta el último carácter y el gantt muestra "1MA".
-func TestGanttRulerEtiquetaAlUltimoDiaVisible(t *testing.T) {
-	etiqueta := model.WeekOfMonthLabel(time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC))
-	if etiqueta != "1MAR" {
-		t.Fatalf("la etiqueta del fixture es %q, want 1MAR", etiqueta)
+// Four visible days: the Monday label (four letters) takes column
+// labelW+1 and the next four, so its LAST character falls in the last
+// column of the grid. That column exists because of the "+1": without it, the
+// condition `at+i < len(ruler)` discards the last character and the gantt shows "1MA".
+func TestGanttRulerLabelsTheLastVisibleDay(t *testing.T) {
+	label := model.WeekOfMonthLabel(time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC))
+	if label != "1MAR" {
+		t.Fatalf("the fixture's label is %q, want 1MAR", label)
 	}
 
 	for _, labelW := range []int{0, 1, 2, 5} {
 		t.Run("labelW="+itoa(labelW), func(t *testing.T) {
 			const dayCols = 4
-			ruler := rulerDe(labelW, dayCols)
+			ruler := rulerOf(labelW, dayCols)
 
-			if !strings.Contains(ruler, etiqueta) {
-				t.Errorf("con cuatro días visibles la etiqueta del lunes no sale entera: %q, want %q",
-					ruler, etiqueta)
+			if !strings.Contains(ruler, label) {
+				t.Errorf("with four visible days the Monday label does not come out whole: %q, want %q",
+					ruler, label)
 			}
-			// La rejilla es de labelW+1+dayCols columnas, y la línea ni la pasa
-			// ni se queda corta: la etiqueta llega hasta el final.
+			// The grid is of labelW+1+dayCols columns, and the line neither goes
+			// past it nor falls short: the label reaches the end.
 			if n := len([]rune(ruler)); n != labelW+1+dayCols {
-				t.Errorf("la línea mide %d columnas, want %d (labelW+%d días): %q",
+				t.Errorf("the line measures %d columns, want %d (labelW+%d days): %q",
 					n, labelW+1+dayCols, dayCols, ruler)
 			}
 		})
 	}
 }
 
-// Con cero días visibles no hay lunes que rotular y la línea sale vacía: es el
-// otro borde del mismo rango, y dice que la condición `at+i < len(ruler)` es la
-// que protege, no que el "+1" sobre.
-func TestGanttRulerSinDiasVisibles(t *testing.T) {
+// With zero visible days there is no Monday to label and the line comes out
+// empty: it is the other edge of the same range, and it says the condition
+// `at+i < len(ruler)` is the one that protects, not that the "+1" is superfluous.
+func TestGanttRulerWithoutVisibleDays(t *testing.T) {
 	for _, labelW := range []int{0, 3, 8} {
-		if r := rulerDe(labelW, 0); r != "" {
-			t.Errorf("labelW=%d sin días visibles sale %q, want vacío", labelW, r)
+		if r := rulerOf(labelW, 0); r != "" {
+			t.Errorf("labelW=%d with no visible days comes out %q, want empty", labelW, r)
 		}
 	}
 }
 
-// Con los días de sobra, el "+1" no se nota: es el caso desde el que sale el
-// resto de los tests, y por eso no mataba el mutante. Está aquí para dejar escrito
-// que la diferencia es de margen, no de contenido.
-func TestGanttRulerConDiasDeSobra(t *testing.T) {
-	etiqueta := model.WeekOfMonthLabel(time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC))
+// With spare days the "+1" goes unnoticed: it is the case the rest of the
+// tests start from, and that is why it did not kill the mutant. It is here to
+// leave on record that the difference is margin, not content.
+func TestGanttRulerWithDaysToSpare(t *testing.T) {
+	label := model.WeekOfMonthLabel(time.Date(2026, 3, 2, 0, 0, 0, 0, time.UTC))
 
-	ruler := rulerDe(5, 21)
-	if !strings.Contains(ruler, etiqueta) {
-		t.Errorf("con tres semanas visibles la primera etiqueta no sale: %q", ruler)
+	ruler := rulerOf(5, 21)
+	if !strings.Contains(ruler, label) {
+		t.Errorf("with three visible weeks the first label does not come out: %q", ruler)
 	}
-	// Las tres semanas están a siete columnas una de otra.
+	// The three weeks are seven columns apart from one another.
 	for _, want := range []string{"1MAR", "2MAR", "3MAR"} {
 		if !strings.Contains(ruler, want) {
-			t.Errorf("con 21 días falta la etiqueta %q: %q", want, ruler)
+			t.Errorf("with 21 days the label %q is missing: %q", want, ruler)
 		}
 	}
-	// Y con cuatro días, la etiqueta se estira hasta el borde derecho. Ese
-	// contraste -- holgura por un lado, nada por el otro -- es el que hace
-	// legible el "+1".
-	if r := rulerDe(5, 4); !strings.Contains(r, etiqueta) {
-		t.Errorf("con cuatro días visibles la etiqueta no sale: %q", r)
+	// And with four days, the label stretches to the right edge. That
+	// contrast -- slack on one side, nothing on the other -- is what makes
+	// the "+1" readable.
+	if r := rulerOf(5, 4); !strings.Contains(r, label) {
+		t.Errorf("with four visible days the label does not come out: %q", r)
 	}
 }
 
-// itoa evita fmt para un solo número.
+// itoa avoids fmt for a single number.
 func itoa(n int) string {
 	if n == 0 {
 		return "0"

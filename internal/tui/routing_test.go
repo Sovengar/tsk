@@ -10,158 +10,158 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// vaAlTextareaDelAlta decide a dónde va un mensaje que no es ni tecla ni pegado.
+// goesToNewTaskTextarea decides where a message that is neither key nor paste goes.
 //
-// La condición estaba dentro del default de Update y no se podía comprobar:
-// los mensajes que llegan por esa rama son privados del paquete textarea
-// (pasteMsg, copyMsg), que no se exportan, así que un test no puede construir uno
-// para ver a dónde acaba. Con la decisión sacada a una función pura, el enrutado
-// se comprueba entero y sin necesitar el mensaje que lo dispara.
+// The condition was inside Update's default and could not be checked:
+// the messages arriving through that branch are private to the textarea
+// package (pasteMsg, copyMsg), which are not exported, so a test cannot
+// build one to see where it ends up. With the decision extracted to a pure
+// function, the routing is checked whole and without needing the message that triggers it.
 //
-// El caso que importa es el campo: sólo la descripción lleva textarea embebido,
-// porque es el único multilínea. Si el enrutado aceptara cualquier campo con el
-// alta abierta, las teclas de los campos de una línea llegarían al textarea y se
-// comerían: ese es el bug que un `==` mal puesto causaría, y es lo que esta tabla
-// ata.
-func TestVaAlTextareaDelAlta(t *testing.T) {
-	casos := []struct {
-		nombre      string
+// The case that matters is the field: only the description carries an embedded
+// textarea, because it is the only multiline one. If the routing accepted any
+// field with the form open, the keys of the one-line fields would reach the
+// textarea and be eaten: that is the bug a misplaced `==` would cause, and that
+// is what this table ties down.
+func TestGoesToNewTaskTextarea(t *testing.T) {
+	cases := []struct {
+		name        string
 		newTaskOpen bool
 		field       int
 		want        bool
 	}{
-		{"alta abierta en la descripción", true, newTaskFieldDescription, true},
-		{"alta abierta en el título", true, newTaskFieldTitle, false},
-		{"alta abierta en el responsable", true, newTaskFieldAssignee, false},
-		{"alta abierta en las tags", true, newTaskFieldTags, false},
-		{"alta abierta en la prioridad", true, newTaskFieldPriority, false},
-		{"alta cerrada en la descripción", false, newTaskFieldDescription, false},
-		{"alta cerrada en el título", false, newTaskFieldTitle, false},
+		{"form open on the description", true, newTaskFieldDescription, true},
+		{"form open on the title", true, newTaskFieldTitle, false},
+		{"form open on the assignee", true, newTaskFieldAssignee, false},
+		{"form open on the tags", true, newTaskFieldTags, false},
+		{"form open on the priority", true, newTaskFieldPriority, false},
+		{"form closed on the description", false, newTaskFieldDescription, false},
+		{"form closed on the title", false, newTaskFieldTitle, false},
 	}
 
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
-			got := vaAlTextareaDelAlta(c.newTaskOpen, c.field)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := goesToNewTaskTextarea(c.newTaskOpen, c.field)
 			if got != c.want {
-				t.Errorf("vaAlTextareaDelAlta(%v, campo %d) = %v, want %v",
+				t.Errorf("goesToNewTaskTextarea(%v, field %d) = %v, want %v",
 					c.newTaskOpen, c.field, got, c.want)
 			}
 		})
 	}
 }
 
-// La consecuencia de lo anterior, vista desde el Update: con el alta abierta en
-// un campo de una línea, un mensaje que no es tecla ni pegado no debe reenviarse
-// al textarea ni devolver su comando. Con el alta abierta en la descripción, sí.
-func TestElEnrutadoDeMensajesNoTeclaRespetaElCampo(t *testing.T) {
-	// Un mensaje cualquiera que cae en el default: no es KeyMsg ni PasteMsg ni
-	// ninguno de los tipos que el switch de Update reconoce uno a uno.
+// The consequence of the above, seen from Update: with the form open on a
+// one-line field, a message that is neither key nor paste must not be
+// forwarded to the textarea nor return its command. With the form open on the description, it must.
+func TestNonKeyMessageRoutingRespectsTheField(t *testing.T) {
+	// Any message that falls into the default: it is neither KeyMsg nor PasteMsg
+	// nor any of the types the Update switch recognizes one by one.
 	msg := struct{}{}
 
-	t.Run("campo de una línea: no se reenvía", func(t *testing.T) {
+	t.Run("one-line field: not forwarded", func(t *testing.T) {
 		m := newTestModel(t)
 		m.newTaskOpen = true
 		m.newTaskFieldIdx = newTaskFieldTitle
-		antes := m.newTaskTextarea.Value()
+		before := m.newTaskTextarea.Value()
 
-		modelo, cmd := m.Update(msg)
+		nextModel, cmd := m.Update(msg)
 		if cmd != nil {
-			t.Error("ha devuelto un comando con el cursor en el título: el mensaje ha ido al textarea")
+			t.Error("it returned a command with the cursor on the title: the message went to the textarea")
 		}
-		if modelo.(Model).newTaskTextarea.Value() != antes {
-			t.Error("el textarea ha cambiado con el cursor en el título")
+		if nextModel.(Model).newTaskTextarea.Value() != before {
+			t.Error("the textarea changed with the cursor on the title")
 		}
 	})
 
-	t.Run("campo de descripción: se reenvía", func(t *testing.T) {
+	t.Run("description field: forwarded", func(t *testing.T) {
 		m := newTestModel(t)
 		m.newTaskOpen = true
 		m.newTaskFieldIdx = newTaskFieldDescription
 
-		modelo, _ := m.Update(msg)
-		// Lo que se comprueba es que el camino se recorre: el Update del
-		// textarea con un mensaje desconocido no cambia nada, así que la prueba
-		// de que pasó por ahí es la condición, no el resultado. Lo que sí tiene
-		// que ser cierto es que no se rompe.
-		if got := modelo.(Model).newTaskTextarea.Value(); got != m.newTaskTextarea.Value() {
-			t.Errorf("el valor del textarea ha cambiado con un mensaje sin efecto: %q -> %q",
+		nextModel, _ := m.Update(msg)
+		// What is checked is that the path is walked: the textarea's Update
+		// with an unknown message changes nothing, so the proof that it went
+		// through there is the condition, not the result. What does have to be
+		// true is that nothing breaks.
+		if got := nextModel.(Model).newTaskTextarea.Value(); got != m.newTaskTextarea.Value() {
+			t.Errorf("the textarea value changed with a no-op message: %q -> %q",
 				m.newTaskTextarea.Value(), got)
 		}
 	})
 
-	t.Run("alta cerrada: no se reenvía", func(t *testing.T) {
+	t.Run("form closed: not forwarded", func(t *testing.T) {
 		m := newTestModel(t)
 		m.newTaskOpen = false
 		m.newTaskFieldIdx = newTaskFieldDescription
 
 		if _, cmd := m.Update(msg); cmd != nil {
-			t.Error("ha devuelto un comando con el alta cerrada")
+			t.Error("it returned a command with the form closed")
 		}
 	})
 }
 
-// filaEsTarea decide si el cursor del gantt está sobre una tarea.
+// rowIsTask decides whether the gantt's cursor is on a task.
 //
-// El rango con inRange en vez de `>= 0 && < len(rows)` es lo que hace que el
-// cursor en -1 y en len(rows) se puedan comprobar como valores y no como
-// "cualquier cosa que no sea una tarea".
-func TestFilaEsTarea(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan", "@maria"}, 3)
+// The range with inRange instead of `>= 0 && < len(rows)` is what makes the
+// cursor at -1 and at len(rows) checkable as values and not as
+// "anything that is not a task".
+func TestRowIsTask(t *testing.T) {
+	m := ganttModelWithPeople(t, []string{"@john", "@margo"}, 3)
 	m.currentView = viewGantt
 	m.width, m.height = 140, 40
-	filas := m.ganttRows()
+	rows := m.ganttRows()
 
-	// Una fila de tarea de verdad: dentro del rango y del tipo correcto.
-	tarea := -1
-	cabecera := -1
-	for i, f := range filas {
-		if f.kind == ganttTaskRow && tarea < 0 {
-			tarea = i
+	// A real task row: inside the range and of the right type.
+	taskIdx := -1
+	headerIdx := -1
+	for i, f := range rows {
+		if f.kind == ganttTaskRow && taskIdx < 0 {
+			taskIdx = i
 		}
-		if f.kind == ganttAssigneeRow && cabecera < 0 {
-			cabecera = i
-		}
-	}
-	if tarea < 0 || cabecera < 0 {
-		t.Fatalf("el fixture no ha dejado los dos tipos de fila: %d filas", len(filas))
-	}
-
-	if !filaEsTarea(filas, tarea) {
-		t.Errorf("la fila %d es una tarea y filaEsTarea dice que no", tarea)
-	}
-	if filaEsTarea(filas, cabecera) {
-		t.Errorf("la fila %d es una cabecera y filaEsTarea dice que sí", cabecera)
-	}
-
-	// Los bordes del rango, que es lo que inRange viene a sustituir. Con el
-	// rango escrito a mano, estos valores sólo se distinguían de los de la
-	// comparación interna si la fila que hay en ese sitio fuese del otro tipo --
-	// y en 0 no lo es nunca, porque la fila 0 es una cabecera.
-	for _, i := range []int{-1, len(filas), len(filas) + 5} {
-		if filaEsTarea(filas, i) {
-			t.Errorf("filaEsTarea(%d) dice que sí, con %d filas", i, len(filas))
+		if f.kind == ganttAssigneeRow && headerIdx < 0 {
+			headerIdx = i
 		}
 	}
+	if taskIdx < 0 || headerIdx < 0 {
+		t.Fatalf("the fixture left neither of the two row types: %d rows", len(rows))
+	}
 
-	// Y una tabla vacía: todo índice está fuera.
+	if !rowIsTask(rows, taskIdx) {
+		t.Errorf("row %d is a task and rowIsTask says no", taskIdx)
+	}
+	if rowIsTask(rows, headerIdx) {
+		t.Errorf("row %d is a header and rowIsTask says yes", headerIdx)
+	}
+
+	// The edges of the range, which is what inRange comes to replace. With the
+	// range written by hand, these values only told themselves apart from the
+	// internal comparison's if the row sitting there were of the other type --
+	// and at 0 it never is, because row 0 is a header.
+	for _, i := range []int{-1, len(rows), len(rows) + 5} {
+		if rowIsTask(rows, i) {
+			t.Errorf("rowIsTask(%d) says yes, with %d rows", i, len(rows))
+		}
+	}
+
+	// And an empty table: every index is out.
 	for _, i := range []int{-1, 0, 1} {
-		if filaEsTarea(nil, i) {
-			t.Errorf("filaEsTarea(nil, %d) dice que sí", i)
+		if rowIsTask(nil, i) {
+			t.Errorf("rowIsTask(nil, %d) says yes", i)
 		}
 	}
-	// Con una lista vacía inRange no debe devolver true ni para 0, que es el
-	// caso que un `idx <= n` habría colado.
+	// With an empty list inRange must not return true even for 0, which is the
+	// case a `idx <= n` would have let through.
 	if inRange(0, 0) {
-		t.Error("inRange(0, 0) dice que 0 está en una lista de 0 elementos")
+		t.Error("inRange(0, 0) says 0 is in a list of 0 elements")
 	}
 }
 
-// cycleProjectFilter tiene tres salidas y las tres tienen que estar:
-// sin proyectos no hay nada que recorrer; con el filtro actual fuera de la lista
-// el salto arranca por el principio; y el caso normal, que es el de todos los
-// días.
-func TestCycleProjectFilterSalidas(t *testing.T) {
-	t.Run("un solo proyecto: el filtro SÍ salta", func(t *testing.T) {
+// cycleProjectFilter has three exits and all three have to be there:
+// with no projects there is nothing to walk; with the current filter out of
+// the list the jump starts at the beginning; and the normal case, which is
+// the everyday one.
+func TestCycleProjectFilterExits(t *testing.T) {
+	t.Run("a single project: the filter DOES jump", func(t *testing.T) {
 		m := newTestModel(t)
 		m.currentView = viewList
 		m.projects = []model.Project{{Name: "api"}}
@@ -169,286 +169,286 @@ func TestCycleProjectFilterSalidas(t *testing.T) {
 
 		m.cycleProjectFilter(1)
 
-		// Con un proyecto hay DOS opciones -- "all" y "api" -- así que advancing
-		// tiene que llevar a "all". Antes esto no se movía, porque la guarda
-		// `len(opts) <= 1` contaba mal: trataba "all" como si no contara.
+		// With a project there are TWO options -- "all" and "api" -- so advancing
+		// has to lead to "all". Before, this did not move, because the guard
+		// `len(opts) <= 1` counted wrong: it treated "all" as if it did not count.
 		if m.filterProject != "" {
-			t.Errorf("con un solo proyecto el filtro se ha quedado en %q, want el primero (\"all\")",
+			t.Errorf("with a single project the filter stayed at %q, want the first one (\"all\")",
 				m.filterProject)
 		}
 	})
 
-	t.Run("el filtro actual no está en la lista: salta desde el principio", func(t *testing.T) {
+	t.Run("the current filter is not in the list: jumps from the start", func(t *testing.T) {
 		m := newTestModel(t)
 		m.currentView = viewList
-		// El filtro apunta a algo que ya no es una opción -- un proyecto
-		// borrado, o un nombre escrito a mano. El recorrido tiene que arrancar
-		// por el principio en vez de quedarse donde está.
-		m.filterProject = "no-existe"
+		// The filter points at something that is no longer an option -- a
+		// deleted project, or a hand-written name. The walk has to start at the
+		// beginning instead of staying where it is.
+		m.filterProject = "missing"
 
 		m.cycleProjectFilter(1)
 
-		if m.filterProject == "no-existe" {
-			t.Error("con un filtro fuera de la lista, avanzar no ha hecho nada")
+		if m.filterProject == "missing" {
+			t.Error("with a filter outside the list, advancing did nothing")
 		}
 	})
 
-	t.Run("el normal: alterna entre las opciones", func(t *testing.T) {
+	t.Run("the normal one: alternates between the options", func(t *testing.T) {
 		m := newTestModel(t)
 		m.currentView = viewList
 		m.filterProject = ""
 
-		opciones := m.filterFieldOptions(filterFieldProject)
-		if len(opciones) < 3 {
-			t.Skipf("el fixture sólo tiene %d opciones", len(opciones))
+		options := m.filterFieldOptions(filterFieldProject)
+		if len(options) < 3 {
+			t.Skipf("the fixture only has %d options", len(options))
 		}
 
-		vistos := map[string]bool{}
-		vistos[m.filterProject] = true
-		for range len(opciones) {
+		seen := map[string]bool{}
+		seen[m.filterProject] = true
+		for range len(options) {
 			m.cycleProjectFilter(1)
-			vistos[m.filterProject] = true
+			seen[m.filterProject] = true
 		}
-		if len(vistos) != len(opciones) {
-			t.Errorf("ha pasado por %d valores distintos, want %d: %v",
-				len(vistos), len(opciones), vistos)
+		if len(seen) != len(options) {
+			t.Errorf("it went through %d distinct values, want %d: %v",
+				len(seen), len(options), seen)
 		}
 	})
 }
 
-// siguienteOpcion es la función pura del salto del filtro. Los tres casos -- la
-// lista vacía, el valor actual ausente y el normal -- se prueban aquí sin
-// montar un modelo, que es justo lo que la versión anterior no permitía.
-func TestSiguienteOpcion(t *testing.T) {
+// nextOption is the pure function of the filter's jump. The three cases
+// -- the empty list, the current value absent and the normal one -- are
+// tested here without building a model, which is exactly what the previous version did not allow.
+func TestNextOption(t *testing.T) {
 	opts := []string{"all", "api", "web"}
 
-	t.Run("hacia delante", func(t *testing.T) {
-		if got := siguienteOpcion(opts, "all", 1); got != "api" {
-			t.Errorf("siguienteOpcion(all, +1) = %q, want api", got)
+	t.Run("forwards", func(t *testing.T) {
+		if got := nextOption(opts, "all", 1); got != "api" {
+			t.Errorf("nextOption(all, +1) = %q, want api", got)
 		}
-		if got := siguienteOpcion(opts, "web", 1); got != "all" {
-			t.Errorf("siguienteOpcion(web, +1) = %q, want all (da la vuelta)", got)
-		}
-	})
-
-	t.Run("hacia atrás", func(t *testing.T) {
-		if got := siguienteOpcion(opts, "api", -1); got != "all" {
-			t.Errorf("siguienteOpcion(api, -1) = %q, want all", got)
-		}
-		if got := siguienteOpcion(opts, "all", -1); got != "web" {
-			t.Errorf("siguienteOpcion(all, -1) = %q, want web (da la vuelta)", got)
+		if got := nextOption(opts, "web", 1); got != "all" {
+			t.Errorf("nextOption(web, +1) = %q, want all (wraps around)", got)
 		}
 	})
 
-	t.Run("el valor actual no está: arranca por el principio", func(t *testing.T) {
-		if got := siguienteOpcion(opts, "borrado", 1); got != "api" {
-			t.Errorf("siguienteOpcion(borrado, +1) = %q, want api", got)
+	t.Run("backwards", func(t *testing.T) {
+		if got := nextOption(opts, "api", -1); got != "all" {
+			t.Errorf("nextOption(api, -1) = %q, want all", got)
 		}
-		// Y hacia atrás también arranca por el principio: con el índice a 0, ir
-		// para atrás da el último, no el primero.
-		if got := siguienteOpcion(opts, "borrado", -1); got != "web" {
-			t.Errorf("siguienteOpcion(borrado, -1) = %q, want web", got)
+		if got := nextOption(opts, "all", -1); got != "web" {
+			t.Errorf("nextOption(all, -1) = %q, want web (wraps around)", got)
 		}
 	})
 
-	t.Run("lista vacía", func(t *testing.T) {
-		for _, vacia := range [][]string{nil, {}} {
-			if got := siguienteOpcion(vacia, "api", 1); got != "" {
-				t.Errorf("siguienteOpcion(lista vacía, +1) = %q, want \"\"", got)
+	t.Run("the current value is absent: starts at the beginning", func(t *testing.T) {
+		if got := nextOption(opts, "deleted", 1); got != "api" {
+			t.Errorf("nextOption(deleted, +1) = %q, want api", got)
+		}
+		// And backwards it also starts at the beginning: with the index at 0,
+		// going back gives the last one, not the first.
+		if got := nextOption(opts, "deleted", -1); got != "web" {
+			t.Errorf("nextOption(deleted, -1) = %q, want web", got)
+		}
+	})
+
+	t.Run("empty list", func(t *testing.T) {
+		for _, emptyList := range [][]string{nil, {}} {
+			if got := nextOption(emptyList, "api", 1); got != "" {
+				t.Errorf("nextOption(empty list, +1) = %q, want \"\"", got)
 			}
-			if got := siguienteOpcion(vacia, "api", -1); got != "" {
-				t.Errorf("siguienteOpcion(lista vacía, -1) = %q, want \"\"", got)
+			if got := nextOption(emptyList, "api", -1); got != "" {
+				t.Errorf("nextOption(empty list, -1) = %q, want \"\"", got)
 			}
 		}
 	})
 
-	t.Run("una sola opción: se queda en ella", func(t *testing.T) {
-		uno := []string{"all"}
-		if got := siguienteOpcion(uno, "all", 1); got != "all" {
-			t.Errorf("siguienteOpcion([all], +1) = %q, want all", got)
+	t.Run("a single option: stays on it", func(t *testing.T) {
+		one := []string{"all"}
+		if got := nextOption(one, "all", 1); got != "all" {
+			t.Errorf("nextOption([all], +1) = %q, want all", got)
 		}
-		if got := siguienteOpcion(uno, "all", -1); got != "all" {
-			t.Errorf("siguienteOpcion([all], -1) = %q, want all", got)
+		if got := nextOption(one, "all", -1); got != "all" {
+			t.Errorf("nextOption([all], -1) = %q, want all", got)
 		}
 	})
 
-	t.Run("ida y vuelta: vuelve al punto de partida", func(t *testing.T) {
-		for _, actual := range opts {
-			ida := siguienteOpcion(opts, actual, 1)
-			vuelta := siguienteOpcion(opts, ida, -1)
-			if vuelta != actual {
-				t.Errorf("de %q hacia +1 sale %q y de ahí hacia -1 sale %q, want %q",
-					actual, ida, vuelta, actual)
+	t.Run("there and back: returns to the starting point", func(t *testing.T) {
+		for _, current := range opts {
+			there := nextOption(opts, current, 1)
+			back := nextOption(opts, there, -1)
+			if back != current {
+				t.Errorf("from %q forward gives %q and from there backward gives %q, want %q",
+					current, there, back, current)
 			}
 		}
 	})
 }
 
-// El recorte de las líneas de comentario y de las tarjetas del kanban.
+// The truncation of comment lines and of kanban cards.
 //
-// Los dos discountan un margen fijo antes de truncar, y ese margen es lo que
-// impide que el texto se salga de la caja. Con el número escrito a pelo (`width -
-// 2`) no se sabía qué estaba descontando; con las constantes con nombre se puede
-// comprobar, y lo que se comprueba es que un texto que llega justo al borde
-// pierde exactamente esas columnas y ni una más.
-func TestElMargenDelRecorteEsElDeclarado(t *testing.T) {
-	const ancho = 30
+// Both discount a fixed margin before truncating, and that margin is what
+// keeps the text from going out of the box. With the number written raw
+// (`width - 2`) it was not known what it was discounting; with named
+// constants it can be checked, and what is checked is that a text arriving
+// exactly at the edge loses exactly those columns and not one more.
+func TestTruncationMarginIsTheDeclaredOne(t *testing.T) {
+	const width = 30
 
-	t.Run("comentarios", func(t *testing.T) {
+	t.Run("comments", func(t *testing.T) {
 		m := newDetailModel(t, 1)
-		m.width, m.height = ancho, 24
-		// Un cuerpo que no cabe de sobra: así el recorte es activo y el margen
-		// se nota.
+		m.width, m.height = width, 24
+		// A body that does not fit with room to spare: that way the truncation
+		// is active and the margin shows.
 		m.detailComments[0].Body = strings.Repeat("w", 200)
 
-		lineas := m.renderCommentLines(ancho)
-		if len(lineas) != 1 {
-			t.Fatalf("líneas = %d, want 1", len(lineas))
+		lines := m.renderCommentLines(width)
+		if len(lines) != 1 {
+			t.Fatalf("lines = %d, want 1", len(lines))
 		}
-		anchoT := ansi.StringWidth(lineas[0])
-		want := ancho - prefijoComentario - huecoFecha
-		if anchoT > want {
-			t.Errorf("la línea del comentario mide %d columnas y el margen deja %d: %q",
-				anchoT, want, lineas[0])
+		lineWidth := ansi.StringWidth(lines[0])
+		want := width - commentPrefix - dateGap
+		if lineWidth > want {
+			t.Errorf("the comment line measures %d columns and the margin leaves %d: %q",
+				lineWidth, want, lines[0])
 		}
-		// Y con un margen más estrecho (una columna menos) el texto entraría, así
-		// que un `width - 3` sí se distinguiría. Se comprueba que NO cabe con el
-		// margen declarado.
-		if ansi.StringWidth(lineas[0]) == want+1 {
-			t.Error("la línea ha entrado justa: el recorte no ha quitado nada")
+		// And with a narrower margin (one column less) the text would fit, so
+		// a `width - 3` would tell itself apart. It is checked that it does NOT
+		// fit with the declared margin.
+		if ansi.StringWidth(lines[0]) == want+1 {
+			t.Error("the line fit exactly: the truncation removed nothing")
 		}
 	})
 
-	t.Run("tarjetas del kanban", func(t *testing.T) {
+	t.Run("kanban cards", func(t *testing.T) {
 		m := newTestModel(t)
 		m.currentView = viewKanban
 		m.width, m.height = 40, 30
 
-		// El recorte ocurre ANTES del borde, sobre el texto de la tarjeta, y
-		// luego se le mete un prefijo de 2 columnas. Así que el límite real del
-		// título es ancho - margenTarjeta - prefijo.
+		// The truncation happens BEFORE the border, on the card's text, and
+		// then a 2-column prefix is put in it. So the real limit of the
+		// title is width - cardMargin - prefix.
 		//
-		// La caja rellena a la derecha con espacios hasta el ancho de la columna,
-		// así que medir la línea entera no dice nada: lo que se mide es cuántos
-		// caracteres del título salen, que es exactamente lo que el margen
-		// controla.
-		const anchoCol = 20
-		const prefijo = 2
-		limite := anchoCol - margenTarjeta - prefijo
+		// The box pads on the right with spaces up to the column width, so
+		// measuring the whole line says nothing: what is measured is how many
+		// characters of the title come out, which is exactly what the margin
+		// controls.
+		const colWidth = 20
+		const prefix = 2
+		limit := colWidth - cardMargin - prefix
 
-		card := func(titulo string) string {
+		card := func(title string) string {
 			col := kanbanColumn{
 				status: "todo",
-				tasks:  []model.Task{{ID: 1, Title: titulo, Assignee: "@juan"}},
+				tasks:  []model.Task{{ID: 1, Title: title, Assignee: "@john"}},
 			}
-			return m.renderKanbanColumn(col, anchoCol, "header", false, columnWindow{0, 1})
+			return m.renderKanbanColumn(col, colWidth, "header", false, columnWindow{0, 1})
 		}
 
-		// La letra de relleno no aparece en ningún otro sitio de la tarjeta --
-		// ni en "@juan" ni en la cabecera --, así que contarla cuenta el título.
-		const letra = "x"
+		// The padding letter does not appear anywhere else on the card --
+		// neither in "@john" nor in the header --, so counting it counts the title.
+		const letter = "x"
 
-		// Un título largo se recorta al límite, ni una columna más.
-		largo := strings.Repeat(letra, limite+50)
-		if n := strings.Count(card(largo), letra); n != limite {
-			t.Errorf("un título larguísimo sale con %d caracteres, want %d (el límite declarado)", n, limite)
+		// A long title is truncated to the limit, not one column more.
+		longTitle := strings.Repeat(letter, limit+50)
+		if n := strings.Count(card(longTitle), letter); n != limit {
+			t.Errorf("a very long title comes out with %d characters, want %d (the declared limit)", n, limit)
 		}
 
-		// El borde por los dos lados: uno que mide EXACTAMENTE el límite sale
-		// entero, y uno con una columna más sale recortado. Eso es lo que separa
-		// el margen declarado de uno más estrecho.
-		justo := strings.Repeat(letra, limite)
-		if n := strings.Count(card(justo), letra); n != limite {
-			t.Errorf("un título de %d columnas sale con %d: el que cabe justo no debe perder nada",
-				limite, n)
+		// The edge from both sides: one that measures EXACTLY the limit comes
+		// out whole, and one with a column more comes out truncated. That is
+		// what separates the declared margin from a narrower one.
+		exactTitle := strings.Repeat(letter, limit)
+		if n := strings.Count(card(exactTitle), letter); n != limit {
+			t.Errorf("a title of %d columns comes out with %d: one that fits exactly must not lose anything",
+				limit, n)
 		}
-		unaMas := strings.Repeat(letra, limite+1)
-		if n := strings.Count(card(unaMas), letra); n != limite {
-			t.Errorf("un título de %d columnas sale con %d, want %d: el que no cabe pierde la de más",
-				limite+1, n, limite)
+		oneMoreTitle := strings.Repeat(letter, limit+1)
+		if n := strings.Count(card(oneMoreTitle), letter); n != limit {
+			t.Errorf("a title of %d columns comes out with %d, want %d: one that does not fit loses the extra column",
+				limit+1, n, limit)
 		}
 	})
 }
 
-// estimateNoNegativo y el centinela que lo distingue de "el estimate es cero".
+// nonNegativeEstimate and the sentinel that tells it apart from "the estimate is zero".
 //
-// Es el par de casos que hace alcanzable la comparación del llamante: un estimate
-// de 0 es un valor legítimo y tiene que pasar, y un estimate ausente tiene que
-// distinguishable de él. Con el centinela en -1 los dos son hechos distintos; sin
-// él, "no venía" y "venía a cero" eran lo mismo y la comparación `>= 0` no tenía un
-// caso que la distinguiera de su `> 0`.
-func TestEstimateNoNegativo(t *testing.T) {
-	casos := []struct {
-		nombre string
-		in     string
-		want   float64
+// It is the pair of cases that makes the caller's comparison reachable: an
+// estimate of 0 is a legitimate value and has to pass, and an absent estimate
+// has to be distinguishable from it. With the sentinel at -1 the two are
+// distinct facts; without it, "was not there" and "came as zero" were the
+// same and the `>= 0` comparison had no case that told it apart from its `> 0`.
+func TestNonNegativeEstimate(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want float64
 	}{
-		{"cero", "0", 0},
-		{"cero con decimales", "0.0", 0},
-		{"negativo cero", "-0", 0},
-		{"uno", "1", 1},
-		{"medio", "0.5", 0.5},
-		{"con signo más", "+2", 2},
-		{"ciento veinte", "120", 120},
+		{"zero", "0", 0},
+		{"zero with decimals", "0.0", 0},
+		{"negative zero", "-0", 0},
+		{"one", "1", 1},
+		{"half", "0.5", 0.5},
+		{"with a plus sign", "+2", 2},
+		{"one hundred twenty", "120", 120},
 
-		{"negativo", "-1", estimateAusente},
-		{"negativo pequeño", "-0.5", estimateAusente},
-		{"el centinela escrito tal cual", "-1.0000001", estimateAusente},
+		{"negative", "-1", estimateAbsent},
+		{"small negative", "-0.5", estimateAbsent},
+		{"the sentinel written as-is", "-1.0000001", estimateAbsent},
 
-		{"no es un número", "abc", estimateAusente},
-		{"vacío", "", estimateAusente},
-		{"con unidades", "3d", estimateAusente},
-		{"nan", "NaN", estimateAusente},
-		{"infinito positivo", "+Inf", math.Inf(1)},
+		{"not a number", "abc", estimateAbsent},
+		{"empty", "", estimateAbsent},
+		{"with units", "3d", estimateAbsent},
+		{"nan", "NaN", estimateAbsent},
+		{"positive infinity", "+Inf", math.Inf(1)},
 	}
 
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
-			if got := estimateNoNegativo(c.in); got != c.want {
-				t.Errorf("estimateNoNegativo(%q) = %v, want %v", c.in, got, c.want)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := nonNegativeEstimate(c.in); got != c.want {
+				t.Errorf("nonNegativeEstimate(%q) = %v, want %v", c.in, got, c.want)
 			}
 		})
 	}
 }
 
-// El centinela tiene que ser un valor que ningún estimate real pueda tomar, o el
-// "no viene" se confunde con un dato bueno.
-func TestElCentinelaNoEsUnEstimateValido(t *testing.T) {
-	if estimateAusente >= 0 {
-		t.Fatalf("el centinela es %v, y cualquier valor >= 0 es un estimate válido", estimateAusente)
+// The sentinel has to be a value no real estimate can take, or the
+// "no estimate" gets confused with good data.
+func TestSentinelIsNotAValidEstimate(t *testing.T) {
+	if estimateAbsent >= 0 {
+		t.Fatalf("the sentinel is %v, and any value >= 0 is a valid estimate", estimateAbsent)
 	}
-	// Y tiene que ser el único valor que devuelve el centinela para una entrada
-	// que no es un número: el valor de retorno no depende del texto.
-	for _, entrada := range []string{"", "abc", "-5", "-0.0001"} {
-		if got := estimateNoNegativo(entrada); got != estimateAusente {
-			t.Errorf("estimateNoNegativo(%q) = %v, want el centinela %v",
-				entrada, got, estimateAusente)
+	// And it has to be the only value the sentinel returns for an input that
+	// is not a number: the return value does not depend on the text.
+	for _, input := range []string{"", "abc", "-5", "-0.0001"} {
+		if got := nonNegativeEstimate(input); got != estimateAbsent {
+			t.Errorf("nonNegativeEstimate(%q) = %v, want the sentinel %v",
+				input, got, estimateAbsent)
 		}
 	}
 }
 
-// El viaje completo por la plantilla: un estimate de 0 tiene que llegar a la
-// tarea guardada, y un estimate ausente tiene que quedarse en el valor por
-// defecto. Es el caso que el centinela hace posible.
-func TestElEstimateCeroSeGuardaYElAusenteNo(t *testing.T) {
-	tarea := model.Task{ID: 1, Title: "t", Estimate: 5}
+// The full trip through the template: an estimate of 0 has to arrive at the
+// saved task, and an absent estimate has to stay at the default. It is the
+// case the sentinel makes possible.
+func TestZeroEstimateIsSavedAndAbsentIsNot(t *testing.T) {
+	task := model.Task{ID: 1, Title: "t", Estimate: 5}
 
-	casos := []struct {
-		nombre       string
-		plantilla    string
+	cases := []struct {
+		name         string
+		template     string
 		wantEstimate float64
 	}{
-		{"estimate cero", "# t\n\nd\n\n---\nestimate: 0", 0},
-		{"estimate ausente", "# t\n\nd\n\n---\nassignee: @juan", 0},
-		{"estimate negativo", "# t\n\nd\n\n---\nestimate: -3", 0},
-		{"estimate normal", "# t\n\nd\n\n---\nestimate: 2.5", 2.5},
+		{"zero estimate", "# t\n\nd\n\n---\nestimate: 0", 0},
+		{"absent estimate", "# t\n\nd\n\n---\nassignee: @john", 0},
+		{"negative estimate", "# t\n\nd\n\n---\nestimate: -3", 0},
+		{"normal estimate", "# t\n\nd\n\n---\nestimate: 2.5", 2.5},
 	}
 
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
-			title, desc, assignee, priority, estimate, tags := parseEditFile(c.plantilla)
-			if title != tarea.Title {
-				t.Errorf("title = %q, want %q", title, tarea.Title)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			title, desc, assignee, priority, estimate, tags := parseEditFile(c.template)
+			if title != task.Title {
+				t.Errorf("title = %q, want %q", title, task.Title)
 			}
 			if desc != "d" {
 				t.Errorf("desc = %q, want %q", desc, "d")

@@ -5,15 +5,15 @@ import (
 	"time"
 )
 
-// PriorityLabel y PriorityBar tienen un `default` que los tests existentes no
-// tocaban, y los tres casos no prioritarios devolvían etiquetas distintas.
+// PriorityLabel and PriorityBar have a `default` that the existing tests did not
+// touch, and the three non-priority cases returned different labels.
 func TestPriorityLabelsCoverEveryPriority(t *testing.T) {
 	for _, tc := range []struct {
-		prio     int
-		label    string
-		short    string
-		bar      string
-		esUltima bool
+		prio   int
+		label  string
+		short  string
+		bar    string
+		isLast bool
 	}{
 		{prio: PriorityLow, label: "LOW", short: "L", bar: "●"},
 		{prio: PriorityMedium, label: "MED", short: "M", bar: "●"},
@@ -35,9 +35,9 @@ func TestPriorityLabelsCoverEveryPriority(t *testing.T) {
 	}
 }
 
-// ParseTagsJSON no falla nunca: un JSON que no es una lista de cadenas es lo
-// mismo que no tener tags. Perder las tags de una tarea es malo, pero perder la
-// tarea entera de la vista sería peor.
+// ParseTagsJSON never fails: a JSON that is not a list of strings is the
+// same as having no tags. Losing a task's tags is bad, but losing the whole
+// task from the view would be worse.
 func TestParseTagsJSONIsTotal(t *testing.T) {
 	for _, tc := range []struct {
 		in   string
@@ -48,8 +48,8 @@ func TestParseTagsJSONIsTotal(t *testing.T) {
 		{in: `null`, want: nil},
 		{in: `[`, want: nil},
 		{in: `{"a":1}`, want: nil},
-		{in: `["uno"]`, want: []string{"uno"}},
-		{in: `["  uno  ","DOS","dos"]`, want: []string{"uno", "dos"}},
+		{in: `["one"]`, want: []string{"one"}},
+		{in: `["  one  ","TWO","two"]`, want: []string{"one", "two"}},
 	} {
 		t.Run(tc.in, func(t *testing.T) {
 			got := ParseTagsJSON(tc.in)
@@ -65,12 +65,12 @@ func TestParseTagsJSONIsTotal(t *testing.T) {
 	}
 }
 
-// ParseWorkflowJSON sí devuelve error, a diferencia de ParseTagsJSON: un workflow
-// ilegible es un dato corrupto que hay que reportar, no algo que se pueda
-// sustituir por un default sin que nadie se entere.
+// ParseWorkflowJSON does return an error, unlike ParseTagsJSON: an unreadable
+// workflow is corrupt data that has to be reported, not something that can be
+// replaced by a default without anyone noticing.
 func TestParseWorkflowJSONReportsBadInput(t *testing.T) {
 	if _, err := ParseWorkflowJSON(`["backlog"`); err == nil {
-		t.Error("ParseWorkflowJSON con JSON truncado: want error")
+		t.Error("ParseWorkflowJSON with truncated JSON: want error")
 	}
 	got, err := ParseWorkflowJSON(`["backlog","done"]`)
 	if err != nil {
@@ -81,71 +81,71 @@ func TestParseWorkflowJSONReportsBadInput(t *testing.T) {
 	}
 }
 
-// Los off-days con fechas ilegíveis se descartan en vez de tumbar el calendario
-// entero, y un rango escrito al revés se normaliza. Los dos son cosas que un
-// usuario puede escribir sin querer.
+// Off-days with unreadable dates are dropped instead of taking down the whole
+// calendar, and a range written backwards is normalized. Both are things a
+// user can type by accident.
 func TestOffRangesSkipBadDatesAndNormalizeReversedRanges(t *testing.T) {
 	offdays := []OffDay{
-		{Assignee: "@juan", StartDate: "2026-03-02", EndDate: "2026-03-01", Note: "al revés"},
-		{Assignee: "@juan", StartDate: "no-es-fecha", EndDate: "2026-03-05", Note: "inicio malo"},
-		{Assignee: "@juan", StartDate: "2026-03-06", EndDate: "tampoco", Note: "fin malo"},
-		{Assignee: "@maria", StartDate: "2026-03-03", EndDate: "2026-03-04", Note: "bueno"},
+		{Assignee: "@john", StartDate: "2026-03-02", EndDate: "2026-03-01", Note: "backwards"},
+		{Assignee: "@john", StartDate: "not-a-date", EndDate: "2026-03-05", Note: "bad start"},
+		{Assignee: "@john", StartDate: "2026-03-06", EndDate: "not-a-date", Note: "bad end"},
+		{Assignee: "@margo", StartDate: "2026-03-03", EndDate: "2026-03-04", Note: "good"},
 	}
 
 	got := offRangesByAssignee(offdays)
 
-	juan, ok := got["@juan"]
+	john, ok := got["@john"]
 	if !ok {
-		t.Fatalf("no hay rangos para @juan: %v", got)
+		t.Fatalf("no ranges for @john: %v", got)
 	}
-	if len(juan) != 1 {
-		t.Fatalf("@juan tiene %d rangos, want 1 (los dos ilegibles se descartan)", len(juan))
+	if len(john) != 1 {
+		t.Fatalf("@john has %d ranges, want 1 (the two unreadable ones are dropped)", len(john))
 	}
-	if want := (time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)); !juan[0].start.Equal(want) {
-		t.Errorf("el rango empieza el %s, want %s: un rango al revés se normaliza",
-			juan[0].start.Format("2006-01-02"), want.Format("2006-01-02"))
+	if want := (time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)); !john[0].start.Equal(want) {
+		t.Errorf("the range starts on %s, want %s: a reversed range is normalized",
+			john[0].start.Format("2006-01-02"), want.Format("2006-01-02"))
 	}
 
-	if len(got["@maria"]) != 1 {
-		t.Errorf("@maria tiene %d rangos, want 1", len(got["@maria"]))
+	if len(got["@margo"]) != 1 {
+		t.Errorf("@margo has %d ranges, want 1", len(got["@margo"]))
 	}
 }
 
-// El filtro del calendario tiene que dejar pasar las tareas sin responsable:
-// son las que no aparecen en ninguna cola de persona, así que si el filtro las
-// eliminara desaparecerían de la vista sin más.
+// The calendar filter has to let unassigned tasks through:
+// they are the ones that do not appear in any person's queue, so if the filter
+// removed them they would vanish from the view, plain and simple.
 func TestFilterScheduleKeepsUnassignedTasks(t *testing.T) {
-	tarea := func(assignee string) Task {
+	newTask := func(assignee string) Task {
 		return Task{Assignee: assignee, Priority: PriorityHigh}
 	}
-	horquilla := &Schedule{
+	schedule := &Schedule{
 		Start: "2026-03-01",
 		Assignees: []AssigneeSchedule{{
-			Assignee: "@juan",
-			Entries:  []ScheduleEntry{{Task: tarea("@juan")}},
+			Assignee: "@john",
+			Entries:  []ScheduleEntry{{Task: newTask("@john")}},
 		}},
-		Unassigned: []Task{tarea(""), tarea(""), tarea("")},
+		Unassigned: []Task{newTask(""), newTask(""), newTask("")},
 	}
 
-	filtrada := FilterSchedule(horquilla, func(Task) bool { return true })
+	filtered := FilterSchedule(schedule, func(Task) bool { return true })
 
-	if len(filtrada.Unassigned) != 3 {
-		t.Errorf("quedan %d tareas sin responsable, want 3", len(filtrada.Unassigned))
+	if len(filtered.Unassigned) != 3 {
+		t.Errorf("%d tasks left unassigned, want 3", len(filtered.Unassigned))
 	}
-	if len(filtrada.Assignees) != 1 || len(filtrada.Assignees[0].Entries) != 1 {
-		t.Errorf("la cola de @juan no sobrevive intacta: %+v", filtrada.Assignees)
-	}
-
-	// Y un filtro que lo rechaza todo vacía las dos listas, sin dejar personas
-	// con una cola vacía colgando.
-	filtrada = FilterSchedule(horquilla, func(Task) bool { return false })
-	if len(filtrada.Unassigned) != 0 || len(filtrada.Assignees) != 0 {
-		t.Errorf("con un filtro que lo rechaza todo queda %d sin responsable y %d colas",
-			len(filtrada.Unassigned), len(filtrada.Assignees))
+	if len(filtered.Assignees) != 1 || len(filtered.Assignees[0].Entries) != 1 {
+		t.Errorf("@john's queue does not survive intact: %+v", filtered.Assignees)
 	}
 
-	// El original no se toca: es una copia, no un recorte in situ.
-	if len(horquilla.Unassigned) != 3 || len(horquilla.Assignees) != 1 {
-		t.Error("FilterSchedule ha modificado el schedule de entrada")
+	// And a filter that rejects everything empties both lists, leaving no people
+	// with an empty queue hanging around.
+	filtered = FilterSchedule(schedule, func(Task) bool { return false })
+	if len(filtered.Unassigned) != 0 || len(filtered.Assignees) != 0 {
+		t.Errorf("with a filter that rejects everything, %d unassigned remain and %d queues",
+			len(filtered.Unassigned), len(filtered.Assignees))
+	}
+
+	// The original is untouched: it is a copy, not an in-place truncation.
+	if len(schedule.Unassigned) != 3 || len(schedule.Assignees) != 1 {
+		t.Error("FilterSchedule modified the input schedule")
 	}
 }

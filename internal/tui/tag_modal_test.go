@@ -8,7 +8,7 @@ import (
 	"tsk/internal/model"
 )
 
-// typeTag escribe cada carácter en el modal de tags.
+// typeTag types each character into the tag modal.
 func typeTag(m Model, text string) Model {
 	for _, ch := range text {
 		next, _ := m.handleTagModalKey(string(ch))
@@ -17,7 +17,7 @@ func typeTag(m Model, text string) Model {
 	return m
 }
 
-// openTagModal abre el detalle de la primera tarea y su modal de tags.
+// openTagModal opens the detail of the first task and its tag modal.
 func openTagModal(t *testing.T, m *Model) Model {
 	t.Helper()
 	task := (*m).tasks[0]
@@ -26,13 +26,13 @@ func openTagModal(t *testing.T, m *Model) Model {
 	next, _ := m.handleDetailKey("t")
 	got := next.(Model)
 	if !got.tagOpen {
-		t.Fatal("\"t\" no abrió el modal de tags")
+		t.Fatal("\"t\" did not open the tag modal")
 	}
 	return got
 }
 
-// TestTagModalTogglesTag verifica que Enter agregue la tag escrita y que, si ya
-// está aplicada, la quite; el modal queda abierto tras cada toggle.
+// TestTagModalTogglesTag verifies that Enter adds the typed tag and that, if it is
+// already applied, removes it; the modal stays open after each toggle.
 func TestTagModalTogglesTag(t *testing.T) {
 	m := newTestModel(t)
 	taskID := m.tasks[0].ID
@@ -42,13 +42,13 @@ func TestTagModalTogglesTag(t *testing.T) {
 	next, cmd := m2.handleTagModalKey("enter")
 	m2 = next.(Model)
 	if cmd == nil {
-		t.Fatal("Enter no devolvió comando de toggle")
+		t.Fatal("Enter did not return a toggle command")
 	}
 	if m2.tagOpen != true {
-		t.Error("el modal debería seguir abierto tras el toggle")
+		t.Error("the modal should stay open after the toggle")
 	}
 	if m2.tagInput != "" {
-		t.Errorf("el input debería limpiarse tras el toggle: %q", m2.tagInput)
+		t.Errorf("the input should be cleared after the toggle: %q", m2.tagInput)
 	}
 	next, _ = m2.Update(mustMsg(t, cmd))
 	m2 = next.(Model)
@@ -58,13 +58,13 @@ func TestTagModalTogglesTag(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !model.HasTag(got.Tags, "blocked") {
-		t.Fatalf("la tag no se agregó: %v", got.Tags)
+		t.Fatalf("the tag was not added: %v", got.Tags)
 	}
 	if m2.detailTask == nil || !model.HasTag(m2.detailTask.Tags, "blocked") {
-		t.Errorf("el detalle no refleja la tag nueva: %+v", m2.detailTask)
+		t.Errorf("the detail does not reflect the new tag: %+v", m2.detailTask)
 	}
 
-	// Segundo toggle: la misma tag se quita.
+	// Second toggle: the same tag is removed.
 	m2 = typeTag(m2, "blocked")
 	next, cmd = m2.handleTagModalKey("enter")
 	m2 = next.(Model)
@@ -73,11 +73,11 @@ func TestTagModalTogglesTag(t *testing.T) {
 
 	got, _ = m2.database.GetTask(taskID)
 	if model.HasTag(got.Tags, "blocked") {
-		t.Errorf("la tag no se quitó: %v", got.Tags)
+		t.Errorf("the tag was not removed: %v", got.Tags)
 	}
 }
 
-// TestTagModalSuggestionsCompleteAndClose verifica sugerencias, Tab y Esc.
+// TestTagModalSuggestionsCompleteAndClose covers suggestions, Tab and Esc.
 func TestTagModalSuggestionsCompleteAndClose(t *testing.T) {
 	m := newTestModel(t)
 	taskID := m.tasks[0].ID
@@ -90,31 +90,31 @@ func TestTagModalSuggestionsCompleteAndClose(t *testing.T) {
 	m2 := openTagModal(t, m)
 
 	if suggs := m2.tagSuggestions(); !hasOption(suggs, "blocked") {
-		t.Fatalf("las sugerencias no incluyen la tag existente: %v", suggs)
+		t.Fatalf("the suggestions do not include the existing tag: %v", suggs)
 	}
 
-	// Filtrar por prefijo y completar con Tab.
+	// Filter by prefix and complete with Tab.
 	m2 = typeTag(m2, "block")
 	if suggs := m2.tagSuggestions(); !hasOption(suggs, "blocked") {
-		t.Fatalf("el filtro por prefijo no encontró blocked: %v", suggs)
+		t.Fatalf("the prefix filter did not find blocked: %v", suggs)
 	}
 	next, _ := m2.handleTagModalKey("tab")
 	m2 = next.(Model)
 	if m2.tagInput != "blocked" {
-		t.Errorf("Tab no completó la sugerencia: %q", m2.tagInput)
+		t.Errorf("Tab did not complete the suggestion: %q", m2.tagInput)
 	}
 
 	next, _ = m2.handleTagModalKey("esc")
 	m2 = next.(Model)
 	if m2.tagOpen {
-		t.Error("Esc no cerró el modal de tags")
+		t.Error("Esc did not close the tag modal")
 	}
 	if !m2.detailOpen {
-		t.Error("cerrar el modal de tags no debería cerrar el detalle")
+		t.Error("closing the tag modal should not close the detail")
 	}
 }
 
-// TestRenderTagModalShowsCurrent y sugerencias.
+// TestRenderTagModalShowsCurrent and suggestions.
 func TestRenderTagModalShowsCurrent(t *testing.T) {
 	m := newTestModel(t)
 	taskID := m.tasks[0].ID
@@ -128,12 +128,12 @@ func TestRenderTagModalShowsCurrent(t *testing.T) {
 	m2.width = 100
 	out := ansi.Strip(m2.renderTagModal("base"))
 	if !strings.Contains(out, "Tags") {
-		t.Errorf("el modal no muestra el título Tags:\n%s", out)
+		t.Errorf("the modal does not show the Tags title:\n%s", out)
 	}
 	if !strings.Contains(out, "Current: blocked") {
-		t.Errorf("el modal no muestra las tags actuales:\n%s", out)
+		t.Errorf("the modal does not show the current tags:\n%s", out)
 	}
 	if !strings.Contains(out, "✓ blocked") {
-		t.Errorf("la sugerencia aplicada debería marcarse con ✓:\n%s", out)
+		t.Errorf("the applied suggestion should be marked with ✓:\n%s", out)
 	}
 }

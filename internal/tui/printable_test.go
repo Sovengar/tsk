@@ -5,201 +5,201 @@ import (
 	"testing"
 )
 
-// Los dos modales de texto --el de filtros y el de tags-- filtran lo que llega
-// por una condición del mismoshape: "un solo carácter, imprimible".
+// The two text modals --the filter one and the tag one-- filter what comes
+// in through a condition of the same shape: "a single character, printable".
 //
-// Lo que hay que comprobar no es que una letra se acepte, sino dónde está el
-// borde. El rango del filtro es [33, 127) y el de tags es [32, 127): el filtro
-// deja fuera el espacio, tags lo acepta. Los dos conmutan a la vez en 127.
+// What has to be checked is not that a letter is accepted, but where the
+// edge is. The filter's range is [33, 127) and the tag one's is [32, 127):
+// the filter leaves the space out, tags accepts it. Both flip together at 127.
 //
-// Un test con "a" no dice nada de eso: 'a' está en medio de los dos rangos y
-// los dos lo aceptan. Sólo el borde los separa, y por eso se prueban los
-// caracteres que están justo en el borde y los que están justo fuera.
+// A test with "a" says none of that: 'a' is in the middle of the two ranges
+// and both accept it. Only the edge separates them, and that is why the
+// characters right on the edge and the ones right outside are tested.
 
-// teclasDelBorde son los caracteres alrededor de los dos límites: el 32 (espacio,
-// que sólo acepta tags), el 33 ('!', el primero del filtro) y el 126 (~, el
-// último imprimible ASCII) y el 127 (DEL, fuera de los dos rangos).
-var teclasDelBorde = []struct {
-	nombre   string
-	tecla    string
-	acepta   bool
-	caracter rune
+// edgeKeys are the characters around the two limits: 32 (space,
+// which only tags accepts), 33 ('!', the filter's first), 126 (~, the
+// last printable ASCII) and 127 (DEL, outside both ranges).
+var edgeKeys = []struct {
+	name    string
+	key     string
+	accepts bool
+	char    rune
 }{
-	{"espacio (32)", " ", false, 0},
-	{"exclamación (33)", "!", true, '!'},
-	{"virgulina (44)", ",", true, ','},
+	{"space (32)", " ", false, 0},
+	{"exclamation (33)", "!", true, '!'},
+	{"comma (44)", ",", true, ','},
 	{"tilde (126)", "~", true, '~'},
 	{"DEL (127)", "\x7f", false, 0},
 }
 
-// El filtro se abre con "/" y escribe en el campo que tenga el foco, que al
-// abrir es el primero.
-func filtroAbierto(t *testing.T) *Model {
+// The filter opens with "/" and types into the field that has the focus,
+// which on open is the first one.
+func openFilter(t *testing.T) *Model {
 	t.Helper()
 	m := newTestModel(t)
 	m.currentView = viewList
-	abierto, _ := pulsar(t, m, "/")
-	if !abierto.filterOpen {
-		t.Fatal("el modal de filtros no se ha abierto con /")
+	opened, _ := pressKeys(t, m, "/")
+	if !opened.filterOpen {
+		t.Fatal("the filter modal did not open with /")
 	}
-	return abierto
+	return opened
 }
 
-// updateTagPaste pega texto en el modal de tags por el camino del pegado, que
-// es el único por el que un espacio puede llegar.
-func updateTagPaste(t *testing.T, m *Model, texto string) *Model {
+// updateTagPaste pastes text into the tag modal through the paste path,
+// which is the only one through which a space can arrive.
+func updateTagPaste(t *testing.T, m *Model, text string) *Model {
 	t.Helper()
 	m.tagOpen = true
-	pegado, _ := m.handleTagPaste(texto)
-	model, ok := pegado.(Model)
+	pasted, _ := m.handleTagPaste(text)
+	model, ok := pasted.(Model)
 	if !ok {
-		t.Fatalf("handleTagPaste(%q) ha devuelto %T, want Model", texto, pegado)
+		t.Fatalf("handleTagPaste(%q) returned %T, want Model", text, pasted)
 	}
 	return &model
 }
 
-// Cada carácter del borde tiene que acabar en el campo de búsqueda o no, según
-// lo que diga la comparación del código. Lo que se mira es el RESULTADO, no el
-// código: si alguien cambia el rango, el campo deja de growing y el test lo ve.
-func TestElModalDeFiltroAceptaSoloImprimibles(t *testing.T) {
-	for _, tc := range teclasDelBorde {
-		t.Run(tc.nombre, func(t *testing.T) {
-			m := filtroAbierto(t)
+// Each edge character has to end up in the search field or not, according
+// to what the code's comparison says. What is looked at is the RESULT, not
+// the code: if someone changes the range, the field stops growing and the test sees it.
+func TestFilterModalAcceptsOnlyPrintables(t *testing.T) {
+	for _, tc := range edgeKeys {
+		t.Run(tc.name, func(t *testing.T) {
+			m := openFilter(t)
 
-			m, _ = pulsar(t, m, tc.tecla)
+			m, _ = pressKeys(t, m, tc.key)
 
-			if tc.acepta {
-				if m.filterSearch != string(tc.caracter) {
-					t.Errorf("el filtro no ha aceptado %q: filterSearch = %q",
-						string(tc.caracter), m.filterSearch)
+			if tc.accepts {
+				if m.filterSearch != string(tc.char) {
+					t.Errorf("the filter did not accept %q: filterSearch = %q",
+						string(tc.char), m.filterSearch)
 				}
 				return
 			}
 			if m.filterSearch != "" {
-				t.Errorf("el filtro ha aceptado %q, que no es imprimible: filterSearch = %q",
-					tc.tecla, m.filterSearch)
+				t.Errorf("the filter accepted %q, which is not printable: filterSearch = %q",
+					tc.key, m.filterSearch)
 			}
 		})
 	}
 }
 
-// Los dos modales rechazan el espacio, pero por razones distintas, y conviene
-// que quede escrito.
+// The two modals reject the space, but for different reasons, and it is
+// worth leaving it on record.
 //
-// En el filtro es la comparación: el rango empieza en 33, y un espacio en el
-// buscador de un desplegable no es una búsqueda, es un hueco.
+// In the filter it is the comparison: the range starts at 33, and a space
+// in the search box of a dropdown is not a search, it is a hole.
 //
-// En tags es el `len(key) == 1` de delante: Bubbletea entrega la barra
-// espaciadora con nombre ("space"), no como un carácter suelto, así que un byte
-// 32 suelto nunca llega. El suelo 32 del rango documenta la intención pero no lo
-// hace alcanzable; por eso el `>= 32` -> `> 32` es un mutante EQUIVALENTE y
-// está en .mutation-allowlist con este motivo, no con el de un hueco.
+// In tags it is the `len(key) == 1` in front: Bubbletea delivers the space
+// bar as a named key ("space"), not as a lone character, so a lone byte
+// 32 never arrives. The floor of 32 in the range documents the intent but
+// does not make it reachable; that is why the `>= 32` -> `> 32` is an
+// EQUIVALENT mutant and it is in .mutation-allowlist for this reason, not for the hole.
 //
-// Lo que sí llega a los dos es un pegado, que va por otro camino y conserva los
-// espacios. Lo que deja claro que la diferencia es del camino y no de que los
-// espacios estén prohibidos.
-func TestElEspacioNoLlegaNiAlFiltroNiATags(t *testing.T) {
-	filtro := filtroAbierto(t)
-	filtro, _ = pulsar(t, filtro, " ")
-	if filtro.filterSearch != "" {
-		t.Errorf("el filtro ha tomado el espacio: %q", filtro.filterSearch)
+// What does reach both is a paste, which goes through another path and
+// keeps the spaces. That makes clear that the difference is of the path and
+// not that spaces are forbidden.
+func TestSpaceReachesNeitherFilterNorTags(t *testing.T) {
+	filter := openFilter(t)
+	filter, _ = pressKeys(t, filter, " ")
+	if filter.filterSearch != "" {
+		t.Errorf("the filter took the space: %q", filter.filterSearch)
 	}
 
 	tags := newDetailModel(t, 0)
-	tags, _ = pulsar(t, tags, "t")
+	tags, _ = pressKeys(t, tags, "t")
 	if !tags.tagOpen {
-		t.Fatal("el modal de tags no se ha abierto con t")
+		t.Fatal("the tags modal did not open with t")
 	}
-	tags, _ = pulsar(t, tags, " ")
+	tags, _ = pressKeys(t, tags, " ")
 	if tags.tagInput != "" {
-		t.Errorf("tags ha tomado la barra espaciadora: %q", tags.tagInput)
+		t.Errorf("tags took the space bar: %q", tags.tagInput)
 	}
 
-	tags = updateTagPaste(t, tags, "con espacios")
+	tags = updateTagPaste(t, tags, "with spaces")
 	if !strings.Contains(tags.tagInput, " ") {
-		t.Errorf("un pegado con espacios ha llegado sin ellos: %q", tags.tagInput)
+		t.Errorf("a paste with spaces arrived without them: %q", tags.tagInput)
 	}
 }
 
-// Los dos bordes altos: 126 se acepta y 127 no. Con el rango escrito como `<`
-// en vez de `<=`, el 127 entraría; con `<=`, el 126 se quedaría fuera. Ningún
-// test con una letra normal distingue eso.
-func TestElBordeAltoDelRangoImprimible(t *testing.T) {
+// The two high edges: 126 is accepted and 127 is not. With the range written
+// as `<` instead of `<=`, 127 would get in; with `<=`, 126 would stay out.
+// No test with a normal letter tells those apart.
+func TestPrintableRangeUpperEdge(t *testing.T) {
 	for _, tc := range []struct {
-		nombre string
-		tecla  string
+		name string
+		key  string
 	}{
 		{"tilde (126)", "~"},
 		{"DEL (127)", "\x7f"},
 	} {
-		t.Run("filtro/"+tc.nombre, func(t *testing.T) {
-			m := filtroAbierto(t)
-			m, _ = pulsar(t, m, tc.tecla)
-			aceptado := m.filterSearch != ""
-			if tc.nombre[0] == 't' != aceptado {
-				t.Errorf("filtro: %s aceptada=%v", tc.nombre, aceptado)
+		t.Run("filter/"+tc.name, func(t *testing.T) {
+			m := openFilter(t)
+			m, _ = pressKeys(t, m, tc.key)
+			accepted := m.filterSearch != ""
+			if tc.name[0] == 't' != accepted {
+				t.Errorf("filter: %s accepted=%v", tc.name, accepted)
 			}
 		})
-		t.Run("tags/"+tc.nombre, func(t *testing.T) {
+		t.Run("tags/"+tc.name, func(t *testing.T) {
 			m := newDetailModel(t, 0)
-			m, _ = pulsar(t, m, "t")
+			m, _ = pressKeys(t, m, "t")
 			if !m.tagOpen {
-				t.Fatalf("el modal de tags no se ha abierto con t")
+				t.Fatalf("the tags modal did not open with t")
 			}
-			m, _ = pulsar(t, m, tc.tecla)
-			aceptado := m.tagInput != ""
-			if tc.nombre[0] == 't' != aceptado {
-				t.Errorf("tags: %s aceptada=%v", tc.nombre, aceptado)
+			m, _ = pressKeys(t, m, tc.key)
+			accepted := m.tagInput != ""
+			if tc.name[0] == 't' != accepted {
+				t.Errorf("tags: %s accepted=%v", tc.name, accepted)
 			}
 		})
 	}
 }
 
-// esImprimible es el rango de bytes que se acepta como tecla de un solo carácter,
-// en el modal de tags y en el de filtros.
+// isPrintable is the range of bytes accepted as a single-character key, in
+// the tag modal and in the filter one.
 //
-// Los dos bordes son alcanzables y comprobables, y eso es lo que hace el refactor:
-// antes el rango del modal de tags empezaba en 32 (el espacio), un byte que
-// Bubbletea nunca entrega suelto -- la barra espaciadora llega con nombre. Así que
-// el suelo de 32 y el de 33 eran indistinguibles y el mutante de uno por otro
-// sobrevivía. Con el suelo en el primer byte que sí llega, los dos lados existen.
-func TestEsImprimible(t *testing.T) {
-	casos := []struct {
-		nombre string
-		b      byte
-		want   bool
+// Both edges are reachable and checkable, and that is what the refactor does:
+// before, the tag modal's range started at 32 (the space), a byte that
+// Bubbletea never delivers alone -- the space bar arrives named. So the floor
+// of 32 and the one of 33 were indistinguishable and the mutant of one for
+// the other survived. With the floor on the first byte that does arrive, both sides exist.
+func TestIsPrintable(t *testing.T) {
+	cases := []struct {
+		name string
+		b    byte
+		want bool
 	}{
-		{"nulo", 0, false},
+		{"null", 0, false},
 		{"tab (9)", 9, false},
-		{"nueva línea (10)", 10, false},
+		{"new line (10)", 10, false},
 		{"escape (27)", 27, false},
-		{"justo debajo del suelo (32, el espacio)", 32, false},
-		{"justo el suelo (33, exclamación)", 33, true},
-		{"letra", 'a', true},
-		{"cifra", '7', true},
-		{"virgulina", ',', true},
+		{"right below the floor (32, the space)", 32, false},
+		{"exactly the floor (33, exclamation)", 33, true},
+		{"letter", 'a', true},
+		{"digit", '7', true},
+		{"comma", ',', true},
 		{"tilde (126)", 126, true},
-		{"justo el techo (127, DEL)", 127, false},
-		{"no-ASCII (200)", 200, false},
+		{"exactly the ceiling (127, DEL)", 127, false},
+		{"non-ASCII (200)", 200, false},
 	}
 
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
-			if got := esImprimible(c.b); got != c.want {
-				t.Errorf("esImprimible(%d) = %v, want %v", c.b, got, c.want)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isPrintable(c.b); got != c.want {
+				t.Errorf("isPrintable(%d) = %v, want %v", c.b, got, c.want)
 			}
 		})
 	}
 }
 
-// El recorrido entero del rango, byte a byte, para que un cambio en cualquiera de
-// los dos extremos se note y no sólo los valores que happens a mirar un test.
-func TestEsImprimibleRecorreElRangoEntero(t *testing.T) {
+// The whole range walk, byte by byte, so that a change in either of the two
+// ends shows and not only the values that happens to look at a test.
+func TestIsPrintableScansTheWholeRange(t *testing.T) {
 	for b := 0; b < 256; b++ {
-		want := b >= primerByteImprimible && b < ultimoByteImprimible
-		if got := esImprimible(byte(b)); got != want {
-			t.Fatalf("esImprimible(%d) = %v, want %v: el rango declarado es [%d, %d)",
-				b, got, want, primerByteImprimible, ultimoByteImprimible)
+		want := b >= firstPrintableByte && b < lastPrintableByte
+		if got := isPrintable(byte(b)); got != want {
+			t.Fatalf("isPrintable(%d) = %v, want %v: the declared range is [%d, %d)",
+				b, got, want, firstPrintableByte, lastPrintableByte)
 		}
 	}
 }

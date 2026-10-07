@@ -7,10 +7,10 @@ func TestAddAndListComments(t *testing.T) {
 	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
-	if _, err := db.AddComment(task.ID, "primer comentario"); err != nil {
+	if _, err := db.AddComment(task.ID, "first comment"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.AddComment(task.ID, "segundo comentario"); err != nil {
+	if _, err := db.AddComment(task.ID, "second comment"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -21,8 +21,8 @@ func TestAddAndListComments(t *testing.T) {
 	if len(comments) != 2 {
 		t.Fatalf("count = %d, want 2", len(comments))
 	}
-	// Orden cronológico ascendente
-	if comments[0].Body != "primer comentario" || comments[1].Body != "segundo comentario" {
+	// Ascending chronological order
+	if comments[0].Body != "first comment" || comments[1].Body != "second comment" {
 		t.Errorf("order = [%q %q]", comments[0].Body, comments[1].Body)
 	}
 	if comments[0].TaskID != task.ID {
@@ -38,12 +38,12 @@ func TestAddCommentTrimsBody(t *testing.T) {
 	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
-	c, err := db.AddComment(task.ID, "  con espacios  ")
+	c, err := db.AddComment(task.ID, "  with spaces  ")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Body != "con espacios" {
-		t.Errorf("body = %q, want %q", c.Body, "con espacios")
+	if c.Body != "with spaces" {
+		t.Errorf("body = %q, want %q", c.Body, "with spaces")
 	}
 }
 
@@ -59,7 +59,7 @@ func TestAddCommentEmptyBody(t *testing.T) {
 
 func TestAddCommentUnknownTask(t *testing.T) {
 	db := newTestDB(t)
-	if _, err := db.AddComment(999, "hola"); err == nil {
+	if _, err := db.AddComment(999, "hello"); err == nil {
 		t.Error("expected error for unknown task")
 	}
 }
@@ -69,7 +69,7 @@ func TestDeleteComment(t *testing.T) {
 	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
 
-	c, _ := db.AddComment(task.ID, "para borrar")
+	c, _ := db.AddComment(task.ID, "to delete")
 	if err := db.DeleteComment(c.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestCommentsCascadeOnProjectDelete(t *testing.T) {
 	db := newTestDB(t)
 	mustCreateProject(t, db, "api", nil)
 	task, _ := db.CreateTask("api", "task", "", "", 0, "")
-	mustAddComment(t, db, task.ID, "nota")
+	mustAddComment(t, db, task.ID, "note")
 
 	if err := db.DeleteProject("api"); err != nil {
 		t.Fatal(err)

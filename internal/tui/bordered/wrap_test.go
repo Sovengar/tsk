@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// linesplit parte la salida en líneas ya sin ANSI, que es lo que se compara.
+// linesplit splits the output into lines already without ANSI, which is what is compared.
 func linesplit(t *testing.T, out string) []string {
 	t.Helper()
 	raw := strings.Split(out, "\n")
@@ -20,112 +20,112 @@ func linesplit(t *testing.T, out string) []string {
 	return out2
 }
 
-// boxLines separa las líneas de borde del contenido.
+// boxLines separates the border lines from the content.
 func boxLines(t *testing.T, out string) (top, bottom string, body []string) {
 	t.Helper()
 	ls := linesplit(t, out)
 	if len(ls) < 3 {
-		t.Fatalf("una caja necesita al menos 3 líneas, tiene %d: %q", len(ls), out)
+		t.Fatalf("a box needs at least 3 lines, it has %d: %q", len(ls), out)
 	}
 	return ls[0], ls[len(ls)-1], ls[1 : len(ls)-1]
 }
 
-// Todas las líneas de una caja miden exactamente `width`. Es la invariante que
-// sostiene el layout entero: si una línea se descuadra, el modal se ve roto.
+// All the lines of a box measure exactly `width`. It is the invariant that
+// holds up the whole layout: if one line goes out of sync, the modal looks broken.
 func assertUniformWidth(t *testing.T, out string, width int) {
 	t.Helper()
 	for i, l := range linesplit(t, out) {
 		if w := ansi.StringWidth(l); w != width {
-			t.Errorf("línea %d mide %d, want %d: %q", i, w, width, l)
+			t.Errorf("line %d measures %d, want %d: %q", i, w, width, l)
 		}
 	}
 }
 
 func roundBorder() lipgloss.Border { return lipgloss.RoundedBorder() }
 
-// unwrap quita el primer y el último carácter de una fila de caja. Trabaja con
-// runes: los caracteres del borde son multibyte y un slice por bytes parte el
-// glifo por la mitad.
+// unwrap removes the first and the last character of a box row. It works
+// with runes: the border characters are multibyte and a byte slice splits the
+// glyph in half.
 func unwrap(t *testing.T, line string) string {
 	t.Helper()
 	r := []rune(ansi.Strip(line))
 	if len(r) < 2 {
-		t.Fatalf("fila demasiado corta para quitarle el marco: %q", line)
+		t.Fatalf("row too short to remove its frame: %q", line)
 	}
 	return string(r[1 : len(r)-1])
 }
 
-// --- Ancho mínimo y anchos imposibles ------------------------------------
+// --- Minimum width and impossible widths --------------------------------
 
-// Por debajo de 2 columnas no hay caja posible: el ancho sube a 2 en vez de
-// producir un borde de anchura cero o negativa.
+// Below 2 columns there is no possible box: the width goes up to 2 instead
+// of producing a zero or negative width border.
 //
-// Con el interior en 0 el contenido no se puede recortar (wrapLine devuelve la
-// línea entera cuando no hay ancho), así que las filas de contenido pueden
-// exceder la caja. Lo que sí tiene que cumplirse es que el borde superior e
-// inferior midan lo mismo y que el render no reviente con anchuras imposibles.
+// With the interior at 0 the content cannot be truncated (wrapLine returns
+// the whole line when there is no width), so content rows may
+// exceed the box. What does have to hold is that the top and bottom borders
+// measure the same and that the render does not blow up with impossible widths.
 func TestRenderMinimumWidth(t *testing.T) {
 	for _, width := range []int{-5, 0, 1, 2, 3} {
 		out := RenderWithTitleEx(roundBorder(), nil, AlignLeft, "", "x", width)
 		top, bottom, body := boxLines(t, out)
 		if len(body) == 0 {
-			t.Errorf("width=%d: la caja debe tener al menos una fila de contenido", width)
+			t.Errorf("width=%d: the box must have at least one content row", width)
 		}
 		if ansi.StringWidth(top) != ansi.StringWidth(bottom) {
-			t.Errorf("width=%d: borde superior mide %d y el inferior %d, deben coincidir",
+			t.Errorf("width=%d: top border measures %d and bottom %d, they must match",
 				width, ansi.StringWidth(top), ansi.StringWidth(bottom))
 		}
-		// El valor del recorte importa: por debajo de 2 la caja mide 2, así que
-		// el borde superior son 2 guiones entre esquinas y nada más.
+		// The truncation value matters: below 2 the box measures 2, so
+		// the top border is 2 dashes between corners and nothing else.
 		if width < 2 && top != "╭╮" {
-			t.Errorf("width=%d: borde superior = %q, want el mínimo ╭╮", width, top)
+			t.Errorf("width=%d: top border = %q, want the minimum ╭╮", width, top)
 		}
-		// A 2 columnas el interior es 0, así que no cabe ni un carácter de
-		// relleno entre las esquinas.
+		// At 2 columns the interior is 0, so not even one padding character
+		// fits between the corners.
 		if width == 2 && top != "╭╮" {
-			t.Errorf("width=2: borde superior = %q, want ╭╮ (interior 0)", top)
+			t.Errorf("width=2: top border = %q, want ╭╮ (interior 0)", top)
 		}
 	}
 }
 
-// Un borde con esquinas anchas (caracteres de doble ancho) puede dejar el
-// interior en cero o negativo; nunca debe ser negativo.
+// A border with wide corners (double-width characters) can leave the
+// interior at zero or negative; it must never be negative.
 func TestRenderWithWideCorners(t *testing.T) {
 	b := lipgloss.Border{
 		Top: "─", Bottom: "─", Left: "│", Right: "│",
 		TopLeft: "｛", TopRight: "｝", BottomLeft: "｟", BottomRight: "～",
 	}
-	// Las esquinas ocupan 2 columnas cada una y los laterales 1, así que con
-	// interior >= 1 el borde mide width y el contenido mide width - 2.
+	// The corners take 2 columns each and the sides 1, so with
+	// interior >= 1 the border measures width and the content measures width - 2.
 	for _, width := range []int{5, 6, 8, 10, 20} {
 		inner := width - 4
-		out := RenderWithTitlesEx(b, nil, "", AlignLeft, "", AlignLeft, "contenido largo", width)
+		out := RenderWithTitlesEx(b, nil, "", AlignLeft, "", AlignLeft, "long content", width)
 		top, bottom, body := boxLines(t, out)
 
 		if got := ansi.StringWidth(top); got != width {
-			t.Errorf("width=%d: borde superior mide %d, want %d: %q", width, got, width, top)
+			t.Errorf("width=%d: top border measures %d, want %d: %q", width, got, width, top)
 		}
 		if got := ansi.StringWidth(bottom); got != width {
-			t.Errorf("width=%d: borde inferior mide %d, want %d: %q", width, got, width, bottom)
+			t.Errorf("width=%d: bottom border measures %d, want %d: %q", width, got, width, bottom)
 		}
 		for i, l := range body {
 			if got := ansi.StringWidth(l); got != inner+2 {
-				t.Errorf("width=%d: fila %d mide %d, want %d: %q", width, i, got, inner+2, l)
+				t.Errorf("width=%d: row %d measures %d, want %d: %q", width, i, got, inner+2, l)
 			}
 		}
 	}
 }
 
-// --- Caracteres de borde ausentes ----------------------------------------
+// --- Missing border characters -----------------------------------------
 
-// Un borde con caracteres vacíos se rellena con espacios: sin esto la caja
-// saldría con huecos y las líneas no cuadrarían.
+// A border with empty characters is padded with spaces: without this the box
+// would come out with holes and the lines would not add up.
 func TestRenderFillsMissingBorderChars(t *testing.T) {
-	// width 24, interior 22, contenido "cuerpo" (6 columnas) + 16 de relleno.
+	// width 24, interior 22, content "body" (4 columns) + 18 of padding.
 	const (
 		topOK    = "┌" + "──────────────────────" + "┐"
 		bottomOK = "└" + "──────────────────────" + "┘"
-		bodyOK   = "│cuerpo                │"
+		bodyOK   = "│body                  │"
 	)
 	_ = bottomOK
 
@@ -135,16 +135,16 @@ func TestRenderFillsMissingBorderChars(t *testing.T) {
 		want   []string
 	}{
 		{
-			name: "sin línea superior",
+			name: "no top line",
 			border: lipgloss.Border{
 				TopLeft: "┌", TopRight: "┐", BottomLeft: "└", BottomRight: "┘",
 				Left: "│", Right: "│", Bottom: "─",
 			},
-			// La línea superior se rellena de espacios: es el hueco visible.
+			// The top line is padded with spaces: it is the visible gap.
 			want: []string{"┌" + "                      " + "┐", bodyOK, bottomOK},
 		},
 		{
-			name: "sin línea inferior",
+			name: "no bottom line",
 			border: lipgloss.Border{
 				TopLeft: "┌", TopRight: "┐", BottomLeft: "└", BottomRight: "┘",
 				Left: "│", Right: "│", Top: "─",
@@ -152,23 +152,23 @@ func TestRenderFillsMissingBorderChars(t *testing.T) {
 			want: []string{topOK, bodyOK, "└" + "                      " + "┘"},
 		},
 		{
-			name: "sin laterales",
+			name: "no sides",
 			border: lipgloss.Border{
 				TopLeft: "┌", TopRight: "┐", BottomLeft: "└", BottomRight: "┘",
 				Top: "─", Bottom: "─",
 			},
-			// Sin │ el contenido va pegado al borde, con un espacio a cada lado.
-			want: []string{topOK, " cuerpo                 ", bottomOK},
+			// Without │ the content goes glued to the border, with one space on each side.
+			want: []string{topOK, " body                   ", bottomOK},
 		},
 		{
-			name: "sin línea superior ni laterales",
+			name: "no top line or sides",
 			border: lipgloss.Border{
 				TopLeft: "┌", TopRight: "┐", BottomLeft: "└", BottomRight: "┘", Bottom: "─",
 			},
-			want: []string{"┌" + "                      " + "┐", " cuerpo                 ", bottomOK},
+			want: []string{"┌" + "                      " + "┐", " body                   ", bottomOK},
 		},
 		{
-			name: "sin horizontales",
+			name: "no horizontal lines",
 			border: lipgloss.Border{
 				TopLeft: "┌", TopRight: "┐", BottomLeft: "└", BottomRight: "┘",
 				Left: "│", Right: "│",
@@ -179,61 +179,61 @@ func TestRenderFillsMissingBorderChars(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			const width = 24
-			out := RenderWithTitleEx(tt.border, nil, AlignLeft, "", "cuerpo", width)
-			// Si el carácter de borde faltara en vez de sustituirse por un
-			// espacio, alguna línea mediría menos que el ancho pedido.
+			out := RenderWithTitleEx(tt.border, nil, AlignLeft, "", "body", width)
+			// If the border character were missing instead of being replaced by
+			// a space, some line would measure less than the requested width.
 			assertUniformWidth(t, out, width)
 
-			// Salida exacta: fija QUÉ línea lleva el hueco y con qué carácter.
-			// Un aserto laxo ("alguna línea tiene un espacio") no distingue un
-			// relleno de espacios de un borde dibujado con otro carácter.
+			// Exact output: it pins down WHICH line carries the gap and with what
+			// character. A loose assert ("some line has a space") does not tell
+			// a space padding from a border drawn with another character.
 			want := strings.Join(tt.want, "\n")
 			if got := ansi.Strip(out); got != want {
-				t.Errorf("salida =\n%s\nwant\n%s", got, want)
+				t.Errorf("output =\n%s\nwant\n%s", got, want)
 			}
 		})
 	}
 }
 
-// Cuando las esquinas anchas dejan el interior en negativo, se recorta a 0 en
-// vez de propagar un interior negativo (que daría un relleno negativo y un
-// panic en strings.Repeat).
+// When the wide corners leave the interior negative, it is truncated to 0
+// instead of propagating a negative interior (which would give a negative
+// padding and a panic in strings.Repeat).
 func TestRenderWideCornersWithNegativeInnerWidth(t *testing.T) {
 	b := lipgloss.Border{
 		Top: "─", Bottom: "─", Left: "│", Right: "│",
 		TopLeft: "｛", TopRight: "｝", BottomLeft: "｟", BottomRight: "～",
 	}
 	for _, width := range []int{1, 2, 3, 4} {
-		// No debe entrar en panic: es la razón del recorte a 0.
+		// It must not go into panic: that is the reason for the truncation to 0.
 		out := RenderWithTitlesEx(b, nil, "", AlignLeft, "", AlignLeft, "abc", width)
 		top, bottom, body := boxLines(t, out)
 		if ansi.StringWidth(top) != ansi.StringWidth(bottom) {
-			t.Errorf("width=%d: bordes descuadrados: %q vs %q", width, top, bottom)
+			t.Errorf("width=%d: misaligned borders: %q vs %q", width, top, bottom)
 		}
-		// Con el interior recortado a 0 no hay a dónde envolver, así que el
-		// contenido queda en UNA fila. Si el recorte fuera a 1 en vez de a 0,
-		// "abc" se partiría en tres filas de una columna.
+		// With the interior truncated to 0 there is nowhere to wrap, so the
+		// content stays in ONE row. If the truncation were to 1 instead of 0,
+		// "abc" would be split into three rows of one column.
 		if len(body) != 1 {
-			t.Errorf("width=%d: %d filas de cuerpo, want 1 (interior recortado a 0): %q", width, len(body), body)
+			t.Errorf("width=%d: %d body rows, want 1 (interior clamped to 0): %q", width, len(body), body)
 		}
 	}
 }
 
-// --- Contenido multilínea ------------------------------------------------
+// --- Multi-line content ------------------------------------------------
 
-// Cada salto de línea del contenido produce una fila de la caja, y sólo una.
+// Each line break of the content produces a row of the box, and only one.
 func TestRenderContentLinePerNewline(t *testing.T) {
 	tests := []struct {
 		name    string
 		content string
 		want    int
 	}{
-		{"una línea", "a", 1},
-		{"tres líneas", "a\nb\nc", 3},
-		{"línea vacía al principio", "\na", 2},
-		{"línea vacía al final", "a\n", 2},
-		{"sólo saltos", "\n\n", 3},
-		{"con saltos intercalados", "a\n\nb", 3},
+		{"one line", "a", 1},
+		{"three lines", "a\nb\nc", 3},
+		{"empty line at the beginning", "\na", 2},
+		{"empty line at the end", "a\n", 2},
+		{"only newlines", "\n\n", 3},
+		{"with interleaved newlines", "a\n\nb", 3},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -241,121 +241,121 @@ func TestRenderContentLinePerNewline(t *testing.T) {
 			out := RenderWithTitleEx(roundBorder(), nil, AlignLeft, "", tt.content, width)
 			_, _, body := boxLines(t, out)
 			if len(body) != tt.want {
-				t.Errorf("líneas de cuerpo = %d, want %d: %q", len(body), tt.want, body)
+				t.Errorf("body lines = %d, want %d: %q", len(body), tt.want, body)
 			}
 			assertUniformWidth(t, out, width)
 		})
 	}
 }
 
-// Una línea más ancha que el interior se ENVUELVE en varias filas, no se
-// descarta ni se recorta.
+// A line wider than the interior is WRAPPED into several rows, it is
+// neither discarded nor truncated.
 func TestRenderWrapsWideContent(t *testing.T) {
 	const width = 12
 	out := RenderWithTitleEx(roundBorder(), nil, AlignLeft, "", strings.Repeat("x", 30), width)
 	_, _, body := boxLines(t, out)
 
 	if len(body) < 3 {
-		t.Fatalf("30 columnas en 10 de interior deberían envolver en 3+, hay %d: %q", len(body), body)
+		t.Fatalf("30 columns in 10 of interior should wrap into 3+, there are %d: %q", len(body), body)
 	}
 	assertUniformWidth(t, out, width)
 	for i, l := range body {
 		inner := unwrap(t, l)
 		if strings.TrimSpace(inner) != strings.Repeat("x", len([]rune(inner))) {
-			t.Errorf("cuerpo %d = %q, want sólo x", i, inner)
+			t.Errorf("body %d = %q, want only x", i, inner)
 		}
 	}
 }
 
-// Una línea coloreada que mide EXACTAMENTE el interior no debe partirse. La
-// rama del relleno usa `<=` y no `<` a propósito: aunque el ancho cuadre, la
-// línea puede llevar cambios de estilo en medio, y envolver partiría ahí. Con
-// `<` esa fila se rompería en dos y el alto del modal cambiaría.
+// A colored line measuring EXACTLY the interior must not be split. The
+// padding branch uses `<=` and not `<` on purpose: even if the width matches,
+// the line can carry style changes in the middle, and wrapping would split
+// there. With `<` that row would break in two and the modal's height would change.
 func TestRenderColoredLineAtExactInnerWidth(t *testing.T) {
 	const width = 16
-	// 14 de interior. Coloreamos un texto que mide EXACTAMENTE 14 columnas y
-	// cuyo cambio de estilo cae a mitad: "aaaa" rojo + "bbbbbbbbbb" verde.
+	// 14 of interior. We color a text that measures EXACTLY 14 columns and
+	// whose style change falls in the middle: "aaaa" red + "bbbbbbbbbb" green.
 	//
-	// Aquí está el borde `<=` vs `<` de la rama de relleno. Con `<=` la línea
-	// entra en la rama de relleno (1 fila) porque su ancho visible ya cabe
-	// justo. Con `<` (mutado) cae en la de envolver, y wrapLine parte en el
-	// cambio de estilo: 2 filas y el alto del modal cambia.
+	// Here is the `<=` vs `<` edge of the padding branch. With `<=` the line
+	// enters the padding branch (1 row) because its visible width already fits
+	// exactly. With `<` (mutated) it falls into the wrapping one, and wrapLine
+	// splits at the style change: 2 rows and the modal's height changes.
 	styled := "\033[31m" + strings.Repeat("a", 4) + "\033[0m" +
 		"\033[32m" + strings.Repeat("b", 10) + "\033[0m"
 	if got := ansi.StringWidth(ansi.Strip(styled)); got != 14 {
-		t.Fatalf("fixture: el contenido mide %d columnas, want 14", got)
+		t.Fatalf("fixture: the content measures %d columns, want 14", got)
 	}
 
 	out := RenderWithTitleEx(roundBorder(), nil, AlignLeft, "", styled, width)
 	_, _, body := boxLines(t, out)
 	if len(body) != 1 {
-		t.Errorf("contenido de 14 columnas en interior 14: %d filas, want 1 (no debe partirse): %q", len(body), body)
+		t.Errorf("content of 14 columns in interior 14: %d rows, want 1 (must not split): %q", len(body), body)
 	}
 	assertUniformWidth(t, out, width)
 }
 
-// El relleno hasta el ancho interior es exacto en cada fila.
+// The padding up to the inner width is exact on every row.
 func TestRenderPadsContentToInnerWidth(t *testing.T) {
 	const width = 16
-	// "abcdefghijklmn" mide justo los 14 de interior: con el borde mal puesto
-	// (`<` en vez de `<=`) esta fila se envolvería en dos y el alto cambiaría.
+	// "abcdefghijklmn" measures just the 14 of interior: with the border
+	// misplaced (`<` instead of `<=`) this row would wrap in two and the height would change.
 	tests := []string{"", "x", "ab", "abc", "abcdefghij", "abcdefghijklmn"}
 	for _, content := range tests {
 		out := RenderWithTitleEx(roundBorder(), nil, AlignLeft, "", content, width)
 		_, _, body := boxLines(t, out)
 		if len(body) != 1 {
-			t.Fatalf("contenido %q: %d filas, want 1", content, len(body))
+			t.Fatalf("content %q: %d rows, want 1", content, len(body))
 		}
 		inner := unwrap(t, body[0])
 		if ansi.StringWidth(inner) != width-2 {
-			t.Errorf("contenido %q: interior mide %d, want %d (%q)", content, ansi.StringWidth(inner), width-2, inner)
+			t.Errorf("content %q: interior measures %d, want %d (%q)", content, ansi.StringWidth(inner), width-2, inner)
 		}
 		if !strings.HasPrefix(inner, content) {
-			t.Errorf("contenido %q: el relleno se comió texto (%q)", content, inner)
+			t.Errorf("content %q: the padding ate text (%q)", content, inner)
 		}
 		if strings.TrimRight(inner, " ") != content {
-			t.Errorf("contenido %q: sólo debe añadir espacios a la derecha (%q)", content, inner)
+			t.Errorf("content %q: must only add spaces on the right (%q)", content, inner)
 		}
 	}
 }
 
-// Con el interior en 0 no hay a dónde envolver, así que wrapLine devuelve la
-// línea entera y el relleno sale negativo: se recorta a 0 en vez de restar.
+// With the interior at 0 there is nowhere to wrap, so wrapLine returns the
+// whole line and the padding comes out negative: it is truncated to 0 instead of subtracting.
 func TestRenderNegativePaddingIsClamped(t *testing.T) {
 	b := lipgloss.Border{
 		Top: "─", Bottom: "─", Left: "│", Right: "│",
 		TopLeft: "｛", TopRight: "｝", BottomLeft: "｟", BottomRight: "～",
 	}
-	// width 3 -> interior negativo -> 0. El contenido no cabe y aun así el
-	// relleno no puede ser negativo.
-	out := RenderWithTitlesEx(b, nil, "", AlignLeft, "", AlignLeft, "cuerpo", 3)
+	// width 3 -> negative interior -> 0. The content does not fit and even so
+	// the padding cannot be negative.
+	out := RenderWithTitlesEx(b, nil, "", AlignLeft, "", AlignLeft, "body", 3)
 	_, _, body := boxLines(t, out)
-	// El interior es 0 y "cuerpo" no se puede envolver ni recortar, así que la
-	// fila es el contenido tal cual entre los laterales, SIN relleno extra: un
-	// `padding = 1` en vez de `padding = 0` añadiría un espacio de más.
+	// The interior is 0 and "body" can be neither wrapped nor truncated, so
+	// the row is the content as-is between the sides, with NO extra padding: a
+	// `padding = 1` instead of `padding = 0` would add one space too many.
 	if len(body) != 1 {
-		t.Fatalf("cuerpo = %q, want una fila", body)
+		t.Fatalf("body = %q, want one row", body)
 	}
-	if body[0] != "│cuerpo│" {
-		t.Errorf("fila = %q, want │cuerpo│ (relleno recortado a 0)", body[0])
+	if body[0] != "│body│" {
+		t.Errorf("row = %q, want │body│ (padding clamped to 0)", body[0])
 	}
 }
 
-// --- Alineación de los títulos del borde ---------------------------------
+// --- Alignment of the border titles -------------------------------------
 
-// La alineación decide dónde cae el relleno: a la izquierda del texto, a la
-// derecha, o repartido.
+// The alignment decides where the padding falls: to the left of the text,
+// to the right, or spread out.
 func TestRenderTitleAlignment(t *testing.T) {
 	const width = 30
 	tests := []struct {
 		name        string
 		align       int
-		wantPrefix  string // lo que hay antes del título, sin la esquina
-		wantPostfix int    // caracteres de relleno después del título
+		wantPrefix  string // what is before the title, without the corner
+		wantPostfix int    // padding characters after the title
 	}{
-		{"izquierda", AlignLeft, "╭", width - 3},
-		{"derecha", AlignRight, "", 0},
-		{"centro", AlignCenter, "", 0}, // el resto se comprueba por ancho
+		{"left", AlignLeft, "╭", width - 3},
+		{"right", AlignRight, "", 0},
+		{"center", AlignCenter, "", 0}, // the rest is checked by width
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -366,136 +366,136 @@ func TestRenderTitleAlignment(t *testing.T) {
 			runes := []rune(top)
 			idx := strings.Index(top, "TIT")
 			if idx < 0 {
-				t.Fatalf("el título no aparece: %q", top)
+				t.Fatalf("the title does not appear: %q", top)
 			}
 			runeIdx := len([]rune(top[:idx]))
 			_ = runes
 			switch tt.align {
 			case AlignLeft:
 				if !strings.HasPrefix(top, tt.wantPrefix) {
-					t.Errorf("align left = %q, want prefijo %q", top, tt.wantPrefix)
+					t.Errorf("align left = %q, want prefix %q", top, tt.wantPrefix)
 				}
 			case AlignRight:
-				// Alinear a la derecha deja el relleno ANTES del título: los
-				// guiones van de la esquina al principio del texto.
+				// Right alignment leaves the padding BEFORE the title: the dashes
+				// go from the corner to the start of the text.
 				got := runeIdx - 1
 				want := width - 2 - len("TIT")
 				if got != want {
-					t.Errorf("align right: %d guiones antes del título, want %d (%q)", got, want, top)
+					t.Errorf("align right: %d dashes before the title, want %d (%q)", got, want, top)
 				}
 				if len(runes)-1-(runeIdx+len("TIT")) != 0 {
-					t.Errorf("align right: sobra relleno tras el título (%q)", top)
+					t.Errorf("align right: leftover padding after the title (%q)", top)
 				}
 			case AlignCenter:
-				// El relleno sobrante se reparte: la izquierda nunca excede a
-				// la derecha en más de uno.
-				left := runeIdx - 1 // sin la esquina
+				// The leftover padding is spread: the left never exceeds the right
+				// by more than one.
+				left := runeIdx - 1 // without the corner
 				right := len(runes[runeIdx+len("TIT") : len(runes)-1])
 				if left > right+1 || right > left+1 {
-					t.Errorf("centro: %d a la izquierda y %d a la derecha no están repartidos (%q)", left, right, top)
+					t.Errorf("center: %d on the left and %d on the right are not spread out (%q)", left, right, top)
 				}
 				if left+right+len("TIT") != width-2 {
-					t.Errorf("centro: %d+%d+%d != %d", left, right, len("TIT"), width-2)
+					t.Errorf("center: %d+%d+%d != %d", left, right, len("TIT"), width-2)
 				}
 			}
 		})
 	}
 }
 
-// Un título más ancho que el interior se trunca al ancho disponible, en vez de
-// desbordar la caja.
+// A title wider than the interior is truncated to the available width,
+// instead of overflowing the box.
 func TestRenderTruncatesOverlongTitle(t *testing.T) {
-	const width = 10 // 8 de interior
-	out := RenderWithTitleEx(roundBorder(), nil, AlignLeft, "TITULO DEMASIADO LARGO", "", width)
+	const width = 10 // interior = 8
+	out := RenderWithTitleEx(roundBorder(), nil, AlignLeft, "TITLE TOO LONG", "", width)
 	assertUniformWidth(t, out, width)
 
 	top, _, _ := boxLines(t, out)
-	if strings.Contains(top, "LARGO") {
-		t.Errorf("el título debería truncarse, pero aparece entero: %q", top)
+	if strings.Contains(top, "LONG") {
+		t.Errorf("the title should be truncated, but it appears whole: %q", top)
 	}
 	if !strings.Contains(top, "TIT") {
-		t.Errorf("debería conservar el principio del título: %q", top)
+		t.Errorf("it should keep the beginning of the title: %q", top)
 	}
 }
 
-// El ancho del título se mide en COLUMNAS, no en bytes: un título con acentos o
-// emoji ocupa menos de lo que su longitud en runes sugiere.
+// The title width is measured in COLUMNS, not in bytes: a title with accents
+// or emoji takes less than its rune length suggests.
 func TestRenderMeasuresTitleInColumns(t *testing.T) {
 	const width = 14
-	wide := "áéí" // 6 runes, 3 columnas
+	wide := "áéí" // 3 runes, 6 bytes, 3 columns
 	out := RenderWithTitleEx(roundBorder(), nil, AlignLeft, wide, "", width)
 	assertUniformWidth(t, out, width)
 
 	top, _, _ := boxLines(t, out)
 	if !strings.Contains(top, wide) {
-		t.Errorf("el título cabe de sobra y debe aparecer entero: %q", top)
+		t.Errorf("the title fits with room to spare and must appear whole: %q", top)
 	}
 }
 
-// --- Colores -------------------------------------------------------------
+// --- Colors -------------------------------------------------------------
 
-// Con color de borde, el ANSI envuelve las líneas pero el ancho visible no
-// cambia: si el estilo alterara el ancho, la caja se descuadraría en pantalla.
+// With border color, the ANSI wraps the lines but the visible width does
+// not change: if the style altered the width, the box would go out of sync on screen.
 func TestRenderWithBorderColorKeepsVisibleWidth(t *testing.T) {
 	const width = 24
 	fg := color.RGBA{R: 0x88, G: 0x00, B: 0xAA, A: 0xFF}
-	out := RenderWithTitleEx(roundBorder(), fg, AlignLeft, " T ", "cuerpo del texto", width)
+	out := RenderWithTitleEx(roundBorder(), fg, AlignLeft, " T ", "text body", width)
 
 	if !strings.Contains(out, "\033[") {
-		t.Error("con color de borde la salida debe incluir secuencias ANSI")
+		t.Error("with border color the output must include ANSI sequences")
 	}
 	assertUniformWidth(t, out, width)
 }
 
-// --- wrapLine: la lógica de envolver conservando el estilo ---------------
+// --- wrapLine: the wrapping logic keeping the style ---------------
 
-// Envolver no puede partir una secuencia ANSI por la mitad ni perder el color.
+// Wrapping cannot split an ANSI sequence in half nor lose the color.
 func TestWrapLinePreservesAnsiStyles(t *testing.T) {
 	red := "\033[31m"
 	reset := "\033[0m"
-	line := red + strings.Repeat("palabra ", 6) + reset
+	line := red + strings.Repeat("word ", 6) + reset
 
 	chunks := wrapLine(line, 10)
 	if len(chunks) < 2 {
-		t.Fatalf("una línea de %d columnas en 10 debería partirse: %v", ansi.StringWidth(line), chunks)
+		t.Fatalf("a line of %d columns in 10 should split: %v", ansi.StringWidth(line), chunks)
 	}
 	for i, c := range chunks {
 		if w := ansi.StringWidth(c); w > 10 {
-			t.Errorf("chunk %d mide %d, want <= 10: %q", i, w, c)
+			t.Errorf("chunk %d measures %d, want <= 10: %q", i, w, c)
 		}
 		if !strings.Contains(c, red) {
-			t.Errorf("chunk %d perdió el estilo: %q", i, c)
+			t.Errorf("chunk %d lost the style: %q", i, c)
 		}
 		if !strings.HasSuffix(c, reset) {
-			t.Errorf("chunk %d no cierra el estilo: %q", i, c)
+			t.Errorf("chunk %d does not close the style: %q", i, c)
 		}
 	}
-	// Y nada de texto se pierde.
+	// And no text is lost.
 	var joined string
 	for _, c := range chunks {
 		joined += ansi.Strip(c)
 	}
 	if strings.TrimSpace(joined) != strings.TrimSpace(ansi.Strip(line)) {
-		t.Errorf("el texto envuelto difiere:\n original: %q\n unido:   %q", ansi.Strip(line), joined)
+		t.Errorf("the wrapped text differs:\n original: %q\n joined:   %q", ansi.Strip(line), joined)
 	}
 }
 
-// Con ancho máximo no positivo no se envuelve nada: se devuelve la línea tal
-// cual, porque no hay a dónde partirla.
+// With a non-positive max width nothing is wrapped: the line is returned
+// as-is, because there is nowhere to split it.
 func TestWrapLineNonPositiveWidth(t *testing.T) {
 	for _, w := range []int{0, -1, -10} {
-		line := "texto largo"
+		line := "long text"
 		got := wrapLine(line, w)
 		if len(got) != 1 {
-			t.Fatalf("wrapLine(%q, %d) devolvió %d líneas, want 1", line, w, len(got))
+			t.Fatalf("wrapLine(%q, %d) returned %d lines, want 1", line, w, len(got))
 		}
 		if got[0] != line {
-			t.Errorf("wrapLine(%q, %d) = %q, want la línea intacta", line, w, got[0])
+			t.Errorf("wrapLine(%q, %d) = %q, want the line intact", line, w, got[0])
 		}
 	}
 }
 
-// Una línea de texto sin estilo que no cabe se parte por columnas exactas.
+// An unstyled text line that does not fit is split by exact columns.
 func TestWrapLineSplitsAtExactWidth(t *testing.T) {
 	got := wrapLine(strings.Repeat("a", 25), 10)
 	if len(got) != 3 {
@@ -508,36 +508,36 @@ func TestWrapLineSplitsAtExactWidth(t *testing.T) {
 	}
 }
 
-// Una línea corta cabe entera y no se parte.
+// A short line fits whole and is not split.
 func TestWrapLineShortLineUnchanged(t *testing.T) {
-	got := wrapLine("corta", 10)
-	if len(got) != 1 || got[0] != "corta" {
-		t.Errorf("wrapLine(%q, 10) = %v, want una línea intacta", "corta", got)
+	got := wrapLine("short", 10)
+	if len(got) != 1 || got[0] != "short" {
+		t.Errorf("wrapLine(%q, 10) = %v, want a line intact", "short", got)
 	}
 }
 
-// Una línea con estilo que cambia a mitad debe partirse de forma coherente: cada
-// trozo lleva su propio estilo, no el de antes ni el de después.
+// A styled line whose style changes in the middle must split coherently:
+// each piece carries its own style, not the one before nor the one after.
 func TestWrapLineHandlesStyleChange(t *testing.T) {
-	line := "\033[31mrojo\033[0m\033[32mverde\033[0m"
+	line := "\033[31mred\033[0m\033[32mgreen\033[0m"
 	chunks := wrapLine(line, 5)
 	for i, c := range chunks {
 		if ansi.StringWidth(c) > 5 {
-			t.Errorf("chunk %d mide %d, want <= 5: %q", i, ansi.StringWidth(c), c)
+			t.Errorf("chunk %d measures %d, want <= 5: %q", i, ansi.StringWidth(c), c)
 		}
 	}
 	joined := ""
 	for _, c := range chunks {
 		joined += ansi.Strip(c)
 	}
-	if joined != "rojoverde" {
-		t.Errorf("texto unido = %q, want rojoverde", joined)
+	if joined != "redgreen" {
+		t.Errorf("joined text = %q, want redgreen", joined)
 	}
 }
 
 // --- parseAnsiSegments ---------------------------------------------------
 
-// El parser separa estilo y texto, conservando el orden.
+// The parser separates style and text, preserving the order.
 func TestParseAnsiSegments(t *testing.T) {
 	tests := []struct {
 		name string
@@ -545,27 +545,27 @@ func TestParseAnsiSegments(t *testing.T) {
 		want []ansiSegment
 	}{
 		{
-			name: "texto plano",
-			in:   "hola",
-			want: []ansiSegment{{style: "", text: "hola"}},
+			name: "plain text",
+			in:   "hello",
+			want: []ansiSegment{{style: "", text: "hello"}},
 		},
 		{
-			name: "estilo al principio",
-			in:   "\033[31mrojo",
-			want: []ansiSegment{{style: "\033[31m", text: ""}, {style: "", text: "rojo"}},
+			name: "style at the start",
+			in:   "\033[31mred",
+			want: []ansiSegment{{style: "\033[31m", text: ""}, {style: "", text: "red"}},
 		},
 		{
-			name: "estilo en medio",
+			name: "style in the middle",
 			in:   "a\033[1mb",
 			want: []ansiSegment{{style: "", text: "a"}, {style: "\033[1m", text: ""}, {style: "", text: "b"}},
 		},
 		{
-			name: "reset solo",
+			name: "reset alone",
 			in:   "\033[0m",
 			want: []ansiSegment{{style: "\033[0m", text: ""}},
 		},
 		{
-			name: "varios estilos",
+			name: "multiple styles",
 			in:   "\033[1ma\033[31mb",
 			want: []ansiSegment{
 				{style: "\033[1m", text: ""},
@@ -575,18 +575,18 @@ func TestParseAnsiSegments(t *testing.T) {
 			},
 		},
 		{
-			// 0x7E ('~') es el último byte válido de una secuencia CSI: el
-			// bucle tiene que incluirlo o la secuencia se trunca y el resto del
-			// texto se lee como si fuera parte del estilo.
-			name: "CSI terminado en ~",
-			in:   "\033[1~después",
+			// 0x7E ('~') is the last valid byte of a CSI sequence: the
+			// loop has to include it or the sequence is truncated and the rest
+			// of the text is read as if it were part of the style.
+			name: "CSI ending in ~",
+			in:   "\033[1~after",
 			want: []ansiSegment{
 				{style: "\033[1~", text: ""},
-				{style: "", text: "después"},
+				{style: "", text: "after"},
 			},
 		},
 		{
-			name: "CSI con parámetros y ~",
+			name: "CSI with parameters and ~",
 			in:   "\033[3;5~x",
 			want: []ansiSegment{
 				{style: "\033[3;5~", text: ""},
@@ -594,19 +594,19 @@ func TestParseAnsiSegments(t *testing.T) {
 			},
 		},
 		{
-			// '@' (0x40) es el PRIMER byte del rango de finalizadores, así que
-			// es un final byte válido. Si el rango empezara en 0x41, esta
-			// secuencia se tragaría el texto que viene detrás.
-			name: "CSI terminado en @",
-			in:   "\033[?7@después",
+			// '@' (0x40) is the FIRST byte of the finalizer range, so it is a
+			// valid final byte. If the range started at 0x41, this sequence
+			// would swallow the text that comes behind it.
+			name: "CSI ending in @",
+			in:   "\033[?7@after",
 			want: []ansiSegment{
 				{style: "\033[?7@", text: ""},
-				{style: "", text: "después"},
+				{style: "", text: "after"},
 			},
 		},
 		{
-			// Y lo mismo por el otro extremo del rango.
-			name: "CSI terminado en ~",
+			// And the same at the other end of the range.
+			name: "CSI ending in ~",
 			in:   "\033[1~final",
 			want: []ansiSegment{
 				{style: "\033[1~", text: ""},
@@ -614,17 +614,17 @@ func TestParseAnsiSegments(t *testing.T) {
 			},
 		},
 		{
-			// 'm' (0x6D) es el finalizer del SGR, el caso más común.
+			// 'm' (0x6D) is the SGR finalizer, the most common case.
 			name: "SGR",
-			in:   "\033[31mrojo\033[0m",
+			in:   "\033[31mred\033[0m",
 			want: []ansiSegment{
 				{style: "\033[31m", text: ""},
-				{style: "", text: "rojo"},
+				{style: "", text: "red"},
 				{style: "\033[0m", text: ""},
 			},
 		},
 		{
-			name: "cadena vacía",
+			name: "empty string",
 			in:   "",
 			want: nil,
 		},
@@ -633,70 +633,70 @@ func TestParseAnsiSegments(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := parseAnsiSegments(tt.in)
 			if len(got) != len(tt.want) {
-				t.Fatalf("got %d segmentos %v, want %d %v", len(got), got, len(tt.want), tt.want)
+				t.Fatalf("got %d segments %v, want %d %v", len(got), got, len(tt.want), tt.want)
 			}
 			for i := range got {
 				if got[i] != tt.want[i] {
-					t.Errorf("segmento %d = %+v, want %+v", i, got[i], tt.want[i])
+					t.Errorf("segment %d = %+v, want %+v", i, got[i], tt.want[i])
 				}
 			}
 		})
 	}
 }
 
-// TestParseAnsiSegmentsTermina es la garantía que los casos de arriba NO
-// cubren: que el parser avanza siempre, sea cual sea la entrada.
+// TestParseAnsiSegmentsTerminates is the guarantee that the cases above do NOT
+// cover: that the parser always advances, whatever the input.
 //
-// La suite anterior no tenía ninguna entrada truncada, así que la forma exacta
-// del bucle —`j := i` o `j := i+1`— era indistinguible de cualquier otra. Eso
-// es justo la condición bajo la que la versión previa podía no avanzar: si el
-// escaneo de texto y el de escapes discrepaban, el segmento de texto descartaba
-// i sin consumirlo y el bucle exterior no progresaba. Con un "\033[" al final
-// de una línea eso es un cuelgue del render, no un mutante exótico.
+// The previous suite had no truncated input, so the exact shape of the loop
+// —`j := i` or `j := i+1`— was indistinguishable from any other. That is
+// exactly the condition under which the earlier version could not advance: if
+// the text scan and the escape scan disagreed, the text segment discarded i
+// without consuming it and the outer loop did not progress. With a "\033[" at
+// the end of a line that is a render hang, not an exotic mutant.
 //
-// Estos casos lo fijan sin depender del alfabeto: se ejecutan tal cual, y un
-// no-avance se manifiesta como timeout en vez de como un valor incorrecto.
-func TestParseAnsiSegmentsTermina(t *testing.T) {
+// These cases pin it down without depending on the alphabet: they run as-is,
+// and a non-advance shows up as a timeout instead of as a wrong value.
+func TestParseAnsiSegmentsTerminates(t *testing.T) {
 	for _, in := range []string{
-		"\033",                       // ESC solo: no alcanza a ser CSI
-		"\033[",                      // CSI sin byte final
-		"a\033",                      // texto + ESC truncado
-		"a\033[",                     // texto + CSI incompleto
-		"\033[1",                     // CSI con parámetro sin byte final
-		"a\033[1m",                   // CSI completa tras texto
-		"\033[0m\033[",               // CSI completa y luego truncada
-		"[\033[",                     // corchete suelto + CSI truncada
-		"\033[[",                     // corchete doble tras ESC
-		"\033[\033[",                 // ESC dentro de una CSI
-		"\033[\033",                  // ESC truncado dentro de una CSI
-		"\033[;;;;;;",                // CSI larga sin byte final
-		"\033[1;2;3;4;5",             // CSI parametrizada sin byte final
-		strings.Repeat("\033[", 200), // muchas CSI truncadas seguidas
-		strings.Repeat("a", 5000),    // texto largo sin CSI
+		"\033",                       // lone ESC: not enough to be CSI
+		"\033[",                      // CSI without final byte
+		"a\033",                      // text + truncated ESC
+		"a\033[",                     // text + incomplete CSI
+		"\033[1",                     // CSI with parameter but no final byte
+		"a\033[1m",                   // complete CSI after text
+		"\033[0m\033[",               // complete CSI and then truncated
+		"[\033[",                     // lone bracket + truncated CSI
+		"\033[[",                     // double bracket after ESC
+		"\033[\033[",                 // ESC inside a CSI
+		"\033[\033",                  // truncated ESC inside a CSI
+		"\033[;;;;;;",                // long CSI without final byte
+		"\033[1;2;3;4;5",             // parameterized CSI without final byte
+		strings.Repeat("\033[", 200), // many truncated CSIs in a row
+		strings.Repeat("a", 5000),    // long text with no CSI
 		strings.Repeat("a\033[1m", 500),
 	} {
-		// Que la llamada termine es la aserción. El contenido se comprueba sólo
-		// para que el caso sea un test y no un smoke de compilación: un
-		// segmento de texto vacío sería tan malo como un cuelgue.
+		// That the call finishes is the assertion. The content is checked
+		// only so that the case is a test and not a compilation smoke: an
+		// empty text segment would be as bad as a hang.
 		got := parseAnsiSegments(in)
 		if len(got) == 0 && in != "" {
-			t.Errorf("%q: se perdieron todos los segmentos", in)
+			t.Errorf("%q: all segments were lost", in)
 			continue
 		}
-		// Reconstruir: todo carácter de la entrada debe aparecer una vez, en un
-		// segmento, y el texto reconstruido debe igualar la entrada sin estilos.
+		// Rebuild: every character of the input must appear once, in one
+		// segment, and the rebuilt text must equal the input without styles.
 		var text strings.Builder
 		for _, seg := range got {
 			text.WriteString(seg.text)
 		}
 		if want := stripCSI(in); text.String() != want {
-			t.Errorf("%q: texto reconstruido %q, want %q", in, text.String(), want)
+			t.Errorf("%q: reconstructed text %q, want %q", in, text.String(), want)
 		}
 	}
 }
 
-// stripCSI quita las secuencias CSI completas, que es el texto que el parser
-// debe devolver como segmentos con estilo.
+// stripCSI removes the complete CSI sequences, which is the text the parser
+// must return as styled segments.
 func stripCSI(s string) string {
 	var out strings.Builder
 	for len(s) > 0 {
@@ -721,23 +721,23 @@ func stripCSI(s string) string {
 	return out.String()
 }
 
-// --- Helpers internos ----------------------------------------------------
+// --- Internal helpers ----------------------------------------------------
 
 func TestRepeatStyled(t *testing.T) {
 	if got := repeatStyled(nil, "-", 3); got != "---" {
 		t.Errorf("repeatStyled(nil) = %q, want ---", got)
 	}
 	if got := repeatStyled(nil, "-", 0); got != "" {
-		t.Errorf("repeatStyled(nil, -, 0) = %q, want vacío", got)
+		t.Errorf("repeatStyled(nil, -, 0) = %q, want empty", got)
 	}
 	if got := repeatStyled(nil, "ab", 2); got != "abab" {
-		t.Errorf("repeatStyled con char de 2 = %q, want abab", got)
+		t.Errorf("repeatStyled with a 2-char value = %q, want abab", got)
 	}
 
 	style := ansi.NewStyle()
 	withStyle := repeatStyled(&style, "-", 3)
 	if ansi.StringWidth(withStyle) != 3 {
-		t.Errorf("con estilo el ancho debe seguir siendo 3, es %d", ansi.StringWidth(withStyle))
+		t.Errorf("with style the width must still be 3, it is %d", ansi.StringWidth(withStyle))
 	}
 }
 
@@ -747,6 +747,6 @@ func TestStyledChar(t *testing.T) {
 	}
 	style := ansi.NewStyle()
 	if got := styledChar(&style, "x"); ansi.Strip(got) != "x" {
-		t.Errorf("styledChar con estilo = %q, want x tras strip", got)
+		t.Errorf("styledChar with style = %q, want x after strip", got)
 	}
 }

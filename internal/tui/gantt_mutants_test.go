@@ -10,11 +10,11 @@ import (
 	"tsk/internal/model"
 )
 
-// ganttModelWithPeople deja el modelo en la vista Gantt con `people` personas y
-// `perPerson` tareas cada una, todas "activas" para que aparezcan en la
-// proyección. El Gantt agenda la cola desde hoy, así que las fechas dependen del
-// reloj; los tests worked con lo que el propio modelo calcula, no con fechas
-// fijas.
+// ganttModelWithPeople leaves the model on the Gantt view with `people` people
+// and `perPerson` tasks each, all "active" so that they appear in the
+// projection. The Gantt schedules the queue from today, so the dates depend
+// on the clock; the tests work with what the model itself calculates, not
+// with fixed dates.
 func ganttModelWithPeople(t *testing.T, people []string, perPerson int) *Model {
 	t.Helper()
 	m := newTestModel(t)
@@ -26,11 +26,11 @@ func ganttModelWithPeople(t *testing.T, people []string, perPerson int) *Model {
 			id++
 			m.tasks = append(m.tasks, model.Task{
 				ID:        id,
-				Title:     "tarea",
+				Title:     "task",
 				Status:    "todo",
 				Assignee:  p,
 				Priority:  model.PriorityMedium,
-				Estimate:  1, // sin estimación la tarea no entra en la cola
+				Estimate:  1, // without an estimate the task does not enter the queue
 				CreatedAt: time.Now().Format("2006-01-02"),
 			})
 		}
@@ -40,25 +40,25 @@ func ganttModelWithPeople(t *testing.T, people []string, perPerson int) *Model {
 	return m
 }
 
-// firstGanttMonday devuelve un lunes conocido, para que la rejilla del ruler y
-// del axis tenga columnas predecibles.
+// firstGanttMonday returns a known Monday, so that the ruler's and the
+// axis's grid have predictable columns.
 func firstGanttMonday() time.Time {
-	return time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC) // lunes
+	return time.Date(2026, 9, 7, 0, 0, 0, 0, time.UTC) // Monday
 }
 
-// --- La estructura de filas ----------------------------------------------
+// --- The structure of rows ----------------------------------------------
 
-// Cada persona aporta una cabecera seguida de sus tareas. Es la forma que hace
-// que la navegación tenga que saltarse cabeceras.
+// Each person contributes a header followed by their tasks. It is the shape
+// that forces the navigation to skip headers.
 func TestGanttRowsInterleaveHeadersAndTasks(t *testing.T) {
 	s := &model.Schedule{
 		Start: "2026-09-07",
 		Assignees: []model.AssigneeSchedule{
-			{Assignee: "@juan", Entries: []model.ScheduleEntry{
+			{Assignee: "@john", Entries: []model.ScheduleEntry{
 				{Task: model.Task{ID: 1}, Start: "2026-09-07", End: "2026-09-08"},
 				{Task: model.Task{ID: 2}, Start: "2026-09-09", End: "2026-09-10"},
 			}},
-			{Assignee: "@maria", Entries: []model.ScheduleEntry{
+			{Assignee: "@margo", Entries: []model.ScheduleEntry{
 				{Task: model.Task{ID: 3}, Start: "2026-09-11", End: "2026-09-12"},
 			}},
 		},
@@ -69,41 +69,41 @@ func TestGanttRowsInterleaveHeadersAndTasks(t *testing.T) {
 		kind     ganttRowKind
 		assignee string
 	}{
-		{ganttAssigneeRow, "@juan"},
-		{ganttTaskRow, "@juan"},
-		{ganttTaskRow, "@juan"},
-		{ganttAssigneeRow, "@maria"},
-		{ganttTaskRow, "@maria"},
+		{ganttAssigneeRow, "@john"},
+		{ganttTaskRow, "@john"},
+		{ganttTaskRow, "@john"},
+		{ganttAssigneeRow, "@margo"},
+		{ganttTaskRow, "@margo"},
 	}
 	if len(rows) != len(want) {
-		t.Fatalf("got %d filas, want %d", len(rows), len(want))
+		t.Fatalf("got %d rows, want %d", len(rows), len(want))
 	}
 	for i, w := range want {
 		if rows[i].kind != w.kind || rows[i].assignee != w.assignee {
-			t.Errorf("fila %d = {kind:%d assignee:%q}, want {kind:%d assignee:%q}",
+			t.Errorf("row %d = {kind:%d assignee:%q}, want {kind:%d assignee:%q}",
 				i, rows[i].kind, rows[i].assignee, w.kind, w.assignee)
 		}
 	}
-	// Y cada fila de tarea apunta a SU entrada, no a la primera: si apuntara a
-	// una copia compartida, todas las barras mostrarían la misma tarea.
+	// And each task row points to ITS OWN entry, not the first one: if it
+	// pointed to a shared copy, all the bars would show the same task.
 	if rows[1].entry == nil || rows[1].entry.Task.ID != 1 {
-		t.Errorf("fila 1 debe apuntar a la tarea 1: %+v", rows[1].entry)
+		t.Errorf("row 1 must point to task 1: %+v", rows[1].entry)
 	}
 	if rows[2].entry == nil || rows[2].entry.Task.ID != 2 {
-		t.Errorf("fila 2 debe apuntar a la tarea 2: %+v", rows[2].entry)
+		t.Errorf("row 2 must point to task 2: %+v", rows[2].entry)
 	}
 	if rows[4].entry == nil || rows[4].entry.Task.ID != 3 {
-		t.Errorf("fila 4 debe apuntar a la tarea 3: %+v", rows[4].entry)
+		t.Errorf("row 4 must point to task 3: %+v", rows[4].entry)
 	}
 }
 
 func TestGanttRowsEmpty(t *testing.T) {
 	if got := ganttRows(&model.Schedule{}); len(got) != 0 {
-		t.Errorf("sin assignees hay %d filas, want 0", len(got))
+		t.Errorf("with no assignees there are %d rows, want 0", len(got))
 	}
 	one := &model.Schedule{Assignees: []model.AssigneeSchedule{{Assignee: "solo"}}}
 	if got := ganttRows(one); len(got) != 1 {
-		t.Errorf("una persona sin tareas da %d filas, want 1 (sólo la cabecera)", len(got))
+		t.Errorf("a person with no tasks gives %d rows, want 1 (only the header)", len(got))
 	}
 }
 
@@ -111,15 +111,15 @@ func TestGanttRowsEmpty(t *testing.T) {
 
 func TestGanttTaskRange(t *testing.T) {
 	rows := []ganttRow{
-		{kind: ganttAssigneeRow, assignee: "@juan"},
+		{kind: ganttAssigneeRow, assignee: "@john"},
 		{kind: ganttTaskRow},
 		{kind: ganttTaskRow},
-		{kind: ganttAssigneeRow, assignee: "@maria"},
+		{kind: ganttAssigneeRow, assignee: "@margo"},
 		{kind: ganttTaskRow},
 	}
 	first, last := ganttTaskRange(rows)
 	if first != 1 || last != 4 {
-		t.Errorf("rango = (%d,%d), want (1,4)", first, last)
+		t.Errorf("range = (%d,%d), want (1,4)", first, last)
 	}
 }
 
@@ -129,16 +129,16 @@ func TestGanttTaskRangeEdgeCases(t *testing.T) {
 		rows                []ganttRow
 		wantFirst, wantLast int
 	}{
-		{"sin filas", nil, -1, -1},
-		{"sólo cabeceras", []ganttRow{{kind: ganttAssigneeRow}}, -1, -1},
-		{"una sola tarea", []ganttRow{{kind: ganttAssigneeRow}, {kind: ganttTaskRow}}, 1, 1},
-		{"sólo tareas", []ganttRow{{kind: ganttTaskRow}, {kind: ganttTaskRow}}, 0, 1},
+		{"no rows", nil, -1, -1},
+		{"only headers", []ganttRow{{kind: ganttAssigneeRow}}, -1, -1},
+		{"a single task", []ganttRow{{kind: ganttAssigneeRow}, {kind: ganttTaskRow}}, 1, 1},
+		{"only tasks", []ganttRow{{kind: ganttTaskRow}, {kind: ganttTaskRow}}, 0, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			first, last := ganttTaskRange(tt.rows)
 			if first != tt.wantFirst || last != tt.wantLast {
-				t.Errorf("rango = (%d,%d), want (%d,%d)", first, last, tt.wantFirst, tt.wantLast)
+				t.Errorf("range = (%d,%d), want (%d,%d)", first, last, tt.wantFirst, tt.wantLast)
 			}
 		})
 	}
@@ -146,15 +146,15 @@ func TestGanttTaskRangeEdgeCases(t *testing.T) {
 
 // --- snapGanttCursor ------------------------------------------------------
 
-// El cursor debe acabar SIEMPRE sobre una fila de tarea: las cabeceras de
-// persona no son navegables, así que se salta a la tarea contigua.
+// The cursor must end ALWAYS on a task row: person headers are not
+// navigable, so it jumps to the adjacent task.
 func TestSnapGanttCursorLandsOnTaskRow(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan", "@maria"}, 2)
+	m := ganttModelWithPeople(t, []string{"@john", "@margo"}, 2)
 	rows := m.ganttRows()
-	// 2 personas x (cabecera + 2 tareas) = 6 filas.
-	//  0 hdr @juan · 1 tarea · 2 tarea · 3 hdr @maria · 4 tarea · 5 tarea
+	// 2 people x (header + 2 tasks) = 6 rows.
+	//  0 hdr @john · 1 task · 2 task · 3 hdr @margo · 4 task · 5 task
 	if len(rows) != 6 {
-		t.Fatalf("fixture: 2 personas x (cabecera + 2 tareas) = 6 filas, hay %d", len(rows))
+		t.Fatalf("fixture: 2 people x (header + 2 tasks) = 6 rows, there are %d", len(rows))
 	}
 
 	tests := []struct {
@@ -162,10 +162,10 @@ func TestSnapGanttCursorLandsOnTaskRow(t *testing.T) {
 		cursor int
 		want   int
 	}{
-		{"ya sobre una tarea", 2, 2},
-		{"primera cabecera salta hacia abajo", 0, 1},
-		{"segunda cabecera salta hacia abajo", 3, 4},
-		{"última tarea se queda", 5, 5},
+		{"already on a task", 2, 2},
+		{"first header jumps down", 0, 1},
+		{"second header jumps down", 3, 4},
+		{"last task stays", 5, 5},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -175,37 +175,37 @@ func TestSnapGanttCursorLandsOnTaskRow(t *testing.T) {
 				t.Errorf("cursor = %d, want %d", m.ganttCursor, tt.want)
 			}
 			if rows[m.ganttCursor].kind != ganttTaskRow {
-				t.Errorf("el cursor quedó en una cabecera (fila %d)", m.ganttCursor)
+				t.Errorf("the cursor ended up on a header (row %d)", m.ganttCursor)
 			}
 		})
 	}
 }
 
-// Toda cabecera tiene al menos una tarea detrás: ganttRows sólo emite la
-// cabecera de una persona que tiene entradas, así que la fila siguiente es
-// siempre una tarea. Eso convierte la búsqueda HACIA ATRÁS de snapGanttCursor
-// en un camino defensivo que la estructura de filas no alcanza.
+// Every header has at least one task behind it: ganttRows only emits the
+// header of a person that has entries, so the next row is always a task. That
+// turns snapGanttCursor's BACKWARD search into a defensive path that the row
+// structure never reaches.
 //
-// Se fija la invariante en vez de inventarse un caso: si algún día una cabecera
-// pudiera quedar al final, este test lo diría al romperse.
+// The invariant is pinned down instead of inventing a case: if some day a
+// header could end up at the end, this test would say so by breaking.
 func TestSnapGanttCursorHeaderAlwaysHasTaskAhead(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan", "@maria"}, 1)
-	rows := m.ganttRows() // [hdr @juan, tarea, hdr @maria, tarea]
+	m := ganttModelWithPeople(t, []string{"@john", "@margo"}, 1)
+	rows := m.ganttRows() // [hdr @john, task, hdr @margo, task]
 	if len(rows) != 4 {
-		t.Fatalf("fixture: 4 filas esperadas, hay %d", len(rows))
+		t.Fatalf("fixture: 4 rows expected, there are %d", len(rows))
 	}
 	for i, r := range rows {
 		if r.kind != ganttAssigneeRow {
 			continue
 		}
 		if i+1 >= len(rows) || rows[i+1].kind != ganttTaskRow {
-			t.Fatalf("la cabecera %d no va seguida de una tarea: %+v", i, rows)
+			t.Fatalf("header %d is not followed by a task: %+v", i, rows)
 		}
 	}
 }
 
 func TestSnapGanttCursorOutOfRange(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 2)
+	m := ganttModelWithPeople(t, []string{"@john"}, 2)
 	rows := m.ganttRows() // [hdr, task, task] -> 3
 	last := len(rows) - 1
 
@@ -214,9 +214,9 @@ func TestSnapGanttCursorOutOfRange(t *testing.T) {
 		cursor int
 		want   int
 	}{
-		{"más allá del final", 99, last},
-		{"negativo", -5, 1},
-		{"en la última", last, last},
+		{"beyond the end", 99, last},
+		{"negative", -5, 1},
+		{"on the last one", last, last},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -229,37 +229,37 @@ func TestSnapGanttCursorOutOfRange(t *testing.T) {
 	}
 }
 
-// Sin filas, el cursor queda en 0 en vez de quedar fuera.
+// With no rows, the cursor stays at 0 instead of going out.
 func TestSnapGanttCursorEmpty(t *testing.T) {
 	m := ganttModelWithPeople(t, nil, 0)
 	m.ganttCursor = 7
 
 	m.snapGanttCursor()
 	if m.ganttCursor != 0 {
-		t.Errorf("cursor = %d, want 0 con la vista vacía", m.ganttCursor)
+		t.Errorf("cursor = %d, want 0 with the view empty", m.ganttCursor)
 	}
 }
 
-// Sólo cabeceras, sin ninguna tarea: el cursor cae a 0.
+// Only headers, with no task at all: the cursor falls to 0.
 func TestSnapGanttCursorHeadersWithoutTasks(t *testing.T) {
 	m := ganttModelWithPeople(t, nil, 0)
-	// Una persona sin tareas NO genera filas, así que hay que forzar el caso
-	// con un filtro que deje sólo la cabecera vía una tarea sin agendar.
-	m.tasks = []model.Task{{ID: 1, Title: "sin gente", Status: "todo", Assignee: ""}}
+	// A person with no tasks does NOT generate rows, so the case has to be
+	// forced with a filter that leaves only the header via an unscheduled task.
+	m.tasks = []model.Task{{ID: 1, Title: "no people", Status: "todo", Assignee: ""}}
 	m.invalidateFilterCache()
 
 	m.ganttCursor = 1
 	m.snapGanttCursor()
 	if m.ganttCursor < 0 {
-		t.Errorf("cursor = %d, no puede quedar negativo", m.ganttCursor)
+		t.Errorf("cursor = %d, it cannot be negative", m.ganttCursor)
 	}
 }
 
 // --- daysBetween ----------------------------------------------------------
 
-// daysBetween cuenta días de calendario. Una fecha inválida devuelve -1, que es
-// la señal de "no se pudo medir": si devolviera 0, la barra se dibujaría en la
-// primera columna en vez de desaparecer.
+// daysBetween counts calendar days. An invalid date returns -1, which is the
+// signal of "could not be measured": if it returned 0, the bar would be
+// drawn in the first column instead of disappearing.
 func TestDaysBetween(t *testing.T) {
 	start := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	tests := []struct {
@@ -267,13 +267,13 @@ func TestDaysBetween(t *testing.T) {
 		date string
 		want int
 	}{
-		{"el mismo día", "2026-09-01", 0},
-		{"un día después", "2026-09-02", 1},
-		{"una semana después", "2026-09-08", 7},
-		{"mes siguiente", "2026-10-01", 30},
-		{"fecha inválida", "no-es-fecha", -1},
-		{"vacío", "", -1},
-		{"formato distinto", "01/09/2026", -1},
+		{"the same day", "2026-09-01", 0},
+		{"one day later", "2026-09-02", 1},
+		{"one week later", "2026-09-08", 7},
+		{"next month", "2026-10-01", 30},
+		{"invalid date", "not-a-date", -1},
+		{"empty", "", -1},
+		{"different format", "01/09/2026", -1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -284,155 +284,155 @@ func TestDaysBetween(t *testing.T) {
 	}
 }
 
-// --- El eje de semanas (ruler) -------------------------------------------
+// --- The weeks' axis (ruler) -------------------------------------------
 
 func TestRenderGanttRulerMarksMondays(t *testing.T) {
 	start := firstGanttMonday()
-	const labelW, dayCols = 10, 28 // 4 semanas justas
+	const labelW, dayCols = 10, 28 // exactly 4 weeks
 
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 	ruler := ansi.Strip(m.renderGanttRuler(start, 0, labelW, dayCols))
 
 	if !strings.Contains(ruler, model.WeekOfMonthLabel(start)) {
-		t.Errorf("el ruler debe rotular el lunes de la primera columna: %q", ruler)
+		t.Errorf("the ruler must label the Monday of the first column: %q", ruler)
 	}
-	// Con offset 0 arrancamos en lunes, así que los rótulos caen en las
-	// columnas 0, 7, 14 y 21. Ninguna puede pisar el relleno de la etiqueta.
+	// With offset 0 we start on Monday, so the captions fall on the columns
+	// 0, 7, 14 and 21. None can step on the label's padding.
 	for _, col := range []int{0, 7, 14, 21} {
 		at := labelW + 1 + col
 		r := []rune(ruler)
 		if at < len(r) && r[at] == ' ' {
-			t.Errorf("columna %d sin rótulo de lunes: %q", at, ruler)
+			t.Errorf("column %d without a Monday label: %q", at, ruler)
 		}
 	}
 }
 
-// Desplazar el inicio mueve el rótulo: con offset 2 la columna 0 es miércoles y
-// el primer lunes cae 5 columnas más allá.
+// Shifting the start moves the caption: with offset 2 column 0 is Wednesday
+// and the first Monday falls 5 columns beyond.
 func TestRenderGanttRulerWithOffset(t *testing.T) {
 	start := firstGanttMonday()
 	const labelW, dayCols = 8, 30
 
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 	ruler := ansi.Strip(m.renderGanttRuler(start, 2, labelW, dayCols))
 
 	nextMonday := model.WeekOfMonthLabel(start.AddDate(0, 0, 7))
 	if !strings.Contains(ruler, nextMonday) {
-		t.Errorf("con offset 2 debe rotularse el lunes siguiente: %q", ruler)
+		t.Errorf("with offset 2 the next Monday must be labeled: %q", ruler)
 	}
-	// Y no debe estar pegado a la etiqueta: la columna del lunes es 5.
+	// And it must not be glued to the label: the Monday column is 5.
 	r := []rune(ruler)
 	at := labelW + 1 + 5
 	if at < len(r) && r[at] == ' ' {
-		t.Errorf("el rótulo del lunes no cayó en su columna (offset 2): %q", ruler)
+		t.Errorf("the Monday label did not fall on its column (offset 2): %q", ruler)
 	}
 }
 
-// El ruler nunca desborda la rejilla, ni con etiquetas ni con columnasutc.
+// The ruler never overflows the grid, neither with labels nor with utc columns.
 func TestRenderGanttRulerFitsWidth(t *testing.T) {
 	start := firstGanttMonday()
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 
 	for _, labelW := range []int{1, 4, 8, 14, 30} {
 		for _, dayCols := range []int{1, 7, 14, 28, 60} {
 			ruler := ansi.Strip(m.renderGanttRuler(start, 0, labelW, dayCols))
 			if w := ansi.StringWidth(ruler); w > labelW+1+dayCols {
-				t.Errorf("labelW=%d dayCols=%d: ruler mide %d, want <= %d", labelW, dayCols, w, labelW+1+dayCols)
+				t.Errorf("labelW=%d dayCols=%d: ruler measures %d, want <= %d", labelW, dayCols, w, labelW+1+dayCols)
 			}
 		}
 	}
 }
 
-// --- El eje de días -------------------------------------------------------
+// --- The days' axis -----------------------------------------------------
 
-// El axis marca "|" en cada lunes y "-" en el resto de días.
+// The axis marks "|" on each Monday and "-" on the rest of the days.
 func TestRenderGanttAxisMondays(t *testing.T) {
 	start := firstGanttMonday()
 	const labelW, dayCols = 6, 14
 
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 	axis := ansi.Strip(m.renderGanttAxis(labelW, dayCols, start, 0))
 
 	if w := ansi.StringWidth(axis); w != labelW+1+dayCols {
-		t.Errorf("axis mide %d, want %d", w, labelW+1+dayCols)
+		t.Errorf("axis measures %d, want %d", w, labelW+1+dayCols)
 	}
 	marks := axis[labelW+1:]
 	if pipes := strings.Count(marks, "|"); pipes != 2 {
-		t.Errorf("14 días desde un lunes tienen 2 lunes, hay %d: %q", pipes, marks)
+		t.Errorf("14 days from a Monday have 2 Mondays, there are %d: %q", pipes, marks)
 	}
 	if dashes := strings.Count(marks, "-"); dashes != dayCols-2 {
-		t.Errorf("los %d días restantes deben ser guiones, hay %d", dayCols-2, dashes)
+		t.Errorf("the remaining %d days must be dashes, there are %d", dayCols-2, dashes)
 	}
 }
 
-// Desplazar un día mueve la posición de cada "|" una columna.
+// Shifting a day moves each "|"'s position by one column.
 func TestRenderGanttAxisOffsetMovesMondays(t *testing.T) {
 	start := firstGanttMonday()
 	const labelW, dayCols = 6, 14
 
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 	marks := ansi.Strip(m.renderGanttAxis(labelW, dayCols, start, 1))[labelW+1:]
 
 	if marks[0] != '-' {
-		t.Errorf("con offset 1 la columna 0 es martes: %q", marks[0])
+		t.Errorf("with offset 1 column 0 is Tuesday: %q", marks[0])
 	}
 	if marks[6] != '|' {
-		t.Errorf("con offset 1 el primer lunes debe caer en la columna 6: %q", marks)
+		t.Errorf("with offset 1 the first Monday must fall on column 6: %q", marks)
 	}
 }
 
 func TestRenderGanttAxisZeroDays(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 	axis := ansi.Strip(m.renderGanttAxis(10, 0, firstGanttMonday(), 0))
 	if w := ansi.StringWidth(axis); w != 11 {
-		t.Errorf("axis con 0 días mide %d, want 11 (sólo el relleno)", w)
+		t.Errorf("axis with 0 days measures %d, want 11 (only the padding)", w)
 	}
 }
 
 // --- ganttLegend ----------------------------------------------------------
 
-// La leyenda describe el rango visible, así que cambiar el offset la cambia.
+// The legend describes the visible range, so changing the offset changes it.
 func TestGanttLegend(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 3)
+	m := ganttModelWithPeople(t, []string{"@john"}, 3)
 
 	legend := m.ganttLegend(0, 14)
 	parts := strings.Fields(legend)
 	if len(parts) != 3 || parts[1] != "→" {
-		t.Fatalf("leyenda = %q, want 'desde → hasta'", legend)
+		t.Fatalf("legend = %q, want 'from → to'", legend)
 	}
 	if parts[0] == parts[2] {
-		t.Errorf("con 14 días el rango no puede empezar y acabar el mismo día: %q", legend)
+		t.Errorf("with 14 days the range cannot start and end on the same day: %q", legend)
 	}
 	for _, d := range parts[0:1] {
 		if _, err := model.ParseDate(d); err != nil {
-			t.Errorf("fecha inicial %q no parsea: %v", d, err)
+			t.Errorf("start date %q does not parse: %v", d, err)
 		}
 	}
 	for _, d := range parts[2:] {
 		if _, err := model.ParseDate(d); err != nil {
-			t.Errorf("fecha final %q no parsea: %v", d, err)
+			t.Errorf("end date %q does not parse: %v", d, err)
 		}
 	}
 
 	if shifted := m.ganttLegend(7, 14); shifted == legend {
-		t.Errorf("con offset 7 la leyenda debe cambiar: %q", shifted)
+		t.Errorf("with offset 7 the legend must change: %q", shifted)
 	}
-	// Y con una sola columna el rango es un único día.
+	// And with a single column the range is a single day.
 	one := strings.Fields(m.ganttLegend(0, 1))
 	if len(one) != 3 || one[0] != one[2] {
-		t.Errorf("con 1 día visible el rango debe ser un único día: %q", one)
+		t.Errorf("with 1 visible day the range must be a single day: %q", one)
 	}
 }
 
 // --- moveGanttCursor ------------------------------------------------------
 
-// j/k se mueven entre filas de tarea, saltándose las cabeceras de persona.
+// j/k move between task rows, skipping the person headers.
 func TestMoveGanttCursorSkipsHeaders(t *testing.T) {
 	rows := []ganttRow{
-		{kind: ganttAssigneeRow, assignee: "@juan"},
+		{kind: ganttAssigneeRow, assignee: "@john"},
 		{kind: ganttTaskRow},
 		{kind: ganttTaskRow},
-		{kind: ganttAssigneeRow, assignee: "@maria"},
+		{kind: ganttAssigneeRow, assignee: "@margo"},
 		{kind: ganttTaskRow},
 	}
 	tests := []struct {
@@ -441,14 +441,14 @@ func TestMoveGanttCursorSkipsHeaders(t *testing.T) {
 		dir  int
 		want int
 	}{
-		{"baja de la primera a la segunda tarea", 1, 1, 2},
-		{"sube de la segunda a la primera tarea", 2, -1, 1},
-		{"baja saltando una cabecera", 2, 1, 4},
-		{"sube saltando una cabecera", 4, -1, 2},
+		{"goes down from the first to the second task", 1, 1, 2},
+		{"goes up from the second to the first task", 2, -1, 1},
+		{"goes down skipping a header", 2, 1, 4},
+		{"goes up skipping a header", 4, -1, 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+			m := ganttModelWithPeople(t, []string{"@john"}, 1)
 			m.ganttCursor = tt.from
 			moveGanttCursor(m, rows, tt.dir)
 			if m.ganttCursor != tt.want {
@@ -458,169 +458,169 @@ func TestMoveGanttCursorSkipsHeaders(t *testing.T) {
 	}
 }
 
-// En el extremo no hay a dónde ir: el cursor se queda.
+// At the extreme there is nowhere to go: the cursor stays.
 func TestMoveGanttCursorStopsAtEdges(t *testing.T) {
 	rows := []ganttRow{{kind: ganttTaskRow}, {kind: ganttTaskRow}}
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 
 	m.ganttCursor = 1
 	moveGanttCursor(m, rows, 1)
 	if m.ganttCursor != 1 {
-		t.Errorf("bajar en la última fila debe quedarse, cursor = %d", m.ganttCursor)
+		t.Errorf("going down on the last row must stay, cursor = %d", m.ganttCursor)
 	}
 	m.ganttCursor = 0
 	moveGanttCursor(m, rows, -1)
 	if m.ganttCursor != 0 {
-		t.Errorf("subir en la primera fila debe quedarse, cursor = %d", m.ganttCursor)
+		t.Errorf("going up on the first row must stay, cursor = %d", m.ganttCursor)
 	}
 }
 
-// Sólo cabeceras: no hay tarea a la que saltar y el cursor no se mueve.
+// Only headers: there is no task to jump to and the cursor does not move.
 func TestMoveGanttCursorNoTaskRows(t *testing.T) {
 	rows := []ganttRow{{kind: ganttAssigneeRow}, {kind: ganttAssigneeRow}}
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 	m.ganttCursor = 1
 	moveGanttCursor(m, rows, 1)
 	if m.ganttCursor != 1 {
-		t.Errorf("sin filas de tarea el cursor no debe moverse, cursor = %d", m.ganttCursor)
+		t.Errorf("with no task rows the cursor must not move, cursor = %d", m.ganttCursor)
 	}
 }
 
-// --- Teclado del Gantt ----------------------------------------------------
+// --- The Gantt's keyboard -----------------------------------------------
 
-// g/G saltan al primer y al último día del horizonte visible.
+// g/G jump to the first and the last day of the visible horizon.
 func TestGanttKeysGotoEdges(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 3)
+	m := ganttModelWithPeople(t, []string{"@john"}, 3)
 	rows := m.ganttRows()
 	first, last := ganttTaskRange(rows)
 	if first < 0 {
-		t.Fatal("fixture: sin filas de tarea")
+		t.Fatal("fixture: no task rows")
 	}
 
 	m.ganttCursor = last
 	m, _ = press(m, "g")
 	if m.ganttCursor != first {
-		t.Errorf("tras g cursor = %d, want %d (primera tarea)", m.ganttCursor, first)
+		t.Errorf("after g cursor = %d, want %d (first task)", m.ganttCursor, first)
 	}
 
 	m, _ = press(m, "G")
 	if m.ganttCursor != last {
-		t.Errorf("tras G cursor = %d, want %d (última tarea)", m.ganttCursor, last)
+		t.Errorf("after G cursor = %d, want %d (last task)", m.ganttCursor, last)
 	}
 }
 
-// Con la vista vacía, g y G no mueven el cursor a ningún sitio inválido.
+// With an empty view, g and G do not move the cursor to any invalid place.
 func TestGanttKeysWithNoTasks(t *testing.T) {
 	m := ganttModelWithPeople(t, nil, 0)
 	for _, key := range []string{"g", "G", "j", "k"} {
 		m, _ = press(m, key)
 		if m.ganttCursor < 0 || m.ganttCursor > len(m.ganttRows()) {
-			t.Errorf("tras %q cursor = %d, fuera de rango", key, m.ganttCursor)
+			t.Errorf("after %q cursor = %d, out of range", key, m.ganttCursor)
 		}
 	}
 }
 
-// h/l desplazan la ventana de días, y h no baja de cero.
+// h/l scroll the day window, and h does not go below zero.
 func TestGanttKeysShiftWindow(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 2)
+	m := ganttModelWithPeople(t, []string{"@john"}, 2)
 
 	m, _ = press(m, "l")
 	m, _ = press(m, "l")
 	if m.ganttOffsetDays != 2 {
-		t.Errorf("tras dos l offset = %d, want 2", m.ganttOffsetDays)
+		t.Errorf("after two l offset = %d, want 2", m.ganttOffsetDays)
 	}
 	m, _ = press(m, "h")
 	if m.ganttOffsetDays != 1 {
-		t.Errorf("tras h offset = %d, want 1", m.ganttOffsetDays)
+		t.Errorf("after h offset = %d, want 1", m.ganttOffsetDays)
 	}
 	for range 5 {
 		m, _ = press(m, "h")
 	}
 	if m.ganttOffsetDays != 0 {
-		t.Errorf("el offset no puede quedar negativo: %d", m.ganttOffsetDays)
+		t.Errorf("the offset cannot be negative: %d", m.ganttOffsetDays)
 	}
 }
 
-// enter sobre una fila de tarea abre el detalle con sus comentarios sin cargar
-// todavía (el cursor de comentarios arranca en "ninguno").
+// enter on a task row opens the detail with its comments not yet loaded (the
+// comment cursor starts at "none").
 func TestGanttEnterOpensDetail(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 	m.snapGanttCursor()
 	if rows := m.ganttRows(); m.ganttCursor >= len(rows) || rows[m.ganttCursor].kind != ganttTaskRow {
-		t.Fatalf("fixture: el cursor debe caer en una tarea, está en %d", m.ganttCursor)
+		t.Fatalf("fixture: the cursor must land on a task, it is at %d", m.ganttCursor)
 	}
 
 	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	got := asModel(next)
 
 	if !got.detailOpen {
-		t.Error("enter debe abrir el detalle")
+		t.Error("enter must open the detail")
 	}
 	if got.detailTask == nil {
-		t.Fatal("enter debe cargar la tarea del detalle")
+		t.Fatal("enter must load the task in the detail")
 	}
 	if got.detailComments != nil {
-		t.Error("los comentarios arrancan sin cargar, no como lista vacía")
+		t.Error("the comments start unloaded, not as an empty list")
 	}
 	if got.detailCommentSel != -1 {
-		t.Errorf("detailCommentSel = %d, want -1 (nada seleccionado)", got.detailCommentSel)
+		t.Errorf("detailCommentSel = %d, want -1 (nothing selected)", got.detailCommentSel)
 	}
 	if cmd == nil {
-		t.Error("enter debe emitir la carga de comentarios")
+		t.Error("enter must emit the comments load")
 	}
 }
 
-// enter sobre una cabecera no abre nada: las cabeceras no son navegables.
+// enter on a header opens nothing: headers are not navigable.
 func TestGanttEnterOnHeaderDoesNothing(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 2)
-	// Forzamos el cursor sobre la cabecera saltando el snap.
+	m := ganttModelWithPeople(t, []string{"@john"}, 2)
+	// We force the cursor onto the header by skipping the snap.
 	m.ganttCursor = 0
 
-	// handleGanttKey hace snap al entrar, así que comprobamos el efecto neto:
-	// el detalle se abre, pero sobre una TAREA, nunca sobre una cabecera.
+	// handleGanttKey snaps on entry, so we check the net effect:
+	// the detail opens, but on a TASK, never on a header.
 	m, _ = press(m, "enter")
 	if m.detailOpen && m.detailTask != nil && m.detailTask.Assignee == "" {
-		t.Error("el detalle nunca debe abrir sobre una cabecera de persona")
+		t.Error("the detail must never open on a person header")
 	}
 }
 
-// --- Reparto de ancho del Gantt ------------------------------------------
+// --- Width split of the Gantt -------------------------------------------
 
-// ganttBudgetForRows devuelve el alto que hace caber exactamente `rows` filas
-// de Gantt. En renderGantt, visible = maxHeight - listFixedRows - ganttRulerRows,
-// así que el presupuesto es la suma, no otro descuento.
+// ganttBudgetForRows returns the height that fits exactly `rows` rows of
+// Gantt. In renderGantt, visible = maxHeight - listFixedRows - ganttRulerRows,
+// so the budget is the sum, not another discount.
 func ganttBudgetForRows(rows int) int {
 	return rows + listFixedRows + ganttRulerRows
 }
 
-// El reparto de ancho tiene dos regímenes: con sitio de sobra la etiqueta se
-// queda en 30 columnas; con poco, se queda con un tercio del ancho interior.
-// El umbral son 70 columnas interiores, no 60: a 65 de interior todavía manda el
-// tercio, y ese es exactamente el borde que distingue `innerW < 70` de
-// cualquier otro valor cercano.
+// The width split has two regimes: with room to spare the label stays at 30
+// columns; with little, it keeps a third of the inner width.
+// The threshold is 70 inner columns, not 60: at 65 inner the third still
+// rules, and that is exactly the edge that tells `innerW < 70` from
+// any other nearby value.
 func TestRenderGanttLabelWidthThreshold(t *testing.T) {
 	tests := []struct {
 		width int
-		// columnas que ocupa la etiqueta antes de los días
+		// columns the label takes before the days
 		wantLabel int
 	}{
-		{120, 30}, // interior 118: etiqueta fija
-		{80, 30},  // interior 78: etiqueta fija
-		{72, 30},  // interior 70: justo en el umbral, sigue la fija
-		{71, 23},  // interior 69: un tercio
-		{65, 21},  // interior 63
-		{50, 16},  // interior 48
-		{40, 14},  // interior 38, nunca menos de 14
+		{120, 30}, // inner 118: fixed label
+		{80, 30},  // inner 78: fixed label
+		{72, 30},  // inner 70: exactly at the threshold, still the fixed one
+		{71, 23},  // inner 69: one third
+		{65, 21},  // inner 63
+		{50, 16},  // inner 48
+		{40, 14},  // inner 38, never less than 14
 	}
 	for _, tt := range tests {
-		m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+		m := ganttModelWithPeople(t, []string{"@john"}, 1)
 		m.width = tt.width
 
-		// El relleno del eje es labelW+1, y el eje va justo tras la etiqueta.
-		// El ancho de la etiqueta NO se recalcula aquí a propósito: lo que se
-		// comprueba es que el render aplique el reparto que dice el umbral, y
-		// replicar la fórmula en el test sólo probaría que el test copia el
-		// código.
+		// The axis padding is labelW+1, and the axis goes right after the label.
+		// The label's width is NOT recalculated here on purpose: what is checked
+		// is that the render applies the split the threshold says, and
+		// replicating the formula in the test would only prove that the test
+		// copies the code.
 		out := ansi.Strip(m.renderGantt(30))
 		axis := ""
 		for _, line := range strings.Split(out, "\n") {
@@ -630,10 +630,10 @@ func TestRenderGanttLabelWidthThreshold(t *testing.T) {
 			}
 		}
 		if axis == "" {
-			t.Fatalf("width=%d: no se encontró el eje:\n%s", tt.width, out)
+			t.Fatalf("width=%d: the axis was not found:\n%s", tt.width, out)
 		}
 		runes := []rune(axis)
-		inner := string(runes[1 : len(runes)-1]) // sin los laterales de la caja
+		inner := string(runes[1 : len(runes)-1]) // without the box's sides
 		lead := 0
 		for _, r := range inner {
 			if r != ' ' {
@@ -642,21 +642,21 @@ func TestRenderGanttLabelWidthThreshold(t *testing.T) {
 			lead++
 		}
 		if lead != tt.wantLabel+1 {
-			t.Errorf("width=%d: la etiqueta ocupa %d columnas (relleno %d), want %d",
+			t.Errorf("width=%d: the label takes %d columns (padding %d), want %d",
 				tt.width, lead-1, lead, tt.wantLabel)
 		}
 	}
 }
 
-// El eje de días ocupa exactamente el ancho interior del Gantt, sea cual sea
-// el reparto entre etiqueta y columnas. Con un "- 1" de más o de menos el eje
-// se descuadra y la caja queda una columna más ancha o más estrecha.
+// The days' axis takes exactly the Gantt's inner width, whatever the split
+// between label and columns. With one "- 1" too many or too few the axis
+// goes out of sync and the box ends up one column wider or narrower.
 func TestRenderGanttAxisSpansInnerWidth(t *testing.T) {
-	// Por debajo de ~40 columnas la etiqueta mínima (14) más los 7 días
-	// mínimos no caben, así que el eje se recorta y pierde los lunes: no hay
-	// línea que comparar.
+	// Below ~40 columns the minimum label (14) plus the 7 minimum days do
+	// not fit, so the axis is truncated and loses the Mondays: there is no
+	// line to compare.
 	for _, width := range []int{120, 100, 80, 72, 71, 65, 50, 40} {
-		m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+		m := ganttModelWithPeople(t, []string{"@john"}, 1)
 		m.width = width
 
 		out := ansi.Strip(m.renderGantt(30))
@@ -666,26 +666,26 @@ func TestRenderGanttAxisSpansInnerWidth(t *testing.T) {
 				continue
 			}
 			found = true
-			// La línea del eje incluye los dos laterales de la caja, así que
-			// mide el ancho completo del terminal: es la comprobación que
-			// distingue el reparto de ancho de sus variantes, porque cualquier
-			// "- 1" o "+ 1" en dayCols descuadra la línea.
+			// The axis line includes the box's two sides, so it measures the
+			// full terminal width: it is the check that tells the width split
+			// apart from its variants, because any "- 1" or "+ 1" in dayCols
+			// throws the line off.
 			if got := ansi.StringWidth(line); got != width {
-				t.Errorf("width=%d: el eje (línea %d) mide %d, want %d: %q",
+				t.Errorf("width=%d: the axis (line %d) measures %d, want %d: %q",
 					width, i, got, width, line)
 			}
 		}
 		if !found {
-			t.Errorf("width=%d: no se encontró la línea del eje:\n%s", width, out)
+			t.Errorf("width=%d: the axis line was not found:\n%s", width, out)
 		}
 	}
 }
 
-// La cabecera de persona ocupa toda la anchura de la caja, etiquetas y días
-// incluidos: por eso su cellWidth usa labelW+1+dayCols y no sólo labelW.
+// The person header takes the whole width of the box, labels and days
+// included: that is why its cellWidth uses labelW+1+dayCols and not just labelW.
 func TestRenderGanttAssigneeHeaderWidth(t *testing.T) {
 	for _, width := range []int{120, 80, 65, 40} {
-		m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+		m := ganttModelWithPeople(t, []string{"@john"}, 1)
 		m.width = width
 
 		rows := m.ganttRows()
@@ -696,7 +696,7 @@ func TestRenderGanttAssigneeHeaderWidth(t *testing.T) {
 			}
 		}
 		if header.assignee == "" {
-			t.Fatal("fixture: sin cabecera de persona")
+			t.Fatal("fixture: no person header")
 		}
 
 		innerW := width - 2
@@ -709,17 +709,17 @@ func TestRenderGanttAssigneeHeaderWidth(t *testing.T) {
 
 		got := ansi.StringWidth(ansi.Strip(m.renderGanttRow(header, firstGanttMonday(), 0, dayCols, labelW, false)))
 		if got != labelW+1+dayCols {
-			t.Errorf("width=%d: la cabecera mide %d, want %d (labelW+1+dayCols)",
+			t.Errorf("width=%d: the header measures %d, want %d (labelW+1+dayCols)",
 				width, got, labelW+1+dayCols)
 		}
 	}
 }
 
-// La barra de una tarea se dibuja en las columnas que caen entre su inicio y su
-// fin. Desplazar la ventana (offset) no la mueve: si el cálculo de columnas
-// invirtiera el signo del offset, la barra se iría al lado contrario.
+// A task's bar is drawn on the columns that fall between its start and its
+// end. Shifting the window (offset) does not move it: if the column
+// calculation inverted the sign of the offset, the bar would go to the opposite side.
 func TestRenderGanttBarFollowsTaskDates(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 1)
+	m := ganttModelWithPeople(t, []string{"@john"}, 1)
 	rows := m.ganttRows()
 
 	var task ganttRow
@@ -729,7 +729,7 @@ func TestRenderGanttBarFollowsTaskDates(t *testing.T) {
 		}
 	}
 	if task.entry == nil {
-		t.Fatal("fixture: sin fila de tarea")
+		t.Fatal("fixture: no task row")
 	}
 
 	const labelW, dayCols = 10, 20
@@ -737,7 +737,7 @@ func TestRenderGanttBarFollowsTaskDates(t *testing.T) {
 	d0 := daysBetween(start, task.entry.Start)
 	d1 := daysBetween(start, task.entry.End)
 
-	// Sin desplazamiento la barra empieza en la columna del inicio.
+	// With no shift the bar starts at the start's column.
 	line := ansi.Strip(m.renderGanttRow(task, start, 0, dayCols, labelW, false))
 	cells := []rune(line)[labelW+1:]
 	bars := []int{}
@@ -747,35 +747,35 @@ func TestRenderGanttBarFollowsTaskDates(t *testing.T) {
 		}
 	}
 	if len(bars) == 0 {
-		t.Fatalf("no se dibujó ninguna barra: %q", line)
+		t.Fatalf("no bar was drawn: %q", line)
 	}
 	if bars[0] != d0 {
-		t.Errorf("la barra empieza en la columna %d, want %d (d0)", bars[0], d0)
+		t.Errorf("the bar starts at column %d, want %d (d0)", bars[0], d0)
 	}
 	if bars[len(bars)-1] != d1 {
-		t.Errorf("la barra acaba en la columna %d, want %d (d1)", bars[len(bars)-1], d1)
+		t.Errorf("the bar ends at column %d, want %d (d1)", bars[len(bars)-1], d1)
 	}
 
-	// Con offset la barra se desplaza con la ventana, no al revés: las mismas
-	// columnas absolutas se dibujan offset posiciones antes.
+	// With an offset the bar shifts with the window, not the other way around:
+	// the same absolute columns are drawn offset positions earlier.
 	shifted := ansi.Strip(m.renderGanttRow(task, start, 3, dayCols, labelW, false))
 	scells := []rune(shifted)[labelW+1:]
 	for i, c := range scells {
 		if c == '█' && i != bars[0]-3 {
-			t.Errorf("con offset 3 la barra se dibujó en la columna %d, want %d", i, bars[0]-3)
+			t.Errorf("with offset 3 the bar was drawn at column %d, want %d", i, bars[0]-3)
 			break
 		}
 	}
 }
 
-// --- Presupuesto de alto: ventana vertical -------------------------------
+// --- Height budget: vertical window -------------------------------------
 
-// Con exactamente `visible` filas caben todas; con una más hay que desplazar
-// la ventana. El `>` es lo que separa ambos casos.
+// With exactly `visible` rows they all fit; with one more the window has to
+// shift. The `>` is what separates both cases.
 func TestRenderGanttVerticalWindow(t *testing.T) {
 	for _, perPerson := range []int{1, 2, 3, 5} {
-		m := ganttModelWithPeople(t, []string{"@juan"}, perPerson)
-		rows := m.ganttRows() // 1 cabecera + perPerson tareas
+		m := ganttModelWithPeople(t, []string{"@john"}, perPerson)
+		rows := m.ganttRows() // 1 header + perPerson tasks
 
 		tasks := 0
 		for _, r := range rows {
@@ -784,31 +784,31 @@ func TestRenderGanttVerticalWindow(t *testing.T) {
 			}
 		}
 
-		// Presupuesto justo para ver todas las filas.
+		// Budget just enough to see all the rows.
 		exact := ganttBudgetForRows(len(rows))
 		out := ansi.Strip(m.renderGantt(exact))
 		if n := countGanttRows(out); n != tasks {
-			t.Errorf("perPerson=%d: con presupuesto %d se ven %d tareas, want las %d que hay",
+			t.Errorf("perPerson=%d: with budget %d, %d tasks are visible, want the %d that exist",
 				perPerson, exact, n, tasks)
 		}
 
-		// Un presupuesto menos: la ventana deja fuera la última fila y caben
-		// menos tareas. Con una sola tarea el recorte se come la cabecera y la
-		// barra sigue entrando, así que el caso empieza en 2.
+		// One budget less: the window leaves out the last row and fewer tasks
+		// fit. With a single task the truncation eats the header and the bar
+		// still fits, so the case starts at 2.
 		if tasks >= 2 {
 			tight := exact - 1
 			out = ansi.Strip(m.renderGantt(tight))
 			if n := countGanttRows(out); n >= tasks {
-				t.Errorf("perPerson=%d: con presupuesto %d deberían caber menos de %d tareas, se ven %d",
+				t.Errorf("perPerson=%d: with budget %d fewer than %d tasks should fit, %d are visible",
 					perPerson, tight, tasks, n)
 			}
 		}
 	}
 }
 
-// isGanttAxisLine distingue la línea del eje: empieza por el lateral izquierdo
-// de la caja, tiene guiones y barras de lunes, y ningún dígito (para no
-// confundirse con las fechas de la leyenda).
+// isGanttAxisLine tells the axis line: it starts with the box's left side,
+// has dashes and Monday bars, and no digit (so as not to be confused with
+// the legend's dates).
 func isGanttAxisLine(line string) bool {
 	if !strings.HasPrefix(line, "│") {
 		return false
@@ -819,9 +819,9 @@ func isGanttAxisLine(line string) bool {
 	return strings.IndexFunc(line, func(r rune) bool { return r >= '0' && r <= '9' }) < 0
 }
 
-// countGanttRows cuenta las filas de TAREA visibles: las que llevan la barra.
-// La cabecera de persona no cuenta, así que el número a comparar es el de
-// tareas, no el de filas.
+// countGanttRows counts the visible TASK rows: the ones carrying the bar.
+// The person header does not count, so the number to compare is the tasks'
+// one, not the rows' one.
 func countGanttRows(out string) int {
 	n := 0
 	for _, line := range strings.Split(out, "\n") {
@@ -832,52 +832,52 @@ func countGanttRows(out string) int {
 	return n
 }
 
-// --- La vista vacía ------------------------------------------------------
+// --- The empty view -----------------------------------------------------
 
-// Sin filas, el Gantt lo dice explícitamente en vez de dejar un hueco mudo.
+// With no rows, the Gantt says so explicitly instead of leaving a mute gap.
 func TestRenderGanttWithNoTasks(t *testing.T) {
 	m := ganttModelWithPeople(t, nil, 0)
 	out := ansi.Strip(m.renderGantt(30))
 
 	if !strings.Contains(out, "No active tasks") {
-		t.Errorf("sin tareas debe avisar:\n%s", out)
+		t.Errorf("with no tasks it must warn:\n%s", out)
 	}
 }
 
-// Con filas, ese aviso NO aparece: invertir el `== 0` lo ensuciaría.
+// With rows, that notice does NOT appear: inverting the `== 0` would dirty it.
 func TestRenderGanttWithTasksHidesEmptyNotice(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 2)
+	m := ganttModelWithPeople(t, []string{"@john"}, 2)
 	out := ansi.Strip(m.renderGantt(30))
 
 	if strings.Contains(out, "No active tasks") {
-		t.Errorf("con tareas no debe aparecer el aviso de vacío:\n%s", out)
+		t.Errorf("with tasks the empty notice must not appear:\n%s", out)
 	}
 }
 
-// --- El borde exacto del cursor ------------------------------------------
+// --- The exact edge of the cursor ---------------------------------------
 
-// Un cursor exactamente igual al número de filas queda fuera y se recorta a la
-// última. El `>=` es lo que lo distingue de un `>`.
+// A cursor exactly equal to the number of rows is out and is truncated to
+// the last one. The `>=` is what tells it apart from a `>`.
 func TestSnapGanttCursorAtExactLength(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 3)
+	m := ganttModelWithPeople(t, []string{"@john"}, 3)
 	rows := m.ganttRows()
 
 	m.ganttCursor = len(rows)
 	m.snapGanttCursor()
 
 	if m.ganttCursor != len(rows)-1 {
-		t.Errorf("cursor = %d, want %d (un índice igual al número de filas es fuera de rango)",
+		t.Errorf("cursor = %d, want %d (an index equal to the number of rows is out of range)",
 			m.ganttCursor, len(rows)-1)
 	}
 }
 
-// --- Estimación por defecto ----------------------------------------------
+// --- Default estimate ---------------------------------------------------
 
-// Una estimación global de 0 días es imposible: la cola no avanzaría nunca. El
-// fallback a 1 día es lo que mantiene la proyección viva.
+// A global estimate of 0 days is impossible: the queue would never advance.
+// The fallback to 1 day is what keeps the projection alive.
 func TestGanttScheduleFallsBackToOneDayEstimate(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 2)
-	// El default global sólo se usa si la tarea no trae estimación propia.
+	m := ganttModelWithPeople(t, []string{"@john"}, 2)
+	// The global default is only used if the task brings no estimate of its own.
 	for i := range m.tasks {
 		m.tasks[i].Estimate = 0
 	}
@@ -885,23 +885,23 @@ func TestGanttScheduleFallsBackToOneDayEstimate(t *testing.T) {
 
 	s := m.ganttSchedule()
 	if s == nil || len(s.Assignees) == 0 {
-		t.Fatal("fixture: sin agenda")
+		t.Fatal("fixture: no schedule")
 	}
 	for _, entry := range s.Assignees[0].Entries {
 		if entry.Estimate != 1 {
-			t.Errorf("estimate = %v con default 0, want 1", entry.Estimate)
+			t.Errorf("estimate = %v with default 0, want 1", entry.Estimate)
 		}
 	}
 
-	// Y con una estimación válida se respeta, así que el saneo no es siempre 1.
-	m2 := ganttModelWithPeople(t, []string{"@juan"}, 2)
+	// And with a valid estimate it is respected, so the sanitizing is not always 1.
+	m2 := ganttModelWithPeople(t, []string{"@john"}, 2)
 	for i := range m2.tasks {
 		m2.tasks[i].Estimate = 0
 	}
 	m2.config.DefaultEstimateDays = 3
 	for _, entry := range m2.ganttSchedule().Assignees[0].Entries {
 		if entry.Estimate != 3 {
-			t.Errorf("estimate = %v con default 3, want 3", entry.Estimate)
+			t.Errorf("estimate = %v with default 3, want 3", entry.Estimate)
 		}
 	}
 }

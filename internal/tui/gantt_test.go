@@ -29,9 +29,9 @@ func TestRenderGantt(t *testing.T) {
 	}
 }
 
-// TestRenderGanttShowsFilterHeader verifica que el Gantt muestre la cabecera
-// de filtros sin Status: su proyección sólo incluye tareas activas, por lo que
-// un filtro de estado siempre valdría "active".
+// TestRenderGanttShowsFilterHeader verifies that the Gantt shows the filter
+// header without Status: its projection only includes active tasks, so a
+// status filter would always be "active".
 func TestRenderGanttShowsFilterHeader(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "3")
@@ -40,23 +40,23 @@ func TestRenderGanttShowsFilterHeader(t *testing.T) {
 	plain := ansi.Strip(m.renderGantt(m.height))
 	for _, want := range []string{"Project:", "Assignee:", "Priority:", "api"} {
 		if !strings.Contains(plain, want) {
-			t.Errorf("la cabecera del Gantt no contiene %q:\n%s", want, plain)
+			t.Errorf("the Gantt header does not contain %q:\n%s", want, plain)
 		}
 	}
 	if strings.Contains(plain, "Status:") {
-		t.Errorf("la cabecera del Gantt no debe mostrar Status:\n%s", plain)
+		t.Errorf("the Gantt header must not show Status:\n%s", plain)
 	}
 }
 
-// TestRenderGanttRespectsHeight verifica que la cabecera nueva no rompa el
-// cálculo de alto del Gantt.
+// TestRenderGanttRespectsHeight verifies that the new header does not break the
+// Gantt's height calculation.
 func TestRenderGanttRespectsHeight(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "3")
 
 	for _, budget := range []int{8, 10, 12, 16, 20} {
 		if n := lineCount(m.renderGantt(budget)); n > budget {
-			t.Errorf("budget %d: alto = %d, excede el presupuesto", budget, n)
+			t.Errorf("budget %d: height = %d, exceeds the budget", budget, n)
 		}
 	}
 }
@@ -71,12 +71,12 @@ func TestGanttNavigation(t *testing.T) {
 		t.Fatal("expected gantt task rows")
 	}
 
-	// El cursor arranca sobre la primera tarea, nunca sobre una cabecera.
+	// The cursor starts on the first task, never on a header.
 	if m.ganttCursor != first {
 		t.Fatalf("initial cursor = %d, want first task %d", m.ganttCursor, first)
 	}
 
-	// j/k se mueven entre tareas, ignorando cabeceras de persona.
+	// j/k move between tasks, ignoring person headers.
 	second := -1
 	for i := first + 1; i < len(rows); i++ {
 		if rows[i].kind == ganttTaskRow {
@@ -92,36 +92,36 @@ func TestGanttNavigation(t *testing.T) {
 		t.Errorf("after j: cursor = %d, want %d", m.ganttCursor, second)
 	}
 	if m.ganttRows()[m.ganttCursor].kind != ganttTaskRow {
-		t.Errorf("el cursor quedó sobre una cabecera tras j")
+		t.Errorf("the cursor ended on a header after j")
 	}
 	m, _ = press(m, "k")
 	if m.ganttCursor != first {
 		t.Errorf("after k: cursor = %d, want %d", m.ganttCursor, first)
 	}
 
-	// k sobre la primera tarea no debe saltar a la cabecera previa.
+	// k on the first task must not jump to the previous header.
 	m, _ = press(m, "k")
 	if m.ganttCursor != first {
 		t.Errorf("k at first task: cursor = %d, want %d", m.ganttCursor, first)
 	}
 	if m.ganttRows()[m.ganttCursor].kind != ganttTaskRow {
-		t.Errorf("k no debe dejar el cursor sobre una cabecera")
+		t.Errorf("k must not leave the cursor on a header")
 	}
 
-	// G va a la última tarea, g a la primera.
+	// G goes to the last task, g to the first.
 	m, _ = press(m, "G")
 	if m.ganttCursor != last {
 		t.Errorf("after G: cursor = %d, want last task %d", m.ganttCursor, last)
 	}
 	if m.ganttRows()[m.ganttCursor].kind != ganttTaskRow {
-		t.Errorf("G no debe dejar el cursor sobre una cabecera")
+		t.Errorf("G must not leave the cursor on a header")
 	}
 	m, _ = press(m, "g")
 	if m.ganttCursor != first {
 		t.Errorf("after g: cursor = %d, want first task %d", m.ganttCursor, first)
 	}
 
-	// h/l desplazan la ventana de días.
+	// h/l scroll the day window.
 	m, _ = press(m, "l")
 	if m.ganttOffsetDays != 1 {
 		t.Errorf("after l: offset = %d, want 1", m.ganttOffsetDays)
@@ -136,8 +136,8 @@ func TestGanttNavigation(t *testing.T) {
 	}
 }
 
-// TestGanttSelectedTaskShowsCursor verifica que la fila seleccionada muestra el
-// cursor ">" que la Lista ya usa, sin desalinear la grilla de días.
+// TestGanttSelectedTaskShowsCursor verifies that the selected row shows the
+// ">" cursor the List already uses, without misaligning the day grid.
 func TestGanttSelectedTaskShowsCursor(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "3")
@@ -166,22 +166,22 @@ func TestGanttSelectedTaskShowsCursor(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("la fila seleccionada debe mostrar el cursor %q:\n%s", want, strings.Join(lines, "\n"))
+		t.Errorf("the selected row must show the cursor %q:\n%s", want, strings.Join(lines, "\n"))
 	}
 
-	// Las tareas no seleccionadas conservan la indentación de dos espacios, para
-	// que la cuadrícula de días no se desplace.
+	// The unselected tasks keep the two-space indentation, so that the
+	// day grid does not shift.
 	for _, r := range rows {
 		if r.kind == ganttTaskRow && r.entry.Task.ID != id {
 			if !containsTaskLabel(lines, r.entry.Task.ID) {
-				t.Errorf("fila no seleccionada #%d sin indentación esperada", r.entry.Task.ID)
+				t.Errorf("unselected row #%d without the expected indentation", r.entry.Task.ID)
 			}
 			break
 		}
 	}
 }
 
-// containsTaskLabel busca "  #<id>" (dos espacios) en alguna línea.
+// containsTaskLabel looks for "  #<id>" (two spaces) in some line.
 func containsTaskLabel(lines []string, id int64) bool {
 	want := fmt.Sprintf("  #%d", id)
 	for _, line := range lines {
@@ -210,7 +210,7 @@ func TestGanttProjectFilterIsViewOnly(t *testing.T) {
 		}
 	}
 
-	// Las fechas deben ser idénticas al cálculo global: el filtro es de vista.
+	// The dates must be identical to the global calculation: the filter is a view one.
 	dates := map[int64][2]string{}
 	for _, a := range full.Assignees {
 		for _, e := range a.Entries {
@@ -237,12 +237,12 @@ func TestGanttSlashOpensFilters(t *testing.T) {
 	m, _ = press(m, "3")
 	m, _ = press(m, "/")
 	if !m.filterOpen {
-		t.Error("'/' en Gantt debería abrir el modal de filtros")
+		t.Error("'/' in the Gantt should open the filter modal")
 	}
-	// Esc lo cierra.
+	// Esc closes it.
 	m, _ = press(m, "esc")
 	if m.filterOpen {
-		t.Error("Esc debería cerrar el modal de filtros")
+		t.Error("Esc should close the filter modal")
 	}
 }
 
@@ -251,7 +251,7 @@ func TestKanbanSlashOpensFilters(t *testing.T) {
 	m, _ = press(m, "2")
 	m, _ = press(m, "/")
 	if !m.filterOpen {
-		t.Error("'/' en Kanban debería abrir el modal de filtros")
+		t.Error("'/' in the Kanban should open the filter modal")
 	}
 }
 
@@ -259,7 +259,7 @@ func TestGanttEnterOpensDetailOnTaskRow(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "3")
 
-	// Posicionar el cursor en la primera fila de tarea.
+	// Position the cursor on the first task row.
 	rows := m.ganttRows()
 	for i, r := range rows {
 		if r.kind == ganttTaskRow {

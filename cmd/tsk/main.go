@@ -1,7 +1,7 @@
-// tsk — Task Manager TUI + CLI para IA.
+// tsk — Task Manager TUI + CLI for AI.
 //
-// Gestor de tareas diseñado para programadores que trabajan en 1-3
-// proyectos simultáneamente, con integración total vía CLI para agentes IA.
+// Task manager designed for developers working on 1-3
+// projects simultaneously, with full CLI integration for AI agents.
 package main
 
 import (
@@ -21,18 +21,18 @@ func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, launchTUI))
 }
 
-// run es el main con retorno en vez de os.Exit, y con las tres palabras que se
-// puede sustituir en un test: argumentos, salida y error.
+// run is main with a return value instead of os.Exit, and with the three things that can
+// be substituted in a test: arguments, output and error.
 //
-// La razón de separarlo no es testeabilidad por taste sino que main() no se
-// puede probar: os.Exit mata el proceso de test en mitad. Con run() devolviendo
-// un código, el test comprueba el código y el mensaje; y el test de subprocess
-// cubre el main() de verdad, incluyendo su propio os.Exit.
+// The reason for separating it is not testability by taste but that main() cannot
+// be tested: os.Exit kills the test process halfway. With run() returning a
+// code, the test checks the code and the message; and the subprocess test
+// covers the real main(), including its own os.Exit.
 //
-// La TUI no se arranca desde aquí de forma testeable -- Bubbletea necesita una
-// terminal -- así que run() recibe el arranque como un argumento más. Es la
-// misma costura que el resto del programa usa para lo que no se puede ejecutar
-// en un test, y aquí tiene la forma más simple posible: una función.
+// The TUI is not started from here in a testable way -- Bubbletea needs a
+// terminal -- so run() receives the launcher as one more argument. It is the
+// same seam the rest of the program uses for what cannot be executed
+// in a test, and here it has the simplest possible shape: a function.
 func run(args []string, stdout, stderr io.Writer, launch func(*db.DB, config.Config) error) int {
 	if cli.Run(args) {
 		return 0
@@ -55,7 +55,7 @@ func run(args []string, stdout, stderr io.Writer, launch func(*db.DB, config.Con
 		_, _ = fmt.Fprintln(stderr, "tsk:", err)
 		return 1
 	}
-	// El error de Close se ignora: es limpieza antes de salir.
+	// The Close error is ignored: it is cleanup before exiting.
 	defer func() { _ = database.Close() }()
 
 	if err := launch(database, cfg); err != nil {
@@ -65,8 +65,8 @@ func run(args []string, stdout, stderr io.Writer, launch func(*db.DB, config.Con
 	return 0
 }
 
-// launchTUI es el arranque real, el único trozo de run() que un test no puede
-// ejecutar porque se queda esperando a que el usuario pulse ctrl+c.
+// launchTUI is the real startup, the only piece of run() that a test cannot
+// execute because it waits for the user to press ctrl+c.
 func launchTUI(database *db.DB, cfg config.Config) error {
 	_, err := tea.NewProgram(tui.New(database, cfg)).Run()
 	return err

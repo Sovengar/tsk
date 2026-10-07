@@ -8,7 +8,7 @@ import (
 	"tsk/internal/tui/bordered"
 )
 
-// overlayKind identifica un modal activo que captura las teclas.
+// overlayKind identifies an active modal that captures the keys.
 type overlayKind int
 
 const (
@@ -25,7 +25,7 @@ const (
 	overlayOffdayForm
 )
 
-// KeybindsBar renderiza los keybinds en un pane con bordes.
+// KeybindsBar renders the keybinds in a pane with borders.
 type KeybindsBar struct {
 	width   int
 	view    viewKind
@@ -33,32 +33,32 @@ type KeybindsBar struct {
 	focused bool
 }
 
-// NewKeybindsBar crea un nuevo KeybindsBar.
+// NewKeybindsBar creates a new KeybindsBar.
 func NewKeybindsBar(width int) KeybindsBar {
 	return KeybindsBar{width: width}
 }
 
-// SetView actualiza la vista activa.
+// SetView updates the active view.
 func (s *KeybindsBar) SetView(v viewKind) {
 	s.view = v
 }
 
-// SetOverlay indica si hay un modal activo que captura las teclas.
+// SetOverlay tells whether there is an active modal that captures the keys.
 func (s *KeybindsBar) SetOverlay(o overlayKind) {
 	s.overlay = o
 }
 
-// SetWidth actualiza el ancho.
+// SetWidth updates the width.
 func (s *KeybindsBar) SetWidth(w int) {
 	s.width = w
 }
 
-// View renderiza el KeybindsBar con las filas del contexto activo. No existe el
-// concepto de keybind "global": cada vista u overlay define su lista completa.
+// View renders the KeybindsBar with the rows of the active context. There is
+// no concept of a "global" keybind: each view or overlay defines its full list.
 func (s KeybindsBar) View() string {
 	var content string
 	if s.overlay != overlayNone {
-		// Modal activo: solo las teclas que funcionan en ese contexto.
+		// Active modal: only the keys that work in that context.
 		content = strings.Join(s.renderOverlay(), "\n")
 	} else {
 		content = strings.Join(s.renderView(), "\n")
@@ -82,7 +82,7 @@ func (s KeybindsBar) View() string {
 	)
 }
 
-// title devuelve el título del pane según el contexto activo.
+// title returns the pane title according to the active context.
 func (s KeybindsBar) title() string {
 	switch s.overlay {
 	case overlayDetail:
@@ -109,13 +109,13 @@ func (s KeybindsBar) title() string {
 	return " Keybinds "
 }
 
-// keybindsPerRow es el máximo de acciones por fila en la KeybindsBar. El
-// sobrante salta a la fila siguiente; se añaden tantas filas como haga falta.
-// Mismo reparto para vistas y overlays.
+// keybindsPerRow is the maximum number of actions per row in the KeybindsBar.
+// The leftover jumps to the next row; as many rows as needed are added.
+// Same split for views and overlays.
 const keybindsPerRow = 7
 
-// renderRows reparte una lista priorizada de keybinds en filas de
-// keybindsPerRow acciones como máximo.
+// renderRows spreads a prioritized list of keybinds into rows of at most
+// keybindsPerRow actions.
 func (s KeybindsBar) renderRows(kbs []keybind) []string {
 	sep := styleStatusSep.Render(" · ")
 	var out []string
@@ -123,8 +123,8 @@ func (s KeybindsBar) renderRows(kbs []keybind) []string {
 	for r := range nrows {
 		i := r * keybindsPerRow
 		end := min(i+keybindsPerRow, len(kbs))
-		// Sin pista de capacidad: es una aritmética que ningún test mira, y
-		// append calcula el crecimiento por su cuenta.
+		// No capacity hint: it is arithmetic that no test looks at, and
+		// append computes the growth on its own.
 		var parts []string
 		for _, kb := range kbs[i:end] {
 			parts = append(parts, s.renderKey(kb.key, kb.desc))
@@ -134,14 +134,14 @@ func (s KeybindsBar) renderRows(kbs []keybind) []string {
 	return out
 }
 
-// renderView formatea las filas de keybinds de la vista actual a partir de la
-// definición única en keybindsForView.
+// renderView formats the keybind rows of the current view out of the
+// single definition in keybindsForView.
 func (s KeybindsBar) renderView() []string {
 	return s.renderRows(keybindsForView(s.view))
 }
 
-// renderOverlay formatea las teclas del modal activo, con el mismo reparto en
-// filas de keybindsPerRow.
+// renderOverlay formats the keys of the active modal, with the same split
+// into rows of keybindsPerRow.
 func (s KeybindsBar) renderOverlay() []string {
 	switch s.overlay {
 	case overlayDetail:
@@ -200,7 +200,7 @@ func (s KeybindsBar) renderOverlay() []string {
 	return nil
 }
 
-// renderKey renderiza un par key+desc.
+// renderKey renders a key+desc pair.
 func (s KeybindsBar) renderKey(key, desc string) string {
 	return styleStatusKey.Render(key) + " " + styleStatusDesc.Render(desc)
 }

@@ -10,18 +10,18 @@ import (
 	"tsk/internal/model"
 )
 
-// Estas pruebas miden el render de Kanban en columnas exactas. La razón: el
-// reparto de ancho entre columnas está embebido en el render y comparar "sale
-// algo" no lo ve. Un signo movido cambia dónde acaba la última columna sin
-// quitar ni una palabra de la pantalla.
+// These tests measure the Kanban render in exact columns. The reason: the
+// width split between columns is embedded in the render and comparing "it
+// comes out" does not see it. A moved sign changes where the last column ends
+// without removing a single word from the screen.
 //
-// Todos los índices son por runes. Las esquinas del recuadro y los guiones
-// horizontales son multibyte, y strings.Index daría la posición en bytes: con
-// ellos de por medio, la última columna parecía estar tres veces más a la
-// derecha de donde estaba.
+// All the indexes are by runes. The box corners and the horizontal
+// dashes are multibyte, and strings.Index would give the position in bytes:
+// with them in the way, the last column looked three times further to the
+// right than where it was.
 
-// boardRow devuelve la línea del board: la primera que tiene esquinas de
-// columna, y las columnas donde están sus bordes.
+// boardRow returns the board line: the first one that has column
+// corners, and the columns where their borders are.
 func boardRow(t *testing.T, out string) []rune {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {
@@ -32,22 +32,22 @@ func boardRow(t *testing.T, out string) []rune {
 			}
 		}
 	}
-	t.Fatalf("no se encontró la fila del board:\n%s", out)
+	t.Fatalf("the board row was not found:\n%s", out)
 	return nil
 }
 
-// La última columna llega justo al borde interior del marco, sin hueco detrás.
-// El hueco va *entre* columnas: si también fuera detrás de la última, el board
-// se quedaría kanbanGap columnas corto del borde sin que se notara.
+// The last column reaches exactly the frame's inner border, with no gap
+// behind it. The gap goes *between* columns: if it also went behind the last
+// one, the board would be kanbanGap columns short of the border unnoticed.
 func TestKanbanLastColumnReachesInnerEdge(t *testing.T) {
 	tests := []struct {
 		name  string
 		width int
 	}{
-		// Sólo con holgura: si los anchos mínimos no caben, el board no llega al
-		// borde y esta comprobación no dice nada del reparto.
-		{"muy ancha", 240},
-		{"ancha", 160},
+		// Only with slack: if the minimum widths do not fit, the board does not
+		// reach the border, and this check says nothing about the split.
+		{"very wide", 240},
+		{"wide", 160},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -55,60 +55,60 @@ func TestKanbanLastColumnReachesInnerEdge(t *testing.T) {
 			m.width = tt.width
 
 			runes := boardRow(t, ansi.Strip(m.renderKanban(30)))
-			// El marco cierra con "╮│": la esquina de la última columna y su
-			// propio borde derecho, y detrás el del marco.
+			// The frame closes with "╮│": the corner of the last column and its
+			// own right border, and behind it the frame's.
 			if len(runes) != tt.width {
-				t.Fatalf("la fila mide %d columnas, want %d", len(runes), tt.width)
+				t.Fatalf("the row measures %d columns, want %d", len(runes), tt.width)
 			}
-			// La fila acaba en "...╮│": la esquina de la última columna
-			// justo en la última columna interior, y detrás el borde del marco.
+			// The line ends in "...╮│": the corner of the last column right at
+			// the last inner column, and behind it the frame's border.
 			if runes[len(runes)-1] != '│' {
-				t.Fatalf("la fila no termina en el borde del marco: %q", string(runes[len(runes)-3:]))
+				t.Fatalf("the row does not end at the frame border: %q", string(runes[len(runes)-3:]))
 			}
 			if r := runes[len(runes)-2]; r != '╮' && r != '╝' && r != '│' {
-				t.Errorf("la última columna no llega al borde interior, acaba en %q: %q",
+				t.Errorf("the last column does not reach the inner border, it ends in %q: %q",
 					string(r), string(runes[len(runes)-8:]))
 			}
 		})
 	}
 }
 
-// Entre columnas hay kanbanGap de hueco, ni uno más ni uno menos. Con tres
-// columnas son dos huecos.
+// Between columns there is kanbanGap of gap, neither more nor less. With
+// three columns there are two gaps.
 func TestKanbanGapBetweenColumns(t *testing.T) {
 	m := newKanbanModelWithWorkflow(t, 1, []string{"todo", "doing", "done"})
 	m.width = 240
 
 	runes := boardRow(t, ansi.Strip(m.renderKanban(30)))
-	// Las columnas que no están seleccionadas abren con "╭" y cierran con "╮";
-	// la seleccionada usa el doble borde. Los índices de las aperturas, en orden.
-	var aperturas []int
+	// The columns that are not selected open with "╭" and close with "╮";
+	// the selected one uses the double border. The indexes of the openings, in order.
+	var openings []int
 	for i, r := range runes {
 		if r == '╭' || r == '╔' {
-			aperturas = append(aperturas, i)
+			openings = append(openings, i)
 		}
 	}
 	want := len(m.kanbanColumns())
-	if len(aperturas) != want {
-		t.Fatalf("encontré %d aperturas de columna y el board tiene %d: %q", len(aperturas), want, string(runes[:60]))
+	if len(openings) != want {
+		t.Fatalf("found %d column openings and the board has %d: %q", len(openings), want, string(runes[:60]))
 	}
-	aperturas = aperturas[1:] // la primera es la del marco exterior
+	openings = openings[1:] // the first one is the outer frame's
 
-	// Cada columna ocupa su ancho más kanbanGap de hueco a la derecha. El hueco
-	// se mide entre el cierre de una y la apertura de la siguiente.
-	for i := 0; i+1 < len(aperturas); i++ {
-		cierre := cierreDeColumna(runes, aperturas[i])
-		if got := aperturas[i+1] - cierre - 1; got != kanbanGap {
-			t.Errorf("entre las columnas %d y %d hay %d columnas de hueco, want %d",
+	// Each column takes its width plus kanbanGap of gap to the right. The gap
+	// is measured between the close of one and the opening of the next.
+	for i := 0; i+1 < len(openings); i++ {
+		closing := closeOfColumn(runes, openings[i])
+		if got := openings[i+1] - closing - 1; got != kanbanGap {
+			t.Errorf("between columns %d and %d there are %d columns of gap, want %d",
 				i, i+1, got, kanbanGap)
 		}
 	}
 }
 
-// cierreDeColumna devuelve el índice del borde derecho de la columna que abre en
-// apertura, o -1 si no se encuentra.
-func cierreDeColumna(runes []rune, apertura int) int {
-	for i := apertura + 1; i < len(runes); i++ {
+// closeOfColumn returns the index of the right border of the column that
+// opens at opening, or -1 if it is not found.
+func closeOfColumn(runes []rune, opening int) int {
+	for i := opening + 1; i < len(runes); i++ {
 		if runes[i] == '╮' || runes[i] == '╝' {
 			return i
 		}
@@ -116,66 +116,66 @@ func cierreDeColumna(runes []rune, apertura int) int {
 	return -1
 }
 
-// La columna de "cancelled" no está en el workflow del proyecto, y aun así se
-// añade al final del board en cuanto hay una tarea cancelada.
+// The "cancelled" column is not in the project's workflow, and yet it is
+// added at the end of the board as soon as there is a cancelled task.
 //
-// Es el estado que la base de datos acepta siempre, esté o no en el workflow, así
-// que una tarea puede quedar ahí sin que ninguna columna del workflow la
-// contemplara. Sin esta columna esas tareas serían invisibles en el board.
+// It is the status the database always accepts, whether it is in the workflow
+// or not, so a task can end up there without any workflow column
+// contemplating it. Without this column those tasks would be invisible on the board.
 func TestKanbanCancelledColumnAppearsOnlyWithCancelledTasks(t *testing.T) {
 	m := newKanbanModelWithWorkflow(t, 2, []string{"todo", "done"})
 
-	if tieneColumna(m, model.CancelledStatus) {
-		t.Error("apareció la columna de canceladas sin ninguna tarea cancelada")
+	if hasColumn(m, model.CancelledStatus) {
+		t.Error("the cancelled column appeared with no cancelled task")
 	}
 
-	moverACancelada(t, m, m.tasks[0].ID)
+	moveToCancelled(t, m, m.tasks[0].ID)
 	reloadTasks(t, m)
 
-	if !tieneColumna(m, model.CancelledStatus) {
-		t.Error("con una tarea cancelada no apareció su columna")
+	if !hasColumn(m, model.CancelledStatus) {
+		t.Error("with a cancelled task its column did not appear")
 	}
-	if tieneColumna(m, "nunca-existe") {
-		t.Error("apareció una columna para un estado que no existe")
+	if hasColumn(m, "never-exists") {
+		t.Error("a column appeared for a status that does not exist")
 	}
 }
 
-// Y esa columna va al final, no intercalada: el orden del workflow manda y
-// "cancelled" está fuera de él.
+// And that column goes at the end, not interleaved: the workflow's order rules
+// and "cancelled" is outside it.
 func TestKanbanCancelledColumnGoesLast(t *testing.T) {
 	m := newKanbanModelWithWorkflow(t, 2, []string{"todo", "done"})
-	antes := columnasDe(m)
+	before := columnsOf(m)
 
-	moverACancelada(t, m, m.tasks[0].ID)
+	moveToCancelled(t, m, m.tasks[0].ID)
 	reloadTasks(t, m)
 
-	despues := columnasDe(m)
-	if len(despues) != len(antes)+1 {
-		t.Fatalf("columnas %v -> %v, want una más", antes, despues)
+	after := columnsOf(m)
+	if len(after) != len(before)+1 {
+		t.Fatalf("columns %v -> %v, want one more", before, after)
 	}
-	if despues[len(despues)-1] != model.CancelledStatus {
-		t.Errorf("la columna de canceladas quedó en %q, want la última", despues[len(despues)-1])
+	if after[len(after)-1] != model.CancelledStatus {
+		t.Errorf("the cancelled column ended up as %q, want the last", after[len(after)-1])
 	}
-	for i, c := range antes {
-		if despues[i] != c {
-			t.Errorf("el workflow se reordenó: %q pasó de la posición %d", c, i)
+	for i, c := range before {
+		if after[i] != c {
+			t.Errorf("the workflow was reordered: %q moved from position %d", c, i)
 		}
 	}
 }
 
-// moverACancelada mueve una tarea a "cancelled", que es el único estado que se
-// acepta aunque no esté en el workflow del proyecto. Por eso una columna de
-// canceladas puede existir sin que ningún proyecto la tenga declarada.
-func moverACancelada(t *testing.T, m *Model, id int64) {
+// moveToCancelled moves a task to "cancelled", the only status that is
+// accepted even when it is not in the project's workflow. That is why a
+// column of cancelled ones can exist without any project declaring it.
+func moveToCancelled(t *testing.T, m *Model, id int64) {
 	t.Helper()
 	if _, err := m.database.MoveTask(id, model.CancelledStatus); err != nil {
 		t.Fatalf("MoveTask(%d, cancelled): %v", id, err)
 	}
-	m.filterStatus = "" // el filtro por defecto deja fuera las canceladas
+	m.filterStatus = "" // the default filter leaves the cancelled ones out
 }
 
-// columnasDe devuelve los estados de las columnas del board, en orden.
-func columnasDe(m *Model) []string {
+// columnsOf returns the statuses of the board's columns, in order.
+func columnsOf(m *Model) []string {
 	cols := m.kanbanColumns()
 	out := make([]string, len(cols))
 	for i, c := range cols {
@@ -184,8 +184,8 @@ func columnasDe(m *Model) []string {
 	return out
 }
 
-// El header de una columna dice cuántas se ven y cuántas hay, y sólo lleva el
-// par cuando no caben todas.
+// A column's header says how many are seen and how many there are, and it
+// only carries the pair when they do not all fit.
 func TestKanbanHeaderCountsShownOverTotal(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -193,10 +193,10 @@ func TestKanbanHeaderCountsShownOverTotal(t *testing.T) {
 		total int
 		want  string
 	}{
-		{"caban todas", 3, 3, "─ todo (3) "},
-		{"no caben", 3, 9, "─ todo (3/9) "},
-		{"ninguna visible", 0, 9, "─ todo (0/9) "},
-		{"columna vacía", 0, 0, "─ todo (0) "},
+		{"all fit", 3, 3, "─ todo (3) "},
+		{"do not fit", 3, 9, "─ todo (3/9) "},
+		{"none visible", 0, 9, "─ todo (0/9) "},
+		{"empty column", 0, 0, "─ todo (0) "},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -207,67 +207,67 @@ func TestKanbanHeaderCountsShownOverTotal(t *testing.T) {
 	}
 }
 
-// Con más tarjetas que filas caben, el header de esa columna dice cuántas se ven
-// de cuántas hay. Es el mismo shown/total del caso anterior, pero medido sobre
-// el board de verdad: sin él, un "end - start" mal puesto no se notaría.
+// With more cards than rows fit, that column's header says how many are seen
+// out of how many there are. It is the same shown/total as the previous case,
+// but measured on the real board: without it, a misplaced "end - start" would go unnoticed.
 func TestKanbanHeaderShowsWindowWhenOverflowing(t *testing.T) {
 	m := newKanbanModel(t, 8)
 	m.width = 240
 
 	out := ansi.Strip(m.renderKanban(14))
 	if !strings.Contains(out, "(2/8)") && !strings.Contains(out, "(1/8)") {
-		t.Errorf("el header no dice cuántas se ven de ocho:\n%s", out)
+		t.Errorf("the header does not say how many of eight are shown:\n%s", out)
 	}
 	if strings.Contains(out, "(8/8)") {
-		t.Errorf("con ocho tarjetas y un alto corto el header no puede decir 8/8:\n%s", out)
+		t.Errorf("with eight cards and a short height the header cannot say 8/8:\n%s", out)
 	}
 }
 
-// Cuando el cursor está al final de una columna más larga que la ventana, la
-// ventana se desplaza y el header dice cuántas se ven desde la que está
-// seleccionada, no desde la primera. Es el otro uso de "end - start": con el
-// cursor arriba, start es cero y el par no distingue una cuenta de otra.
+// When the cursor is at the end of a column longer than the window, the
+// window scrolls and the header says how many are seen from the one that is
+// selected, not from the first. It is the other use of "end - start": with
+// the cursor at the top, start is zero and the pair tells one count from another.
 func TestKanbanHeaderFollowsScrolledWindow(t *testing.T) {
 	m := newKanbanModelWithWorkflow(t, 20, []string{"todo", "done"})
 	m.width = 240
 	m.kanbanCol = 0
-	m.kanbanRow = 19 // abajo del todo
+	m.kanbanRow = 19 // at the bottom of todo
 	m.clampKanbanCursor()
 
 	out := ansi.Strip(m.renderKanban(14))
 	want := fmt.Sprintf("(%d/20)", kanbanMaxCards(14))
 	if !strings.Contains(out, want) {
-		t.Errorf("el header no dice %q con el cursor al final:\n%s", want, out)
+		t.Errorf("the header does not say %q with the cursor at the end:\n%s", want, out)
 	}
 	if strings.Contains(out, "(1/20)") {
-		t.Errorf("con el cursor abajo la ventana no puede seguir en la primera tarjeta:\n%s", out)
+		t.Errorf("with the cursor down the window cannot still be on the first card:\n%s", out)
 	}
-	// Y el desplazamiento se ve en las tarjetas: la primera ya no está y la última
-	// sí. El header no lo distingue, porque el número de visibles es el mismo
-	// desplazamiento o no.
-	if !strings.Contains(out, "tarea 19") {
-		t.Errorf("con el cursor abajo no se ve la última tarjeta:\n%s", out)
+	// And the shift is visible in the cards: the first one is gone and the last
+	// one is there. The header does not tell, because the number of visible items is
+	// the same shifted or not.
+	if !strings.Contains(out, "task 19") {
+		t.Errorf("with the cursor down the last card is not visible:\n%s", out)
 	}
-	if strings.Contains(out, "tarea 0 ") {
-		t.Errorf("con el cursor abajo sigue en pantalla la primera tarjeta:\n%s", out)
+	if strings.Contains(out, "task 0 ") {
+		t.Errorf("with the cursor down the first card is still on screen:\n%s", out)
 	}
 }
 
-// Y cuando caben todas, el header no lleva el par.
+// And when they all fit, the header carries no pair.
 func TestKanbanHeaderOmitsPairWhenAllVisible(t *testing.T) {
 	m := newKanbanModel(t, 2)
 	m.width = 240
 
 	out := ansi.Strip(m.renderKanban(40))
 	if strings.Contains(out, "(2/2)") {
-		t.Errorf("con las dos tarjetas visibles el header no debería llevar el par:\n%s", out)
+		t.Errorf("with both cards visible the header should not carry the pair:\n%s", out)
 	}
 	if !strings.Contains(out, "todo (2)") {
-		t.Errorf("el header no dice cuántas hay:\n%s", out)
+		t.Errorf("the header does not say how many there are:\n%s", out)
 	}
 }
 
-func tieneColumna(m *Model, status string) bool {
+func hasColumn(m *Model, status string) bool {
 	for _, c := range m.kanbanColumns() {
 		if c.status == status {
 			return true
@@ -276,7 +276,7 @@ func tieneColumna(m *Model, status string) bool {
 	return false
 }
 
-// reloadProjects vuelve a leer los proyectos, como haría un projectsLoadedMsg.
+// reloadProjects re-reads the projects, as a projectsLoadedMsg would.
 func reloadProjects(t *testing.T, m *Model) {
 	t.Helper()
 	var err error
@@ -285,13 +285,13 @@ func reloadProjects(t *testing.T, m *Model) {
 	}
 }
 
-// newKanbanModel parte de una DB con un único proyecto, el workflow indicado y n
-// tarjetas en "todo".
+// newKanbanModel starts from a DB with a single project, the given workflow
+// and n cards in "todo".
 //
-// Cargar los proyectos y filtrar por "solo" importa: sin el filtro el board usa
-// la unión de los workflows de todos los proyectos, y el proyecto auxiliar "api"
-// de newEmptyDBModel trae el workflow por defecto, con siete estados y
-// "cancelled" dentro. Las columnas del test serían las del default.
+// Loading the projects and filtering by "only" matters: without the filter the
+// board uses the union of all projects' workflows, and the auxiliary "api"
+// project of newEmptyDBModel brings the default workflow, with seven statuses
+// and "cancelled" inside. The test's columns would be the default's.
 func newKanbanModel(t *testing.T, tasks int) *Model {
 	t.Helper()
 	return newKanbanModelWithWorkflow(t, tasks, []string{"todo", "done"})
@@ -300,45 +300,45 @@ func newKanbanModel(t *testing.T, tasks int) *Model {
 func newKanbanModelWithWorkflow(t *testing.T, tasks int, workflow []string) *Model {
 	t.Helper()
 	m := newEmptyDBModel(t)
-	mustCreateProject(t, m.database, "solo", workflow)
+	mustCreateProject(t, m.database, "only", workflow)
 	for i := range tasks {
-		mustCreateTask(t, m.database, "solo", fmt.Sprintf("tarea %d", i), "", "@juan", 1, "todo")
+		mustCreateTask(t, m.database, "only", fmt.Sprintf("task %d", i), "", "@john", 1, "todo")
 	}
 	reloadTasks(t, m)
 	reloadProjects(t, m)
-	// El filtro de proyecto es lo que hace que el board use el workflow de
-	// "solo" y no la unión de todos. Sin él, el proyecto auxiliar "api" de
-	// newEmptyDBModel mete su workflow por defecto, que trae "cancelled", y la
-	// columna aparecería siempre.
-	// newEmptyDBModel deja el modal de personas abierto, y ése se queda con las
-	// teclas antes de que la vista reciba ninguna. Sin cerrarlo, "h" y "l" nunca
-	// llegarían al board.
+	// The project filter is what makes the board use the workflow of
+	// "only" and not the union of all of them. Without it, the auxiliary "api"
+	// project of newEmptyDBModel puts in its default workflow, which brings
+	// "cancelled", and the column would always appear.
+	// newEmptyDBModel leaves the people modal open, and that one keeps the keys
+	// before the view receives any. Without closing it, "h" and "l" would never
+	// reach the board.
 	m.assigneeModalOpen = false
-	m.filterProject = "solo"
+	m.filterProject = "only"
 	m.currentView = viewKanban
 	m.width = 240
 	m.clampKanbanCursor()
 	return m
 }
 
-// La tarjeta de una columna lleva la prioridad si la columna la muestra, y sólo el
-// título si no. Y el responsable va con sus tags detrás cuando las tiene.
+// A column's card carries the priority if the column shows it, and only the
+// title if not. And the assignee goes with its tags behind when it has them.
 func TestKanbanCardContent(t *testing.T) {
-	tags := []string{"bug", "urgente"}
-	conTags := model.Task{ID: 1, Title: "arreglar", Assignee: "@juan", Priority: 3, Tags: tags}
+	tags := []string{"bug", "urgent"}
+	withTags := model.Task{ID: 1, Title: "fix", Assignee: "@john", Priority: 3, Tags: tags}
 
 	tests := []struct {
-		name          string
-		task          model.Task
-		showPriority  bool
-		wantPrioridad bool
-		wantTags      bool
+		name         string
+		task         model.Task
+		showPriority bool
+		wantPriority bool
+		wantTags     bool
 	}{
-		{"con prioridad y sin tags", model.Task{ID: 1, Title: "t", Assignee: "@juan", Priority: 2}, true, true, false},
-		{"sin prioridad y sin tags", model.Task{ID: 1, Title: "t", Assignee: "@juan", Priority: 2}, false, false, false},
-		{"con tags y con prioridad", conTags, true, true, true},
-		{"con tags y sin prioridad", conTags, false, false, true},
-		{"sin responsable", model.Task{ID: 1, Title: "t", Priority: 1}, true, true, false},
+		{"with priority and no tags", model.Task{ID: 1, Title: "t", Assignee: "@john", Priority: 2}, true, true, false},
+		{"without priority and no tags", model.Task{ID: 1, Title: "t", Assignee: "@john", Priority: 2}, false, false, false},
+		{"with tags and with priority", withTags, true, true, true},
+		{"with tags and without priority", withTags, false, false, true},
+		{"without assignee", model.Task{ID: 1, Title: "t", Priority: 1}, true, true, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -346,105 +346,105 @@ func TestKanbanCardContent(t *testing.T) {
 			col := kanbanColumn{status: "todo", tasks: []model.Task{tt.task}, showPriority: tt.showPriority}
 
 			out := ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", false, columnWindow{end: 1}))
-			// El carácter de prioridad viene con color, así que se compara sin él:
-			// el render también se mide sin él.
-			barra := ansi.Strip(priorityChar(tt.task.Priority))
-			if tiene := strings.Contains(out, barra); tiene != tt.wantPrioridad {
-				t.Errorf("la barra de prioridad %q sale=%v, want %v:\n%s",
-					barra, tiene, tt.wantPrioridad, out)
+			// The priority character comes with color, so it is compared without it:
+			// the render is also measured without it.
+			bar := ansi.Strip(priorityChar(tt.task.Priority))
+			if has := strings.Contains(out, bar); has != tt.wantPriority {
+				t.Errorf("the priority bar %q shows=%v, want %v:\n%s",
+					bar, has, tt.wantPriority, out)
 			}
-			// Las tags van dos columnas detrás del responsable, no pegadas. Sin ese
-			// hueco los nombres se leen como un bloque y el "> 0 tags" del contador
-			// deja de empezar en columna fija.
-			junto := "@juan  " + strings.Join(tags, ",")
-			if tiene := strings.Contains(out, junto); tiene != tt.wantTags {
-				t.Errorf("el hueco con las tags sale=%v, want %v:\n%s", tiene, tt.wantTags, out)
+			// The tags go two columns behind the assignee, not glued. Without that
+			// gap the names read as one block and the "> 0 tags" of the counter
+			// stops starting at a fixed column.
+			withGap := "@john  " + strings.Join(tags, ",")
+			if has := strings.Contains(out, withGap); has != tt.wantTags {
+				t.Errorf("the gap with the tags shows=%v, want %v:\n%s", has, tt.wantTags, out)
 			}
-			if tiene := strings.Contains(out, strings.Join(tags, ",")); tiene != tt.wantTags {
-				t.Errorf("las tags salen=%v, want %v:\n%s", tiene, tt.wantTags, out)
+			if has := strings.Contains(out, strings.Join(tags, ",")); has != tt.wantTags {
+				t.Errorf("the tags show=%v, want %v:\n%s", has, tt.wantTags, out)
 			}
-			if !strings.Contains(out, "t") && !strings.Contains(out, "arreglar") {
-				t.Errorf("no sale el título:\n%s", out)
+			if !strings.Contains(out, "t") && !strings.Contains(out, "fix") {
+				t.Errorf("the title does not show:\n%s", out)
 			}
 		})
 	}
 }
 
-// La tarjeta seleccionada lleva "> " delante y las demás "  ". Es la única
-// diferencia entre ellas, así que lo que se compara es el prefijo de la primera
-// línea de la tarjeta, no su texto: el texto lleva la barra de prioridad con
-// color y comparar sobre el render sin color no lo deja claro.
+// The selected card carries "> " in front and the others "  ". It is the only
+// difference between them, so what is compared is the prefix of the first
+// line of the card, not its text: the text carries the priority bar with
+// color and comparing on the colorless render does not make it clear.
 func TestKanbanSelectedCardIsMarked(t *testing.T) {
 	m := newKanbanModel(t, 0)
-	task := model.Task{ID: 1, Title: "tarea", Assignee: "@juan", Priority: 2}
-	// Con showPriority la tarjeta ya trae su propio prefijo de dos columnas, así
-	// que el prefijo de selección se distingue del de la tarjeta. Sin la barra,
-	// los dos prefijos se solapan y quitarlos sería invisible.
+	task := model.Task{ID: 1, Title: "task", Assignee: "@john", Priority: 2}
+	// With showPriority the card already brings its own two-column prefix, so
+	// the selection prefix is told apart from the card's. Without the bar,
+	// the two prefixes overlap and removing them would be invisible.
 	col := kanbanColumn{status: "todo", tasks: []model.Task{task}, showPriority: true}
 
-	seleccionada := primeraTarjeta(t, ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", true, columnWindow{end: 1})), "tarea")
-	if !strings.HasPrefix(seleccionada, "> ") {
-		t.Errorf("la tarjeta seleccionada empieza por %q, want \"> \"", seleccionada)
+	selected := firstCard(t, ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", true, columnWindow{end: 1})), "task")
+	if !strings.HasPrefix(selected, "> ") {
+		t.Errorf("the selected card starts with %q, want \"> \"", selected)
 	}
 
-	noSeleccionada := primeraTarjeta(t, ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", false, columnWindow{end: 1})), "tarea")
-	if strings.HasPrefix(noSeleccionada, "> ") {
-		t.Errorf("una tarjeta no seleccionada empieza por %q", noSeleccionada)
+	notSelected := firstCard(t, ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", false, columnWindow{end: 1})), "task")
+	if strings.HasPrefix(notSelected, "> ") {
+		t.Errorf("an unselected card starts with %q", notSelected)
 	}
-	if !strings.HasPrefix(noSeleccionada, "    ") {
-		t.Errorf("una tarjeta no seleccionada no lleva el prefijo de dos columnas: %q", noSeleccionada)
+	if !strings.HasPrefix(notSelected, "    ") {
+		t.Errorf("an unselected card does not carry the two-column prefix: %q", notSelected)
 	}
 }
 
-// Con dos tarjetas y el cursor en la segunda, sólo esa lleva la marca.
+// With two cards and the cursor on the second one, only that one carries the mark.
 func TestKanbanOnlyCursorRowIsMarked(t *testing.T) {
 	m := newKanbanModel(t, 0)
 	m.kanbanRow = 1
 	col := kanbanColumn{status: "todo", tasks: []model.Task{
-		{ID: 1, Title: "primera", Assignee: "@juan", Priority: 2},
-		{ID: 2, Title: "segunda", Assignee: "@juan", Priority: 2},
+		{ID: 1, Title: "first", Assignee: "@john", Priority: 2},
+		{ID: 2, Title: "second", Assignee: "@john", Priority: 2},
 	}}
 
 	out := ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", true, columnWindow{end: 2}))
 	if n := strings.Count(out, "> "); n != 1 {
-		t.Errorf("hay %d marcas, want 1:\n%s", n, out)
+		t.Errorf("there are %d marks, want 1:\n%s", n, out)
 	}
-	if !strings.Contains(out, "segunda") {
-		t.Errorf("no sale la segunda tarjeta:\n%s", out)
+	if !strings.Contains(out, "second") {
+		t.Errorf("the second card does not show:\n%s", out)
 	}
 }
 
-// primeraTarjeta devuelve la primera línea que contiene el texto de una tarjeta,
-// con el borde izquierdo de la columna quitado. El resto del recuadro -- la caja,
-// la cabecera -- se salta buscando la línea que trae el texto.
+// firstCard returns the first line containing the text of a card,
+// with the column's left border removed. The rest of the box -- the box,
+// the header -- is skipped by looking for the line carrying the text.
 //
-// Todo por runes: los bordes y los guiones son multibyte, y un corte por bytes
-// parte el carácter y devuelve basura.
-func primeraTarjeta(t *testing.T, renderizado, titulo string) string {
+// All by runes: the borders and the dashes are multibyte, and a byte cut
+// splits the character and returns garbage.
+func firstCard(t *testing.T, rendered, title string) string {
 	t.Helper()
-	for _, linea := range strings.Split(renderizado, "\n") {
-		i := strings.Index(linea, titulo)
+	for _, line := range strings.Split(rendered, "\n") {
+		i := strings.Index(line, title)
 		if i < 0 {
 			continue
 		}
-		runes := []rune(linea[:i])
-		// Fuera el borde izquierdo: "║", "│", "╔" o "╭".
+		runes := []rune(line[:i])
+		// Outside the left border: "║", "│", "╔" or "╭".
 		for len(runes) > 0 && strings.ContainsRune("║│╔╭", runes[0]) {
 			runes = runes[1:]
 		}
 		return string(runes)
 	}
-	t.Fatalf("la columna no tiene la tarjeta %q:\n%s", titulo, renderizado)
+	t.Fatalf("the column does not have the card %q:\n%s", title, rendered)
 	return ""
 }
 
-// Una columna sin tarjetas dice "(empty)" en vez de salirse con una caja vacía.
+// A column with no cards says "(empty)" instead of overflowing with an empty box.
 func TestKanbanEmptyColumnSaysSo(t *testing.T) {
 	m := newKanbanModel(t, 0)
 	col := kanbanColumn{status: "todo", tasks: nil}
 
 	out := ansi.Strip(m.renderKanbanColumn(col, 40, "─ todo ", false, columnWindow{}))
 	if !strings.Contains(out, "(empty)") {
-		t.Errorf("una columna vacía no lo dice:\n%s", out)
+		t.Errorf("an empty column does not say so:\n%s", out)
 	}
 }

@@ -8,9 +8,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// TestRenderDashboardRespectsHeight verifica que el dashboard no exceda el alto
-// disponible aunque haya muchas tareas y assignees: las filas sobrantes de las
-// columnas se descartan.
+// TestRenderDashboardRespectsHeight verifies that the dashboard does not
+// exceed the available height even with many tasks and assignees: the extra
+// rows of the columns are dropped.
 func TestRenderDashboardRespectsHeight(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "4")
@@ -29,11 +29,11 @@ func TestRenderDashboardRespectsHeight(t *testing.T) {
 	out := m.renderDashboard(budget)
 
 	if n := lineCount(out); n > budget {
-		t.Errorf("alto = %d, excede el presupuesto %d", n, budget)
+		t.Errorf("height = %d, exceeds the budget %d", n, budget)
 	}
 	for i, line := range strings.Split(out, "\n") {
 		if w := ansi.StringWidth(line); w > m.width {
-			t.Errorf("línea %d mide %d, excede el ancho %d", i, w, m.width)
+			t.Errorf("line %d measures %d, exceeds the width %d", i, w, m.width)
 		}
 	}
 }

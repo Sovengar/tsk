@@ -10,19 +10,19 @@ import (
 	"tsk/internal/model"
 )
 
-// errAccionFallida es el error que devuelven las acciones simuladas que tienen
-// que fallar: el comando no debe recargar la lista.
-var errAccionFallida = errors.New("accion fallida")
+// errActionFailed is the error that the simulated actions return when they
+// are meant to fail: the command must not reload the list.
+var errActionFailed = errors.New("action failed")
 
-// Los handlers empiezan siempre con su clamp, así que un cursor fuera de rango
-// no se puede provocar desde el teclado. Lo que sí es real es la lista vacía:
-// ahí el clamp deja el cursor en 0 y el guarda de la tecla tiene que impedir la
-// acción, porque indexar tasks[0] sobre una lista vacía revienta.
+// The handlers always start with their clamp, so an out-of-range cursor
+// cannot be provoked from the keyboard. What is real is the empty list:
+// there the clamp leaves the cursor at 0 and the key guard has to prevent
+// the action, because indexing tasks[0] on an empty list blows up.
 //
-// Estos tests fijan ese borde: con tareas la tecla actúa, sin tareas no hace
-// nada.
+// These tests pin that edge down: with tasks the key acts, with no tasks it
+// does nothing.
 
-// Con la lista filtrada vacía, ninguna tecla de acción toca la base de datos.
+// With the filtered list empty, no action key touches the database.
 func TestListActionKeysNoopWithEmptyList(t *testing.T) {
 	for _, key := range []string{"s", "d", "x"} {
 		t.Run(key, func(t *testing.T) {
@@ -33,47 +33,47 @@ func TestListActionKeysNoopWithEmptyList(t *testing.T) {
 
 			next, cmd := press(m, key)
 			if cmd != nil {
-				t.Errorf("tecla %q sin tareas: %v quiere ejecutar una acción", key, cmd)
+				t.Errorf("key %q with no tasks: %v wants to run an action", key, cmd)
 			}
 			if next.cursor != 0 {
-				t.Errorf("el cursor quedó en %d sin tareas", next.cursor)
+				t.Errorf("the cursor ended at %d with no tasks", next.cursor)
 			}
 		})
 	}
 }
 
-// El otro lado del mismo guarda: con una tarea bajo el cursor, la tecla actúa.
-// Sin esta mitad, el test anterior pasaría también con el guarda eliminado.
+// The other side of the same guard: with a task under the cursor, the key acts.
+// Without this half, the previous test would also pass with the guard removed.
 func TestListActionKeysActWithValidCursor(t *testing.T) {
 	for _, key := range []string{"s", "d", "x"} {
 		t.Run(key, func(t *testing.T) {
 			m := newTestModel(t)
 			if len(m.filteredTasks()) == 0 {
-				t.Skip("el fixture no dejó tareas visibles")
+				t.Skip("the fixture left no visible tasks")
 			}
 			m.cursor = 0
 
 			if _, cmd := press(m, key); cmd == nil {
-				t.Errorf("tecla %q con una tarea seleccionada no produjo comando", key)
+				t.Errorf("key %q with a task selected produced no command", key)
 			}
 		})
 	}
 }
 
-// El alto disponible para el contenido descuenta el preview y el toast. El
-// toast ocupa una línea, así que sumarlo en vez de restarlo cambia cuántas filas
-// de tareas caben en la caja.
+// The height available for the content discounts the preview and the toast.
+// The toast takes one line, so adding it instead of subtracting it changes how
+// many task rows fit in the box.
 //
-// A 18 de alto la diferencia cae justo en el borde: con toast se pintan 2 filas
-// de tarea, sin toast 3. Los números son literales, no derivados: si alguien
-// cambia el reparto de alto del layout hay que actualizar el test a mano, que es
-// justo lo que se quiere.
+// At a height of 18 the difference falls right on the edge: with toast 2 task
+// rows are painted, without toast 3. The numbers are literals, not derived: if
+// someone changes the layout's height split the test has to be updated by hand,
+// which is exactly what is wanted.
 func TestViewBudgetCountsToastLine(t *testing.T) {
 	for _, tt := range []struct {
 		toast string
 		want  int
 	}{
-		{"guardado", 2},
+		{"saved", 2},
 		{"", 3},
 	} {
 		t.Run("toast="+tt.toast, func(t *testing.T) {
@@ -84,14 +84,14 @@ func TestViewBudgetCountsToastLine(t *testing.T) {
 			m.toastKind = "info"
 
 			if got := countRenderedTasks(t, m); got != tt.want {
-				t.Errorf("con toast %q se pintaron %d filas de tarea, want %d", tt.toast, got, tt.want)
+				t.Errorf("with toast %q %d task rows were painted, want %d", tt.toast, got, tt.want)
 			}
 		})
 	}
 }
 
-// Las filas se cuentan por los títulos de las tareas del fixture: cada uno
-// aparece exactamente una vez por fila pintada.
+// The rows are counted by the titles of the fixture's tasks: each one appears
+// exactly once per painted row.
 var fixtureTitles = []string{"Fix N+1 query", "Add caching", "Update README", "Fix checkout"}
 
 func countRenderedTasks(t *testing.T, m *Model) int {
@@ -104,49 +104,49 @@ func countRenderedTasks(t *testing.T, m *Model) int {
 	return n
 }
 
-// La selección del detalle no envuelve por arriba: -1 significa "nada
-// seleccionado", y desde ahí "j" va al primer comentario, no al segundo.
+// The detail's selection does not wrap upwards: -1 means "nothing
+// selected", and from there "j" goes to the first comment, not the second.
 
-// Con el cursor en el último comentario, "j" se queda ahí.
+// With the cursor on the last comment, "j" stays there.
 func TestDetailCommentDownStopsAtLast(t *testing.T) {
 	m := newDetailModel(t, 3)
 	m.detailCommentSel = len(m.detailComments) - 1
 
 	next, _ := press(m, "j")
 	if next.detailCommentSel != 2 {
-		t.Errorf("selección %d, want 2 (no avanza más allá del último)", next.detailCommentSel)
+		t.Errorf("selection %d, want 2 (does not advance past the last)", next.detailCommentSel)
 	}
 }
 
-// Y desde -1, "j" va al primero, no al segundo.
+// And from -1, "j" goes to the first one, not the second.
 func TestDetailCommentDownFromNoneSelectsFirst(t *testing.T) {
 	m := newDetailModel(t, 3)
 	m.detailCommentSel = -1
 
 	next, _ := press(m, "j")
 	if next.detailCommentSel != 0 {
-		t.Errorf("selección %d, want 0", next.detailCommentSel)
+		t.Errorf("selection %d, want 0", next.detailCommentSel)
 	}
 }
 
-// Hacia arriba desde el primero se vuelve a "nada seleccionado", y de ahí no se
-// sale hacia -2.
+// Up from the first one goes back to "nothing selected", and from there it
+// does not go out to -2.
 func TestDetailCommentUpFromFirstClearsSelection(t *testing.T) {
 	m := newDetailModel(t, 2)
 	m.detailCommentSel = 0
 
 	next, _ := press(m, "k")
 	if next.detailCommentSel != -1 {
-		t.Errorf("selección %d, want -1", next.detailCommentSel)
+		t.Errorf("selection %d, want -1", next.detailCommentSel)
 	}
 
 	next, _ = press(m, "k")
 	if next.detailCommentSel != -1 {
-		t.Errorf("selección %d, want -1 (no baja de -1)", next.detailCommentSel)
+		t.Errorf("selection %d, want -1 (does not go below -1)", next.detailCommentSel)
 	}
 }
 
-// Sin comentarios, ni "j" ni "k" mueven nada.
+// With no comments, neither "j" nor "k" move anything.
 func TestDetailCommentKeysNoopWithoutComments(t *testing.T) {
 	for _, key := range []string{"j", "k"} {
 		t.Run(key, func(t *testing.T) {
@@ -154,68 +154,68 @@ func TestDetailCommentKeysNoopWithoutComments(t *testing.T) {
 
 			next, _ := press(m, key)
 			if next.detailCommentSel != -1 {
-				t.Errorf("selección %d, want -1 sin comentarios", next.detailCommentSel)
+				t.Errorf("selection %d, want -1 with no comments", next.detailCommentSel)
 			}
 		})
 	}
 }
 
-// newDetailModel abre el detalle de la primera tarea con n comentarios.
+// newDetailModel opens the detail of the first task with n comments.
 func newDetailModel(t *testing.T, comments int) *Model {
 	t.Helper()
 	m := newTestModel(t)
 	if len(m.tasks) == 0 {
-		t.Fatal("el fixture no dejó tareas")
+		t.Fatal("the fixture left no tasks")
 	}
 	task := m.tasks[0]
 	m.detailOpen = true
 	m.detailTask = &task
 	for i := range comments {
-		mustAddComment(t, m.database, task.ID, "comentario")
+		mustAddComment(t, m.database, task.ID, "comment")
 		_ = i
 	}
 	m.detailComments, _ = m.database.ListComments(task.ID)
 	if len(m.detailComments) != comments {
-		t.Fatalf("pedidos %d comentarios, hay %d", comments, len(m.detailComments))
+		t.Fatalf("%d comments requested, got %d", comments, len(m.detailComments))
 	}
 	return m
 }
 
-// "d" en el detalle borra el comentario seleccionado; sin selección, o con una
-// selección que no vale para la lista, marca la tarea. El borde del guarda es
-// detailCommentSel == len(comments), que la interfaz no produce pero el código
-// comprueba: si el guarda desapareciera, indexaría fuera de rango.
+// "d" in the detail deletes the selected comment; with no selection, or with
+// a selection that does not apply to the list, it marks the task. The guard's
+// edge is detailCommentSel == len(comments), which the interface never produces
+// but the code checks: if the guard disappeared, it would index out of range.
 func TestDetailDeleteFallsBackToTaskWhenSelectionOutOfRange(t *testing.T) {
 	for _, sel := range []int{-1, -5, 2, 99} {
 		m := newDetailModel(t, 2)
 		m.detailCommentSel = sel
 
 		next, _ := press(m, "d")
-		// Marcar la tarea cierra el detalle; borrar un comentario no.
+		// Marking the task closes the detail; deleting a comment does not.
 		if next.detailOpen {
-			t.Errorf("sel %d: no se borró ni se marcó; el detalle sigue abierto", sel)
+			t.Errorf("sel %d: neither deleted nor marked; the detail is still open", sel)
 		}
 	}
 }
 
-// Con una selección válida, "d" borra ese comentario y deja el detalle abierto.
-// Sin esta mitad, el test anterior pasaría también con el guarda eliminado.
+// With a valid selection, "d" deletes that comment and leaves the detail open.
+// Without this half, the previous test would also pass with the guard removed.
 func TestDetailDeleteRemovesSelectedComment(t *testing.T) {
 	m := newDetailModel(t, 2)
 	m.detailCommentSel = 1
 
 	next, cmd := press(m, "d")
 	if cmd == nil {
-		t.Fatal("no produjo comando de borrado")
+		t.Fatal("it produced no delete command")
 	}
 	if !next.detailOpen {
-		t.Error("borrar un comentario cerró el detalle")
+		t.Error("deleting a comment closed the detail")
 	}
 }
 
-// Las teclas del detalle que necesitan una tarea abierta no abren nada sin ella.
-// Cada una tiene su propio guarda, y quitarlos sería cambiar el comportamiento
-// con el detalle cerrado.
+// The detail keys that need an open task open nothing without one. Each one
+// has its own guard, and removing them would change the behavior with the
+// detail closed.
 func TestDetailKeysRequireOpenTask(t *testing.T) {
 	for _, key := range []string{"t", "e", "c", "E"} {
 		t.Run(key, func(t *testing.T) {
@@ -225,49 +225,49 @@ func TestDetailKeysRequireOpenTask(t *testing.T) {
 
 			next, cmd := press(m, key)
 			if cmd != nil {
-				t.Errorf("tecla %q sin tarea abierta produjo comando %T", key, cmd)
+				t.Errorf("key %q with no open task produced command %T", key, cmd)
 			}
 			if next.tagOpen {
-				t.Error("abrió el modal de tags sin tarea")
+				t.Error("it opened the tag modal without a task")
 			}
 			if next.descEditOpen {
-				t.Error("abrió el editor de descripción sin tarea")
+				t.Error("it opened the description editor without a task")
 			}
 		})
 	}
 }
 
-// New arranca con un pageSize utilizable aunque la configuración no traiga uno,
-// y con el resto de valores por defecto que las vistas asumen.
+// New starts with a usable pageSize even if the config brings none, and with
+// the rest of the default values the views assume.
 func TestNewDefaults(t *testing.T) {
 	m := newBareModel(t, func(c *config.Config) { c.ListPageSize = 0 })
 
 	if m.pageSize != config.DefaultPageSize {
-		t.Errorf("pageSize %d, want %d con la config a 0", m.pageSize, config.DefaultPageSize)
+		t.Errorf("pageSize %d, want %d with the config at 0", m.pageSize, config.DefaultPageSize)
 	}
 	if m.currentView != viewList {
-		t.Errorf("vista inicial %v, want la lista", m.currentView)
+		t.Errorf("initial view %v, want the list", m.currentView)
 	}
 	if m.cursor != 0 {
-		t.Errorf("cursor inicial %d, want 0", m.cursor)
+		t.Errorf("initial cursor %d, want 0", m.cursor)
 	}
-	// -1 es "sin filtro": se distingue del 0, que sería sólo prioridad máxima.
+	// -1 means "no filter": it is told apart from 0, which would be only the highest priority.
 	if m.filterPriority != -1 {
-		t.Errorf("filterPriority inicial %d, want -1", m.filterPriority)
+		t.Errorf("initial filterPriority %d, want -1", m.filterPriority)
 	}
 	if m.filterStatus != statusFilterAllActive {
-		t.Errorf("filterStatus inicial %q, want %q", m.filterStatus, statusFilterAllActive)
+		t.Errorf("initial filterStatus %q, want %q", m.filterStatus, statusFilterAllActive)
 	}
-	// Igual que -1: "nada seleccionado" en los dos selectores.
+	// Same as -1: "nothing selected" in both pickers.
 	if m.detailCommentSel != -1 || m.tagSuggestIdx != -1 {
-		t.Errorf("selectores iniciales (%d, %d), want (-1, -1)", m.detailCommentSel, m.tagSuggestIdx)
+		t.Errorf("initial selectors (%d, %d), want (-1, -1)", m.detailCommentSel, m.tagSuggestIdx)
 	}
 	if m.width != 80 || m.height != 24 {
-		t.Errorf("tamaño inicial %dx%d, want 80x24", m.width, m.height)
+		t.Errorf("initial size %dx%d, want 80x24", m.width, m.height)
 	}
 }
 
-// Y una configuración con pageSize se respeta tal cual.
+// And a config with pageSize is respected as-is.
 func TestNewKeepsConfiguredPageSize(t *testing.T) {
 	for _, n := range []int{1, 7, 50} {
 		m := newBareModel(t, func(c *config.Config) { c.ListPageSize = n })
@@ -277,7 +277,7 @@ func TestNewKeepsConfiguredPageSize(t *testing.T) {
 	}
 }
 
-// newBareModel construye un modelo con DB vacía y la config ajustada.
+// newBareModel builds a model with an empty DB and the adjusted config.
 func newBareModel(t *testing.T, tweak func(*config.Config)) Model {
 	t.Helper()
 	database, err := db.NewTestDB()
@@ -291,53 +291,53 @@ func newBareModel(t *testing.T, tweak func(*config.Config)) Model {
 	return New(database, cfg)
 }
 
-// Una acción que falla no recarga la lista: el comando devuelve nil en vez de
-// un tasksLoadedMsg con los datos de antes, que era lo que se veía.
+// A failing action does not reload the list: the command returns nil instead
+// of a tasksLoadedMsg with the old data, which was what was seen.
 func TestTaskActionCmdErrorYieldsNoMsg(t *testing.T) {
 	m := newTestModel(t)
-	boom := func(int64) (*model.Task, error) { return nil, errAccionFallida }
+	boom := func(int64) (*model.Task, error) { return nil, errActionFailed }
 
 	cmd := m.taskActionCmd(1, boom)
 	if cmd == nil {
-		t.Fatal("no produjo comando")
+		t.Fatal("it produced no command")
 	}
 	if msg := cmd(); msg != nil {
-		t.Errorf("una acción fallida devolvió %T, want nil (no recarga)", msg)
+		t.Errorf("a failed action returned %T, want nil (no reload)", msg)
 	}
 }
 
-// Si la acción va bien, el comando recarga y trae la lista.
+// If the action goes well, the command reloads and brings the list.
 func TestTaskActionCmdSuccessReloads(t *testing.T) {
 	m := newTestModel(t)
 	ok := func(id int64) (*model.Task, error) { return m.database.DoneTask(id) }
 
 	msgs := mustRun(t, m.taskActionCmd(m.tasks[0].ID, ok))
 	if len(msgs) != 1 {
-		t.Fatalf("mensajes %d, want 1", len(msgs))
+		t.Fatalf("messages %d, want 1", len(msgs))
 	}
 	loaded, isLoaded := msgs[0].(tasksLoadedMsg)
 	if !isLoaded {
-		t.Fatalf("mensaje %T, want tasksLoadedMsg", msgs[0])
+		t.Fatalf("message %T, want tasksLoadedMsg", msgs[0])
 	}
 	if len(loaded.tasks) == 0 {
-		t.Error("la recarga no trajo tareas")
+		t.Error("the reload did not bring tasks")
 	}
 }
 
-// projectsLoadedMsg con un proyecto pendiente lo selecciona y limpia el
-// pendiente; sin pendiente, deja el cursor donde estaba.
+// projectsLoadedMsg with a pending project selects it and clears the pending
+// one; with no pending one, it leaves the cursor where it was.
 func TestProjectsLoadedSelectsPendingName(t *testing.T) {
 	m := newTestModel(t)
 	m.pendingSelectName = "web"
-	idxAntes := m.dashProjectIdx
+	idxBefore := m.dashProjectIdx
 
 	next, _ := m.Update(projectsLoadedMsg{projects: m.projects})
 	got := next.(Model)
-	if got.dashProjectIdx == idxAntes {
-		t.Errorf("no seleccionó el proyecto pendiente (dashProjectIdx %d)", got.dashProjectIdx)
+	if got.dashProjectIdx == idxBefore {
+		t.Errorf("it did not select the pending project (dashProjectIdx %d)", got.dashProjectIdx)
 	}
 	if got.pendingSelectName != "" {
-		t.Errorf("el pendiente quedó en %q, want vacío tras consumirse", got.pendingSelectName)
+		t.Errorf("the pending one stayed at %q, want empty after being consumed", got.pendingSelectName)
 	}
 }
 
@@ -349,15 +349,15 @@ func TestProjectsLoadedWithoutPendingKeepsSelection(t *testing.T) {
 	next, _ := m.Update(projectsLoadedMsg{projects: m.projects})
 	got := next.(Model)
 	if got.dashProjectIdx != 0 {
-		t.Errorf("sin pendiente la selección cambió a %d", got.dashProjectIdx)
+		t.Errorf("without a pending one the selection changed to %d", got.dashProjectIdx)
 	}
 	if got.pendingSelectName != "" {
-		t.Errorf("apareció un pendiente %q sin pedirlo", got.pendingSelectName)
+		t.Errorf("a pending one %q appeared without being requested", got.pendingSelectName)
 	}
 }
 
-// Con el detalle ya abierto y comentarios cargados, reabrirlo con Enter vuelve a
-// dejar la selección en -1.
+// With the detail already open and comments loaded, reopening it with Enter
+// goes back to leaving the selection at -1.
 func TestReopeningDetailClearsCommentSelection(t *testing.T) {
 	m := newTestModel(t)
 	m.cursor = 0
@@ -369,42 +369,42 @@ func TestReopeningDetailClearsCommentSelection(t *testing.T) {
 	got := next
 
 	if !got.detailOpen {
-		t.Fatal("Enter no abrió el detalle")
+		t.Fatal("Enter did not open the detail")
 	}
 	if got.detailCommentSel != -1 {
-		t.Errorf("detailCommentSel = %d, want -1 (nada seleccionado)", got.detailCommentSel)
+		t.Errorf("detailCommentSel = %d, want -1 (nothing selected)", got.detailCommentSel)
 	}
 	if got.detailComments != nil {
-		t.Error("los comentarios arrancan sin cargar, no como lista vacía")
+		t.Error("comments start unloaded, not as an empty list")
 	}
 }
 
-// Abrir el modal de tags deja el índice de sugerencia en -1, por el mismo motivo
-// que el detalle con los comentarios.
+// Opening the tag modal leaves the suggestion index at -1, for the same reason
+// as the detail with the comments.
 func TestOpeningTagModalClearsSuggestionIndex(t *testing.T) {
 	m := newTestModel(t)
 	task := m.tasks[0]
 	m.detailOpen = true
 	m.detailTask = &task
-	m.tagInput = "algo"
+	m.tagInput = "something"
 	m.tagSuggestIdx = 4
 
 	next, _ := press(m, "t")
 	got := next
 
 	if !got.tagOpen {
-		t.Fatal("la tecla t no abrió el modal de tags")
+		t.Fatal("the t key did not open the tag modal")
 	}
 	if got.tagSuggestIdx != -1 {
 		t.Errorf("tagSuggestIdx = %d, want -1", got.tagSuggestIdx)
 	}
 	if got.tagInput != "" {
-		t.Errorf("el input quedó en %q, want vacío", got.tagInput)
+		t.Errorf("the input stayed at %q, want empty", got.tagInput)
 	}
 }
 
-// En Kanban, abrir el detalle sobre la tarjeta seleccionada también limpia la
-// selección de comentarios.
+// In Kanban, opening the detail on the selected card also clears the
+// comment selection.
 func TestKanbanOpeningDetailClearsCommentSelection(t *testing.T) {
 	m := newTestModel(t)
 	m.currentView = viewKanban
@@ -417,36 +417,36 @@ func TestKanbanOpeningDetailClearsCommentSelection(t *testing.T) {
 	got := next
 
 	if !got.detailOpen {
-		t.Fatal("Enter en Kanban no abrió el detalle")
+		t.Fatal("Enter in Kanban did not open the detail")
 	}
 	if got.detailCommentSel != -1 {
 		t.Errorf("detailCommentSel = %d, want -1", got.detailCommentSel)
 	}
 }
 
-// Con una sola columna no hay a dónde moverse con las flechas horizontales, y la
-// fila no se resetea: el reset es consecuencia de cambiar de columna, no de
-// apretar la tecla. Con más de una columna, mover sí resetea.
+// With a single column there is nowhere to move with the horizontal arrows,
+// and the row is not reset: the reset is a consequence of changing column,
+// not of pressing the key. With more than one column, moving does reset.
 func TestKanbanColumnArrowsWithASingleColumn(t *testing.T) {
 	m := newKanbanModelWithWorkflow(t, 2, []string{"todo", "done"})
 	if len(m.kanbanColumns()) != 2 {
-		t.Skipf("el fixture tiene %d columnas", len(m.kanbanColumns()))
+		t.Skipf("the fixture has %d columns", len(m.kanbanColumns()))
 	}
 	m.kanbanCol = 0
 	m.kanbanRow = 1
 
 	next, _ := press(m, "h")
 	if next.kanbanRow != 1 {
-		t.Errorf("con una sola columna a la izquierda la fila pasó a %d, want 1", next.kanbanRow)
+		t.Errorf("with a single column, moving left changed the row to %d, want 1", next.kanbanRow)
 	}
 
-	// Y con dos columnas, mover a la izquierda desde la primera no mueve y la fila
-	// se queda: no hubo cambio de columna.
+	// And with two columns, moving left from the first one does not move and the
+	// row stays: there was no column change.
 	next2, _ := press(m, "h")
 	if next2.kanbanCol != 0 {
-		t.Errorf("la columna se movió a %d desde el borde", next2.kanbanCol)
+		t.Errorf("the column moved to %d from the edge", next2.kanbanCol)
 	}
 	if next2.kanbanRow != 1 {
-		t.Errorf("la fila se reseteó a %d sin cambiar de columna", next2.kanbanRow)
+		t.Errorf("the row was reset to %d without changing column", next2.kanbanRow)
 	}
 }

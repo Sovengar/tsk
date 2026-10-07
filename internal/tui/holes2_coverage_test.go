@@ -7,18 +7,18 @@ import (
 	"tsk/internal/model"
 )
 
-// Un segundo turno en la interfaz: aquí viven los caminos donde una escritura
-// funciona y la lectura que va detrás falla, que es el patrón que la base en
-// sólo lectura no alcanza. Para provocarlos hay que dejar la tabla con el tipo
-// que el Scan espera cambiado -- las tablas no son STRICT, así que el truco no
-// es un valor raro sino quitar la autoincrementación: una fila con id nulo no se
-// puede escanear en un int64.
+// A second round on the interface: here live the paths where a write works
+// and the read behind it fails, which is the pattern the read-only database
+// cannot reach. To provoke them the table has to be left with the type that
+// the Scan expects changed -- the tables are not STRICT, so the trick is not
+// a weird value but removing the autoincrement: a row with a null id cannot
+// be scanned into an int64.
 
-// sabotearCommentsDejaFilaIlegible convierte la tabla de comentarios en una sin
-// clave primaria y le mete una fila con id nulo, de modo que cualquier lectura
-// falle. Las escrituras siguen funcionando: por eso sirve para el patrón
-// "escribo y luego no puedo leer".
-func sabotearCommentsDejaFilaIlegible(t *testing.T, m *Model, taskID int64) {
+// sabotageCommentsLeavesRowUnreadable turns the comments table into one without
+// a primary key and inserts a row with a null id, so that any read fails.
+// The writes keep working: that is why it serves for the pattern
+// "I write and then cannot read".
+func sabotageCommentsLeavesRowUnreadable(t *testing.T, m *Model, taskID int64) {
 	t.Helper()
 	conn := m.database.Conn()
 	if _, err := conn.Exec(`DROP TABLE comments`); err != nil {
@@ -29,13 +29,13 @@ func sabotearCommentsDejaFilaIlegible(t *testing.T, m *Model, taskID int64) {
 		t.Fatalf("CREATE TABLE comments: %v", err)
 	}
 	if _, err := conn.Exec(
-		`INSERT INTO comments (id, task_id, body, created_at) VALUES (NULL, ?, 'ilegible', '2020-01-01')`,
+		`INSERT INTO comments (id, task_id, body, created_at) VALUES (NULL, ?, 'unreadable', '2020-01-01')`,
 		taskID,
 	); err != nil {
 		t.Fatalf("INSERT INTO comments: %v", err)
 	}
-	// Y uno con id válido, para que borrar un comentario siga teniendo algo que
-	// borrar: lo que se quiere fallar es la LECTURA posterior, no el borrado.
+	// And one with a valid id, so that deleting a comment still has something
+	// to delete: what is meant to fail is the READ after, not the deletion.
 	if _, err := conn.Exec(
 		`INSERT INTO comments (id, task_id, body, created_at) VALUES ('7', ?, 'real', '2020-01-01')`,
 		taskID,
@@ -44,9 +44,9 @@ func sabotearCommentsDejaFilaIlegible(t *testing.T, m *Model, taskID int64) {
 	}
 }
 
-// sabotearTasksDejaFilaIlegible hace lo mismo con las tareas, para los caminos
-// que escriben una tarea y recargan el listado detrás.
-func sabotearTasksDejaFilaIlegible(t *testing.T, m *Model, projectID int64) {
+// sabotageTasksLeavesRowUnreadable does the same with tasks, for the paths that
+// write a task and reload the listing behind.
+func sabotageTasksLeavesRowUnreadable(t *testing.T, m *Model, projectID int64) {
 	t.Helper()
 	conn := m.database.Conn()
 	if _, err := conn.Exec(`DROP TABLE tasks`); err != nil {
@@ -62,211 +62,211 @@ func sabotearTasksDejaFilaIlegible(t *testing.T, m *Model, projectID int64) {
 		t.Fatalf("CREATE TABLE tasks: %v", err)
 	}
 	if _, err := conn.Exec(
-		`INSERT INTO tasks (id, project_id, title) VALUES (NULL, ?, 'ilegible')`, projectID,
+		`INSERT INTO tasks (id, project_id, title) VALUES (NULL, ?, 'unreadable')`, projectID,
 	); err != nil {
 		t.Fatalf("INSERT INTO tasks: %v", err)
 	}
 }
 
-func projectIDDe(t *testing.T, m *Model) int64 {
+func projectIDOf(t *testing.T, m *Model) int64 {
 	t.Helper()
 	if len(m.projects) == 0 {
-		t.Fatal("el modelo no tiene proyectos cargados")
+		t.Fatal("the model has no projects loaded")
 	}
 	return m.projects[0].ID
 }
 
-// Guardar un comentario y cargar la lista son dos operaciones seguidas. Si la
-// escritura va y la lectura no, el mensaje sale con la lista vacía y sin
-// selección, que es lo que evita que la interfaz seleção un índice imposible.
+// Saving a comment and loading the list are two consecutive operations. If
+// the write goes and the read does not, the message comes out with an empty
+// list and no selection, which is what keeps the interface from selecting an impossible index.
 func TestCommentCmdsWhenTheReadAfterTheWriteFails(t *testing.T) {
-	t.Run("añadir", func(t *testing.T) {
+	t.Run("add", func(t *testing.T) {
 		m := newDetailModel(t, 0)
 		taskID := m.detailTask.ID
-		sabotearCommentsDejaFilaIlegible(t, m, taskID)
+		sabotageCommentsLeavesRowUnreadable(t, m, taskID)
 
-		msg := mustMsg(t, m.addCommentCmd(taskID, "nuevo"))
+		msg := mustMsg(t, m.addCommentCmd(taskID, "new"))
 		loaded, ok := msg.(commentsLoadedMsg)
 		if !ok {
-			t.Fatalf("el mensaje es %T, want commentsLoadedMsg", msg)
+			t.Fatalf("the message is %T, want commentsLoadedMsg", msg)
 		}
 		if len(loaded.comments) != 0 || loaded.selectIdx != -1 {
-			t.Errorf("han salido %d comentarios y sel=%d, want 0 y -1",
+			t.Errorf("got %d comments and sel=%d, want 0 and -1",
 				len(loaded.comments), loaded.selectIdx)
 		}
 	})
 
-	t.Run("borrar", func(t *testing.T) {
+	t.Run("delete", func(t *testing.T) {
 		m := newDetailModel(t, 2)
 		taskID := m.detailTask.ID
-		sabotearCommentsDejaFilaIlegible(t, m, taskID)
+		sabotageCommentsLeavesRowUnreadable(t, m, taskID)
 
-		// El id 7 es el que metió el sabotaje: es el comentario borrable.
+		// Id 7 is the one the sabotage inserted: it is the deletable comment.
 		msg := mustMsg(t, m.deleteCommentCmd(taskID, 7, 1))
 		loaded, ok := msg.(commentsLoadedMsg)
 		if !ok {
-			t.Fatalf("el mensaje es %T, want commentsLoadedMsg", msg)
+			t.Fatalf("the message is %T, want commentsLoadedMsg", msg)
 		}
-		// El borrado sí funcionó: el mensaje no debe conservar la selección que
-		// se queda sólo para el caso de fallo del borrado.
+		// The deletion did work: the message must not keep the selection that
+		// is kept only for the deletion failure case.
 		if loaded.selectIdx != -1 {
 			t.Errorf("selectIdx = %d, want -1", loaded.selectIdx)
 		}
 	})
 }
 
-// Los tres caminos donde se escribe y luego se recarga el listado: el alta de
-// tarea, el guardado de la descripción inline y el guardado del editor externo.
-// Con la lectura rota, no hay recarga, y el modelo se queda con lo que tenía.
+// The three paths where something is written and then the listing is
+// reloaded: the task form, the inline description save and the external
+// editor save. With the read broken there is no reload, and the model keeps what it had.
 func TestWriteThenReloadWhenTheReloadFails(t *testing.T) {
-	t.Run("alta de tarea", func(t *testing.T) {
+	t.Run("task creation", func(t *testing.T) {
 		m := newTestModel(t)
-		abierto, _ := pulsar(t, m, "i")
-		conTitulo, _ := pulsar(t, abierto, "n", "u", "e", "v", "a")
+		open, _ := pressKeys(t, m, "i")
+		withTitle, _ := pressKeys(t, open, "n", "e", "w")
 
-		sabotearTasksDejaFilaIlegible(t, conTitulo, projectIDDe(t, conTitulo))
+		sabotageTasksLeavesRowUnreadable(t, withTitle, projectIDOf(t, withTitle))
 
-		cmd := conTitulo.createTaskCmd(
-			conTitulo.currentProjectName(), "nueva", "", "Me", model.PriorityLow, nil)
+		cmd := withTitle.createTaskCmd(
+			withTitle.currentProjectName(), "new", "", "Me", model.PriorityLow, nil)
 		if cmd == nil {
-			t.Fatal("crear la tarea no ha lanzado ningún comando")
+			t.Fatal("creating the task did not launch any command")
 		}
 		if msg := cmd(); msg != nil {
-			t.Errorf("con el listado ilegible ha salido %T, want nil", msg)
+			t.Errorf("with the listing unreadable got %T, want nil", msg)
 		}
 	})
 
-	t.Run("descripción inline", func(t *testing.T) {
+	t.Run("inline description", func(t *testing.T) {
 		m := newTestModel(t)
 		id := m.tasks[0].ID
-		sabotearTasksDejaFilaIlegible(t, m, projectIDDe(t, m))
+		sabotageTasksLeavesRowUnreadable(t, m, projectIDOf(t, m))
 
-		if msg := m.saveDescriptionCmd(id, "nueva")(); msg != nil {
-			t.Errorf("con el listado ilegible ha salido %T, want nil", msg)
+		if msg := m.saveDescriptionCmd(id, "new description")(); msg != nil {
+			t.Errorf("with the listing unreadable got %T, want nil", msg)
 		}
 	})
 
-	t.Run("editor externo", func(t *testing.T) {
+	t.Run("external editor", func(t *testing.T) {
 		m := newTestModel(t)
 		id := m.tasks[0].ID
-		sabotearTasksDejaFilaIlegible(t, m, projectIDDe(t, m))
+		sabotageTasksLeavesRowUnreadable(t, m, projectIDOf(t, m))
 
-		if msg := m.updateTaskFromEdit(id, "Title: otro\n")(); msg != nil {
-			t.Errorf("con el listado ilegible ha salido %T, want nil", msg)
+		if msg := m.updateTaskFromEdit(id, "Title: other\n")(); msg != nil {
+			t.Errorf("with the listing unreadable got %T, want nil", msg)
 		}
 	})
 }
 
-// Poner una tag escribe en dos sitios: la tabla de tasks_tags y, en algunos
-// caminos, la propia tarea. Con la lectura de la tarea rota, el comando entero
-// se queda sin mensaje.
+// Adding a tag writes in two places: the tasks_tags table and, on some
+// paths, the task itself. With the task's read broken, the whole command is
+// left without a message.
 func TestToggleTagWhenTheWriteFails(t *testing.T) {
 	m := newTestModel(t)
-	tarea := m.tasks[0]
+	task := m.tasks[0]
 	if err := m.database.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
-	_ = tarea
+	_ = task
 
-	if msg := m.toggleTagCmd(1, "nueva")(); msg != nil {
-		t.Errorf("con la base cerrada ha salido %T, want nil", msg)
+	if msg := m.toggleTagCmd(1, "new")(); msg != nil {
+		t.Errorf("with the database closed got %T, want nil", msg)
 	}
 }
 
-// El modal de personas tiene un segundo nivel con sus propias teclas. Sin días
-// libres, la navegación no tiene nada que recorrer y "a" sigue funcionando;
-// con días libres, todo el juego de teclas aplica.
+// The people modal has a second level with its own keys. With no free days
+// the navigation has nothing to walk and "a" keeps working; with free days,
+// the whole key set applies.
 func TestAssigneeDetailKeys(t *testing.T) {
 	m := newAssigneeModel(t, 3)
 	m.assigneeModalOpen = true
 	m.currentView = viewList
 	m.assigneeDetail = true
 
-	nombre := m.currentAssignee()
-	if nombre == "" {
-		t.Fatal("el fixture no ha dejado ninguna persona seleccionada")
+	name := m.currentAssignee()
+	if name == "" {
+		t.Fatal("the fixture left no person selected")
 	}
-	for _, dia := range []string{"2026-10-05", "2026-10-12", "2026-10-19"} {
-		mustAddOffDay(t, m.database, nombre, dia, dia, "puente")
+	for _, day := range []string{"2026-10-05", "2026-10-12", "2026-10-19"} {
+		mustAddOffDay(t, m.database, name, day, day, "bridge")
 	}
 	reloadOffDays(t, m)
 
-	offs := m.assigneeOffDays(nombre)
+	offs := m.assigneeOffDays(name)
 	if len(offs) < 3 {
-		t.Fatalf("la persona %q tiene %d días libres, want 3", nombre, len(offs))
+		t.Fatalf("person %q has %d free days, want 3", name, len(offs))
 	}
 
-	abajo, _ := pulsar(t, m, "j")
-	if abajo.assigneeOffdayIdx != 1 {
-		t.Errorf("j ha dejado el off-day en %d, want 1", abajo.assigneeOffdayIdx)
+	down, _ := pressKeys(t, m, "j")
+	if down.assigneeOffdayIdx != 1 {
+		t.Errorf("j left the off-day at %d, want 1", down.assigneeOffdayIdx)
 	}
-	abajo2, _ := pulsar(t, abajo, "j")
-	if abajo2.assigneeOffdayIdx != 2 {
-		t.Errorf("j desde 1 ha dejado el off-day en %d, want 2", abajo2.assigneeOffdayIdx)
+	down2, _ := pressKeys(t, down, "j")
+	if down2.assigneeOffdayIdx != 2 {
+		t.Errorf("j from 1 left the off-day at %d, want 2", down2.assigneeOffdayIdx)
 	}
-	arriba, _ := pulsar(t, abajo2, "k")
-	if arriba.assigneeOffdayIdx != 1 {
-		t.Errorf("k ha dejado el off-day en %d, want 1", arriba.assigneeOffdayIdx)
+	up, _ := pressKeys(t, down2, "k")
+	if up.assigneeOffdayIdx != 1 {
+		t.Errorf("k left the off-day at %d, want 1", up.assigneeOffdayIdx)
 	}
 
-	// "a" abre el alta de un día libre para la persona enfocada.
-	alta, cmd := pulsar(t, arriba, "a")
-	if !alta.offdayFormOpen {
-		t.Error("a no ha abierto el alta de día libre")
+	// "a" opens the creation of a free day for the focused person.
+	opened, cmd := pressKeys(t, up, "a")
+	if !opened.offdayFormOpen {
+		t.Error("a did not open the free-day form")
 	}
 	_ = cmd
 
-	// x pide confirmar el borrado, igual que d.
-	confirmado, _ := pulsar(t, arriba, "x")
-	if !confirmado.confirmOpen || confirmado.confirmAction != "delete-offday" {
-		t.Errorf("x no ha pedido confirmar: open=%v action=%q",
-			confirmado.confirmOpen, confirmado.confirmAction)
+	// x asks to confirm the deletion, same as d.
+	confirmed, _ := pressKeys(t, up, "x")
+	if !confirmed.confirmOpen || confirmed.confirmAction != "delete-offday" {
+		t.Errorf("x did not ask for confirmation: open=%v action=%q",
+			confirmed.confirmOpen, confirmed.confirmAction)
 	}
 
-	// esc sale del detalle sin cerrar el modal entero.
-	atras, _ := pulsar(t, arriba, "esc")
-	if atras.assigneeDetail {
-		t.Error("esc no ha salido del detalle de la persona")
+	// esc leaves the detail without closing the whole modal.
+	back, _ := pressKeys(t, up, "esc")
+	if back.assigneeDetail {
+		t.Error("esc did not leave the person detail")
 	}
-	if !atras.assigneeModalOpen {
-		t.Error("esc en el detalle ha cerrado el modal entero")
+	if !back.assigneeModalOpen {
+		t.Error("esc in the detail closed the whole modal")
 	}
 }
 
-// El ciclo de opciones del modal de filtros no puede reportar un índice
-// imposible cuando el campo no tiene ninguna. El único campo así es uno que no
-// existe, que es exactamente lo que pasa si el número de campos y el switch se
-// desincronizan.
+// The option cycle of the filter modal cannot report an impossible index
+// when the field has none. The only such field is one that does not exist,
+// which is exactly what happens if the number of fields and the switch get
+// out of sync.
 func TestFilterCycleWithAnUnknownField(t *testing.T) {
 	m := newTestModel(t)
 	m.filterOpen = true
 	m.filterFieldIdx = 99
 
 	if opts := m.filterVisibleOptions(); len(opts) != 0 {
-		t.Fatalf("un campo inexistente tiene %d opciones (%v), want 0", len(opts), opts)
+		t.Fatalf("a non-existent field has %d options (%v), want 0", len(opts), opts)
 	}
 
-	antes := m.filterOptionIdx
-	for _, adelante := range []bool{true, false} {
-		m.filterCycle(adelante)
-		if m.filterOptionIdx != antes {
-			t.Errorf("con un campo sin opciones el índice se ha movido a %d, want %d",
-				m.filterOptionIdx, antes)
+	before := m.filterOptionIdx
+	for _, forward := range []bool{true, false} {
+		m.filterCycle(forward)
+		if m.filterOptionIdx != before {
+			t.Errorf("with a field without options the index moved to %d, want %d",
+				m.filterOptionIdx, before)
 		}
 	}
 }
 
-// El nombre de una vista es lo que aparece en la barra y en la ayuda. Una vista
-// que no existe tiene que decirlo, no imprimir un entero vacío.
+// A view's name is what appears in the bar and in the help. A view that
+// does not exist has to say so, not print an empty integer.
 func TestUnknownViewHasAName(t *testing.T) {
 	if got := viewKind(42).String(); got != "?" {
-		t.Errorf("una vista inexistente se llama %q, want %q", got, "?")
+		t.Errorf("a non-existent view is named %q, want %q", got, "?")
 	}
 }
 
-// Editar un proyecto con el orden de la lista vacío lo deja como está; con
-// orden, lo cambia. Las dos mitades del mismo comando, y la segunda no estaba
-// ejecutándose.
+// Editing a project with an empty list order leaves it as it is; with an
+// order, it changes it. Two halves of the same command, and the second one
+// was not running.
 func TestProjectEditWithAListOrder(t *testing.T) {
 	m := newDashModel(t, "api")
 	original := m.projects[0].Workflow
@@ -274,111 +274,111 @@ func TestProjectEditWithAListOrder(t *testing.T) {
 	msg := mustMsg(t, m.saveProjectCmd(true, "api", "api", "", "done,backlog,todo"))
 	saved, ok := msg.(projectSavedMsg)
 	if !ok {
-		t.Fatalf("el mensaje es %T, want projectSavedMsg", msg)
+		t.Fatalf("the message is %T, want projectSavedMsg", msg)
 	}
 	if saved.err != nil {
-		t.Fatalf("editar con un orden válido ha fallado: %v", saved.err)
+		t.Fatalf("editing with a valid order failed: %v", saved.err)
 	}
 
-	revisado, err := m.database.GetProject("api")
+	reloaded, err := m.database.GetProject("api")
 	if err != nil {
 		t.Fatalf("GetProject: %v", err)
 	}
-	if len(revisado.ListOrder) != 3 {
-		t.Errorf("el orden de la lista es %v, want tres estados", revisado.ListOrder)
+	if len(reloaded.ListOrder) != 3 {
+		t.Errorf("the list order is %v, want three states", reloaded.ListOrder)
 	}
-	// El workflow viene vacío en la llamada, así que no debe haber cambiado.
-	if len(revisado.Workflow) != len(original) {
-		t.Errorf("el workflow ha pasado de %v a %v con el orden vacío", original, revisado.Workflow)
+	// The workflow comes empty in the call, so it must not have changed.
+	if len(reloaded.Workflow) != len(original) {
+		t.Errorf("the workflow went from %v to %v with an empty order", original, reloaded.Workflow)
 	}
 }
 
-// h en el kanban cambia de columna y reinicia la fila, porque el índice de fila
-// es por columna. Quedarse en la columna anterior dejando el índice donde estaba
-// haría que la selección apuntara a otra tarea.
+// h in the kanban changes column and resets the row, because the row index
+// is per column. Staying on the previous column while leaving the index where
+// it was would make the selection point at another task.
 func TestKanbanColumnChangeResetsTheRow(t *testing.T) {
 	m := newKanbanModel(t, 6)
 	m.currentView = viewKanban
 
 	cols := len(m.kanbanColumns())
 	if cols < 2 {
-		t.Skip("el fixture necesita dos columnas")
+		t.Skip("the fixture needs two columns")
 	}
 
 	m.kanbanCol = 1
 	m.kanbanRow = 2
 
-	izquierda, _ := pulsar(t, m, "h")
-	if izquierda.kanbanCol != 0 {
-		t.Errorf("h ha dejado la columna en %d, want 0", izquierda.kanbanCol)
+	left, _ := pressKeys(t, m, "h")
+	if left.kanbanCol != 0 {
+		t.Errorf("h left the column at %d, want 0", left.kanbanCol)
 	}
-	if izquierda.kanbanRow != 0 {
-		t.Errorf("h no ha reiniciado la fila: %d, want 0", izquierda.kanbanRow)
+	if left.kanbanRow != 0 {
+		t.Errorf("h did not reset the row: %d, want 0", left.kanbanRow)
 	}
 }
 
-// La tarea del gantt sólo existe si el cursor cae en una fila de tarea: la
-// cabecera de una persona no es una tarea, y una vista sin filas tampoco.
+// The gantt's task only exists if the cursor falls on a task row: a
+// person's header is not a task, and a view with no rows either.
 func TestSelectedTaskInTheGantt(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan", "@maria"}, 3)
+	m := ganttModelWithPeople(t, []string{"@john", "@margo"}, 3)
 	m.currentView = viewGantt
 	m.width, m.height = 140, 40
 
-	filas := m.ganttRows()
-	if len(filas) == 0 {
-		t.Fatal("el fixture no ha dejado filas")
+	rows := m.ganttRows()
+	if len(rows) == 0 {
+		t.Fatal("the fixture left no rows")
 	}
 
-	tareaIdx, cabeceraIdx := -1, -1
-	for i, f := range filas {
+	taskIdx, headerIdx := -1, -1
+	for i, f := range rows {
 		switch {
-		case f.kind == ganttTaskRow && tareaIdx < 0:
-			tareaIdx = i
-		case f.kind == ganttAssigneeRow && cabeceraIdx < 0:
-			cabeceraIdx = i
+		case f.kind == ganttTaskRow && taskIdx < 0:
+			taskIdx = i
+		case f.kind == ganttAssigneeRow && headerIdx < 0:
+			headerIdx = i
 		}
 	}
-	if tareaIdx < 0 || cabeceraIdx < 0 {
-		t.Fatalf("el fixture no ha dejado los dos tipos de fila: %d filas", len(filas))
+	if taskIdx < 0 || headerIdx < 0 {
+		t.Fatalf("the fixture left neither of the two row types: %d rows", len(rows))
 	}
 
-	m.ganttCursor = tareaIdx
+	m.ganttCursor = taskIdx
 	tsk := m.selectedTask()
 	if tsk == nil {
-		t.Fatalf("con el cursor en la fila %d (una tarea) no hay tarea seleccionada", tareaIdx)
+		t.Fatalf("with the cursor on row %d (a task) there is no selected task", taskIdx)
 	}
-	if tsk.ID != filas[tareaIdx].entry.Task.ID {
-		t.Errorf("la tarea seleccionada es %d, want %d", tsk.ID, filas[tareaIdx].entry.Task.ID)
+	if tsk.ID != rows[taskIdx].entry.Task.ID {
+		t.Errorf("the selected task is %d, want %d", tsk.ID, rows[taskIdx].entry.Task.ID)
 	}
 
-	m.ganttCursor = cabeceraIdx
+	m.ganttCursor = headerIdx
 	if tsk := m.selectedTask(); tsk != nil {
-		t.Errorf("con el cursor en una cabecera hay tarea: %q", tsk.Title)
+		t.Errorf("with the cursor on a header there is a task: %q", tsk.Title)
 	}
 
-	m.ganttCursor = len(filas) + 5
+	m.ganttCursor = len(rows) + 5
 	if tsk := m.selectedTask(); tsk != nil {
-		t.Errorf("con el cursor fuera de rango hay tarea: %q", tsk.Title)
+		t.Errorf("with the cursor out of range there is a task: %q", tsk.Title)
 	}
 
-	// El borde exacto, que es lo que separa `< len(rows)` de `<= len(rows)`: con
-	// el cursor en la fila justo posterior a la última no hay nada, aunque sea
-	// "casi" un índice válido.
-	m.ganttCursor = len(filas)
+	// The exact edge, which is what separates `< len(rows)` from `<= len(rows)`:
+	// with the cursor on the row right after the last there is nothing, even
+	// though it is "almost" a valid index.
+	m.ganttCursor = len(rows)
 	if tsk := m.selectedTask(); tsk != nil {
-		t.Errorf("con el cursor en la primera fila de más hay tarea: %q", tsk.Title)
+		t.Errorf("with the cursor one row past the end there is a task: %q", tsk.Title)
 	}
 
-	// Y el otro borde, por debajo.
+	// And the other edge, below.
 	m.ganttCursor = -1
 	if tsk := m.selectedTask(); tsk != nil {
-		t.Errorf("con el cursor en -1 hay tarea: %q", tsk.Title)
+		t.Errorf("with the cursor at -1 there is a task: %q", tsk.Title)
 	}
 }
 
-// La carga de proyectos son dos consultas. Si la de archivados falla, el
-// programa arranca igual con la de activos: perder el panel de archivados es
-// mejor que no arrancar.
+// The project loading is two queries. If the archived one fails, the
+// program starts anyway with the active one: losing the archived panel is
+// better than not starting.
 func TestLoadProjectsWithAnUnreadableArchive(t *testing.T) {
 	m := newTestModel(t)
 
@@ -386,8 +386,8 @@ func TestLoadProjectsWithAnUnreadableArchive(t *testing.T) {
 	if _, err := conn.Exec(`DROP TABLE projects`); err != nil {
 		t.Fatalf("DROP TABLE projects: %v", err)
 	}
-	// Una vista con tipos que no se pueden escanear: la consulta de activos
-	//选出rá filas, la de archivados fallará al convertirlas.
+	// A view with types that cannot be scanned: the active query will select
+	// rows, the archived one will fail converting them.
 	if _, err := conn.Exec(`CREATE TABLE projects (
 		id BLOB, name BLOB, workflow BLOB, list_order BLOB, archived BLOB)`); err != nil {
 		t.Fatalf("CREATE TABLE projects: %v", err)
@@ -403,81 +403,81 @@ func TestLoadProjectsWithAnUnreadableArchive(t *testing.T) {
 	msg := mustMsg(t, m.loadProjects())
 	loaded, ok := msg.(projectsLoadedMsg)
 	if !ok {
-		t.Fatalf("el mensaje es %T, want projectsLoadedMsg", msg)
+		t.Fatalf("the message is %T, want projectsLoadedMsg", msg)
 	}
 	if loaded.archivedProjects != nil {
-		t.Errorf("con la tabla de archivados ilegible hay %d archivados, want nil",
+		t.Errorf("with the archived table unreadable there are %d archived, want nil",
 			len(loaded.archivedProjects))
 	}
 }
 
-// La fila 0 de un gantt con filas es siempre una CABECERA de persona, nunca una
-// tarea: ganttRows emite la cabecera antes que las entradas de esa persona, y
-// no emite la cabecera de nadie que no tenga entradas.
+// Row 0 of a gantt with rows is always a person HEADER, never a task:
+// ganttRows emits the header before that person's entries, and it does not
+// emit the header of anyone who has no entries.
 //
-// Es lo que hace que selectedTask pueda conformarse con el resto del rango sin
-// // y la comparación: con el cursor en 0, la fila 0 no es una tarea, así que la
-// comparación con el cero del límite inferior da lo mismo que un "> 0". El test
-// fija el invariante para que, si algún día ganttRows deja de cumplirlo, se
-// note aquí y no en un mutant que sobrevive sin explicación.
-func TestLaFilaCeroDelGanttEsUnaCabecera(t *testing.T) {
-	for _, personas := range [][]string{
-		{"@juan"},
-		{"@juan", "@maria"},
-		nil, // sin responsables no hay ni cabecera ni tarea
+// That is what lets selectedTask settle for the rest of the range without
+// the comparison: with the cursor at 0, row 0 is not a task, so the
+// comparison with the lower bound's zero gives the same as a "> 0". The test
+// pins the invariant so that, if some day ganttRows stops meeting it, it
+// shows here and not in a mutant that survives without explanation.
+func TestGanttRowZeroIsAHeader(t *testing.T) {
+	for _, people := range [][]string{
+		{"@john"},
+		{"@john", "@margo"},
+		nil, // with no people there is neither header nor task
 	} {
-		t.Run(strings.Join(personas, "+"), func(t *testing.T) {
-			m := ganttModelWithPeople(t, personas, 3)
+		t.Run(strings.Join(people, "+"), func(t *testing.T) {
+			m := ganttModelWithPeople(t, people, 3)
 			m.currentView = viewGantt
 			m.width, m.height = 140, 40
 
-			filas := m.ganttRows()
-			if len(filas) == 0 {
-				if len(personas) > 0 {
-					t.Fatal("hay responsables pero no hay filas")
+			rows := m.ganttRows()
+			if len(rows) == 0 {
+				if len(people) > 0 {
+					t.Fatal("there are people but no rows")
 				}
 				return
 			}
-			if filas[0].kind != ganttAssigneeRow {
-				t.Errorf("la fila 0 es %v, want una cabecera de persona: de eso depende que "+
-					"selectedTask rechace el cursor 0 sin mirar el límite inferior", filas[0].kind)
+			if rows[0].kind != ganttAssigneeRow {
+				t.Errorf("row 0 is %v, want a person header: selectedTask's rejection of cursor 0 "+
+					"without checking the lower bound depends on it", rows[0].kind)
 			}
 
-			// Y con el cursor ahí no hay tarea seleccionada, que es lo mismo que
-			// diría un "> 0" en el código.
+			// And with the cursor there there is no selected task, which is the
+			// same as a "> 0" would say in the code.
 			m.ganttCursor = 0
 			if tsk := m.selectedTask(); tsk != nil {
-				t.Errorf("con el cursor en la fila 0 hay tarea: %q", tsk.Title)
+				t.Errorf("with the cursor on row 0 there is a task: %q", tsk.Title)
 			}
 		})
 	}
 }
 
-// nextGanttTaskRow devuelve -1 cuando no hay ninguna fila de tarea a partir del
-// punto. Desde el cursor es impracticable -- habría un invariante roto -- pero
-// como función pura el caso es alcanzable, y es el que devuelve el valor que
-// snapGanttCursor guarda cuando no encuentra nada.
-func TestNextGanttTaskRowSinTareas(t *testing.T) {
-	casos := []struct {
-		nombre string
-		rows   []ganttRow
-		from   int
+// nextGanttTaskRow returns -1 when there is no task row from the point on.
+// From the cursor it is impracticable -- there would be a broken invariant --
+// but as a pure function the case is reachable, and it is the one that
+// returns the value snapGanttCursor keeps when it finds nothing.
+func TestNextGanttTaskRowWithoutTasks(t *testing.T) {
+	cases := []struct {
+		name string
+		rows []ganttRow
+		from int
 	}{
-		{"lista vacía", nil, 0},
-		{"lista vacía con cursor negativo", nil, -1},
-		{"sólo cabeceras", []ganttRow{{kind: ganttAssigneeRow}, {kind: ganttAssigneeRow}}, 0},
-		{"cursor más allá del final", []ganttRow{{kind: ganttTaskRow}}, 5},
-		{"desde la última fila", []ganttRow{{kind: ganttTaskRow}}, 1},
+		{"empty list", nil, 0},
+		{"empty list with negative cursor", nil, -1},
+		{"only headers", []ganttRow{{kind: ganttAssigneeRow}, {kind: ganttAssigneeRow}}, 0},
+		{"cursor beyond the end", []ganttRow{{kind: ganttTaskRow}}, 5},
+		{"from the last row", []ganttRow{{kind: ganttTaskRow}}, 1},
 	}
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
 			if got := nextGanttTaskRow(c.rows, c.from); got != -1 {
-				t.Errorf("nextGanttTaskRow(%d filas, from=%d) = %d, want -1", len(c.rows), c.from, got)
+				t.Errorf("nextGanttTaskRow(%d rows, from=%d) = %d, want -1", len(c.rows), c.from, got)
 			}
 		})
 	}
 
-	// Y el caso normal: encuentra la siguiente tarea, saltando las cabeceras.
+	// And the normal case: it finds the next task, skipping the headers.
 	rows := []ganttRow{
 		{kind: ganttAssigneeRow},
 		{kind: ganttTaskRow},
@@ -485,28 +485,28 @@ func TestNextGanttTaskRowSinTareas(t *testing.T) {
 		{kind: ganttAssigneeRow},
 		{kind: ganttTaskRow},
 	}
-	for desde, want := range map[int]int{0: 1, 1: 1, 2: 2, 3: 4} {
-		if got := nextGanttTaskRow(rows, desde); got != want {
-			t.Errorf("nextGanttTaskRow(from=%d) = %d, want %d", desde, got, want)
+	for from, want := range map[int]int{0: 1, 1: 1, 2: 2, 3: 4} {
+		if got := nextGanttTaskRow(rows, from); got != want {
+			t.Errorf("nextGanttTaskRow(from=%d) = %d, want %d", from, got, want)
 		}
 	}
 
-	// Y con un cursor negativo busca desde el principio, que es lo que evita un
-	// slice con índice negativo.
+	// And with a negative cursor it searches from the start, which is what
+	// keeps a slice with a negative index.
 	if got := nextGanttTaskRow(rows, -3); got != 1 {
-		t.Errorf("nextGanttTaskRow(from=-3) = %d, want 1: debe arrancar en la primera fila", got)
+		t.Errorf("nextGanttTaskRow(from=-3) = %d, want 1: it must start at the first row", got)
 	}
 }
 
-// stepGanttCursor es la aritmética del salto del gantt, sacada del recorrido para
-// que se pueda comprobar con cualquier cursor, incluso los que el recorrido real
-// nunca produce (negativos, más allá del final).
+// stepGanttCursor is the gantt's jump arithmetic, taken out of the walk so
+// that it can be checked with any cursor, including the ones the real walk
+// never produces (negative, beyond the end).
 //
-// Los bordes de esa aritmética son justo lo que el recorrido repartido no dejaba
-// ver: el suelo en 0 del clamp, el +1 del offset hacia delante, y la cuenta desde
-// el final hacia atrás.
+// The edges of that arithmetic are exactly what the spread walk did not let
+// you see: the clamp's floor at 0, the +1 of the forward offset, and the
+// count from the end backwards.
 func TestStepGanttCursor(t *testing.T) {
-	// Cabecera, tarea, tarea, cabecera, tarea.
+	// Header, task, task, header, task.
 	rows := []ganttRow{
 		{kind: ganttAssigneeRow},
 		{kind: ganttTaskRow},
@@ -515,179 +515,179 @@ func TestStepGanttCursor(t *testing.T) {
 		{kind: ganttTaskRow},
 	}
 
-	t.Run("hacia delante", func(t *testing.T) {
-		casos := []struct{ desde, want int }{
-			{0, 1}, // desde una cabecera
-			{1, 2}, // desde una tarea
-			{3, 4}, // desde una cabecera con una tarea detrás
-			{2, 4}, // salta la cabecera intermedia
+	t.Run("forwards", func(t *testing.T) {
+		cases := []struct{ from, want int }{
+			{0, 1}, // from a header
+			{1, 2}, // from a task
+			{3, 4}, // from a header with a task behind it
+			{2, 4}, // skips the intermediate header
 		}
-		for _, c := range casos {
-			got, ok := stepGanttCursor(rows, c.desde, 1)
+		for _, c := range cases {
+			got, ok := stepGanttCursor(rows, c.from, 1)
 			if !ok {
-				t.Errorf("stepGanttCursor(desde=%d, +1) dice que no hay salto", c.desde)
+				t.Errorf("stepGanttCursor(from=%d, +1) says there is no jump", c.from)
 				continue
 			}
 			if got != c.want {
-				t.Errorf("stepGanttCursor(desde=%d, +1) = %d, want %d", c.desde, got, c.want)
+				t.Errorf("stepGanttCursor(from=%d, +1) = %d, want %d", c.from, got, c.want)
 			}
 		}
 	})
 
-	t.Run("hacia atrás", func(t *testing.T) {
-		casos := []struct{ desde, want int }{
+	t.Run("backwards", func(t *testing.T) {
+		cases := []struct{ from, want int }{
 			{4, 2},
 			{3, 2},
 			{2, 1},
 		}
-		for _, c := range casos {
-			got, ok := stepGanttCursor(rows, c.desde, -1)
+		for _, c := range cases {
+			got, ok := stepGanttCursor(rows, c.from, -1)
 			if !ok {
-				t.Errorf("stepGanttCursor(desde=%d, -1) dice que no hay salto", c.desde)
+				t.Errorf("stepGanttCursor(from=%d, -1) says there is no jump", c.from)
 				continue
 			}
 			if got != c.want {
-				t.Errorf("stepGanttCursor(desde=%d, -1) = %d, want %d", c.desde, got, c.want)
+				t.Errorf("stepGanttCursor(from=%d, -1) = %d, want %d", c.from, got, c.want)
 			}
 		}
 	})
 
-	t.Run("cursores fuera de rango", func(t *testing.T) {
-		// El clamp es lo que evita que el slice se corte al revés. Con un cursor
-		// negativo, el suelo en 0 y no en -1 es lo que decide.
-		for _, desde := range []int{-1, -5, -100} {
-			if got, ok := stepGanttCursor(rows, desde, 1); !ok || got != 1 {
-				t.Errorf("stepGanttCursor(desde=%d, +1) = (%d, %v), want (1, true): el clamp debe arrancar en 0",
-					desde, got, ok)
+	t.Run("out-of-range cursors", func(t *testing.T) {
+		// The clamp is what keeps the slice from being cut the other way around.
+		// With a negative cursor, the floor at 0 and not at -1 is what decides.
+		for _, from := range []int{-1, -5, -100} {
+			if got, ok := stepGanttCursor(rows, from, 1); !ok || got != 1 {
+				t.Errorf("stepGanttCursor(from=%d, +1) = (%d, %v), want (1, true): the clamp must start at 0",
+					from, got, ok)
 			}
-			if _, ok := stepGanttCursor(rows, desde, -1); ok {
-				t.Errorf("stepGanttCursor(desde=%d, -1) dice que hay salto: no hay nada por encima del 0",
-					desde)
+			if _, ok := stepGanttCursor(rows, from, -1); ok {
+				t.Errorf("stepGanttCursor(from=%d, -1) says there is a jump: there is nothing above 0",
+					from)
 			}
 		}
-		// Y con el cursor más allá del final: el techo es len(rows), no
-		// len(rows)-1, porque el destino de "hacia delante" es cursor+1.
-		for _, desde := range []int{5, 6, 100} {
-			if got, ok := stepGanttCursor(rows, desde, 1); ok {
-				t.Errorf("stepGanttCursor(desde=%d, +1) = (%d, true), want sin salto", desde, got)
+		// And with the cursor beyond the end: the ceiling is len(rows), not
+		// len(rows)-1, because the destination of "forward" is cursor+1.
+		for _, from := range []int{5, 6, 100} {
+			if got, ok := stepGanttCursor(rows, from, 1); ok {
+				t.Errorf("stepGanttCursor(from=%d, +1) = (%d, true), want no jump", from, got)
 			}
-			if got, ok := stepGanttCursor(rows, desde, -1); !ok || got != 4 {
-				t.Errorf("stepGanttCursor(desde=%d, -1) = (%d, %v), want (4, true): el techo es la longitud",
-					desde, got, ok)
+			if got, ok := stepGanttCursor(rows, from, -1); !ok || got != 4 {
+				t.Errorf("stepGanttCursor(from=%d, -1) = (%d, %v), want (4, true): the ceiling is the length",
+					from, got, ok)
 			}
 		}
 	})
 
-	t.Run("sin nada a donde saltar", func(t *testing.T) {
-		soloCabeceras := []ganttRow{{kind: ganttAssigneeRow}, {kind: ganttAssigneeRow}}
-		if got, ok := stepGanttCursor(soloCabeceras, 0, 1); ok {
-			t.Errorf("sin tareas, +1 = (%d, true), want sin salto", got)
+	t.Run("nowhere to jump to", func(t *testing.T) {
+		headersOnly := []ganttRow{{kind: ganttAssigneeRow}, {kind: ganttAssigneeRow}}
+		if got, ok := stepGanttCursor(headersOnly, 0, 1); ok {
+			t.Errorf("no tasks, +1 = (%d, true), want no jump", got)
 		}
-		if got, ok := stepGanttCursor(soloCabeceras, 1, -1); ok {
-			t.Errorf("sin tareas, -1 = (%d, true), want sin salto", got)
+		if got, ok := stepGanttCursor(headersOnly, 1, -1); ok {
+			t.Errorf("no tasks, -1 = (%d, true), want no jump", got)
 		}
 		if got, ok := stepGanttCursor(nil, 0, 1); ok {
-			t.Errorf("lista vacía, +1 = (%d, true), want sin salto", got)
+			t.Errorf("empty list, +1 = (%d, true), want no jump", got)
 		}
 	})
 
-	t.Run("dir cero va hacia delante", func(t *testing.T) {
-		// dir == 0 no es "no mover": entra por la rama de "hacia delante" porque
-		// no es negativo, y el destino es from+1. Es lo que separa `dir < 0` de
-		// `dir <= 0`: con el `<=`, dir cero entraría por la rama de atrás y
-		// devolvería -1 en vez del índice de la fila siguiente.
-		for _, desde := range []int{0, 1, 2, 3} {
-			got, gotOK := stepGanttCursor(rows, desde, 0)
-			want, wantOK := stepGanttCursor(rows, desde, 1)
+	t.Run("dir zero goes forward", func(t *testing.T) {
+		// dir == 0 is not "do not move": it enters the "forward" branch because
+		// it is not negative, and the destination is from+1. That is what
+		// separates `dir < 0` from `dir <= 0`: with the `<=`, zero dir would
+		// enter the back branch and return -1 instead of the next row's index.
+		for _, from := range []int{0, 1, 2, 3} {
+			got, gotOK := stepGanttCursor(rows, from, 0)
+			want, wantOK := stepGanttCursor(rows, from, 1)
 			if got != want || gotOK != wantOK {
-				t.Errorf("stepGanttCursor(desde=%d, 0) = (%d, %v), want (%d, %v) (lo mismo que +1)",
-					desde, got, gotOK, want, wantOK)
+				t.Errorf("stepGanttCursor(from=%d, 0) = (%d, %v), want (%d, %v) (same as +1)",
+					from, got, gotOK, want, wantOK)
 			}
 		}
-		// Y los casos en los que "hacia delante" no encuentra nada: dir cero
-		// tiene que decir lo mismo, que no hay salto.
+		// And the cases where "forward" finds nothing: zero dir has to say the
+		// same thing: there is no jump.
 		if got, ok := stepGanttCursor(rows, 4, 0); ok {
-			t.Errorf("stepGanttCursor(desde=4, 0) = (%d, true), want sin salto", got)
+			t.Errorf("stepGanttCursor(from=4, 0) = (%d, true), want no jump", got)
 		}
 		if got, ok := stepGanttCursor(rows, 99, 0); ok {
-			t.Errorf("stepGanttCursor(desde=99, 0) = (%d, true), want sin salto", got)
+			t.Errorf("stepGanttCursor(from=99, 0) = (%d, true), want no jump", got)
 		}
 	})
 }
 
-// clamp por los tres lados: el suelo, el techo y el medio.
+// clamp on the three sides: the floor, the ceiling and the middle.
 func TestClamp(t *testing.T) {
-	casos := []struct{ v, lo, hi, want int }{
-		{-5, 0, 10, 0},  // por debajo del suelo
-		{0, 0, 10, 0},   // justo el suelo
-		{3, 0, 10, 3},   // en medio
-		{10, 0, 10, 10}, // justo el techo
-		{15, 0, 10, 10}, // por encima del techo
-		{-1, -5, 5, -1}, // suelo negativo
+	cases := []struct{ v, lo, hi, want int }{
+		{-5, 0, 10, 0},  // below the floor
+		{0, 0, 10, 0},   // exactly the floor
+		{3, 0, 10, 3},   // in the middle
+		{10, 0, 10, 10}, // exactly the ceiling
+		{15, 0, 10, 10}, // above the ceiling
+		{-1, -5, 5, -1}, // negative floor
 		{9, 5, 5, 5},    // lo == hi
 		{1, 3, 3, 3},    // lo > v, hi == lo
 	}
-	for _, c := range casos {
+	for _, c := range cases {
 		if got := clamp(c.v, c.lo, c.hi); got != c.want {
 			t.Errorf("clamp(%d, %d, %d) = %d, want %d", c.v, c.lo, c.hi, got, c.want)
 		}
 	}
 }
 
-// moveGanttCursor con un salto que no existe: el centinela tiene que dejar el
-// cursor donde está.
+// moveGanttCursor with a jump that does not exist: the sentinel has to leave
+// the cursor where it is.
 //
-// stepGanttCursor devuelve ganttNoTasks cuando no hay fila de tarea hacia donde
-// saltar, y moveGanttCursor tiene que distinguir ese -1 de un índice de verdad.
-// Con `>= 0` en vez de `!= ganttNoTasks` las dos formas son la misma condición
-// sobre enteros, así que su mutante no se podía matar. Con el centinela
-// nombrado, la comparación dice lo que compara.
-func TestMoveGanttCursorSinSaltoNoMueveElCursor(t *testing.T) {
-	m := ganttModelWithPeople(t, []string{"@juan"}, 2)
+// stepGanttCursor returns ganttNoTasks when there is no task row to jump to,
+// and moveGanttCursor has to tell that -1 apart from a real index.
+// With `>= 0` instead of `!= ganttNoTasks` the two forms are the same
+// condition over integers, so its mutant could not be killed. With the named
+// sentinel the comparison says what it compares.
+func TestMoveGanttCursorWithoutJumpDoesNotMoveTheCursor(t *testing.T) {
+	m := ganttModelWithPeople(t, []string{"@john"}, 2)
 	m.currentView = viewGantt
 	m.width, m.height = 140, 40
-	filas := m.ganttRows()
+	rows := m.ganttRows()
 
-	// Dos casos sin destino: el cursor en la última fila y yendo hacia delante, y
-	// el cursor en la primera yendo hacia atrás.
-	casos := []struct {
-		nombre   string
-		posicion int
+	// Two cases with no destination: the cursor on the last row going forward,
+	// and the cursor on the first going backwards.
+	cases := []struct {
+		name     string
+		position int
 		dir      int
 	}{
-		{"primera fila hacia atrás", 0, -1},
-		{"última fila hacia delante", len(filas) - 1, 1},
+		{"first row backwards", 0, -1},
+		{"last row forwards", len(rows) - 1, 1},
 	}
 
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
 			local := *m
-			local.ganttCursor = c.posicion
-			// Que de verdad no hay salto.
-			if got, ok := stepGanttCursor(filas, c.posicion, c.dir); ok {
-				t.Fatalf("el fixture no sirve: stepGanttCursor(%d, %d) = (%d, true), want sin salto",
-					c.posicion, c.dir, got)
+			local.ganttCursor = c.position
+			// That there really is no jump.
+			if got, ok := stepGanttCursor(rows, c.position, c.dir); ok {
+				t.Fatalf("the fixture is useless: stepGanttCursor(%d, %d) = (%d, true), want no jump",
+					c.position, c.dir, got)
 			}
 
-			moveGanttCursor(&local, filas, c.dir)
+			moveGanttCursor(&local, rows, c.dir)
 
-			if local.ganttCursor != c.posicion {
-				t.Errorf("el cursor se ha movido a %d sin destino; estaba en %d",
-					local.ganttCursor, c.posicion)
+			if local.ganttCursor != c.position {
+				t.Errorf("the cursor moved to %d with no destination; it was at %d",
+					local.ganttCursor, c.position)
 			}
 		})
 	}
 
-	// Y el caso normal, para que el test no pase por no hacer nada: con destino sí
-	// se mueve, y al sitio exacto que dice stepGanttCursor.
+	// And the normal case, so that the test does not pass by doing nothing:
+	// with a destination it does move, and to the exact place stepGanttCursor says.
 	local := *m
-	local.ganttCursor = len(filas) - 2
-	want, ok := stepGanttCursor(filas, local.ganttCursor, 1)
+	local.ganttCursor = len(rows) - 2
+	want, ok := stepGanttCursor(rows, local.ganttCursor, 1)
 	if !ok {
-		t.Fatal("el fixture no sirve: hay destino")
+		t.Fatal("the fixture is useless: there is a destination")
 	}
-	moveGanttCursor(&local, filas, 1)
+	moveGanttCursor(&local, rows, 1)
 	if local.ganttCursor != want {
-		t.Errorf("el cursor ha ido a %d, want %d", local.ganttCursor, want)
+		t.Errorf("the cursor went to %d, want %d", local.ganttCursor, want)
 	}
 }

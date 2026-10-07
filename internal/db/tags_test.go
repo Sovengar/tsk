@@ -6,8 +6,8 @@ import (
 	"tsk/internal/model"
 )
 
-// TestTaskTagsRoundtrip verifica que las tags se normalicen al crear y que
-// sobrevivan el round-trip por GetTask y ListTasks.
+// TestTaskTagsRoundtrip verifies that tags are normalized on create and that
+// they survive the round-trip through GetTask and ListTasks.
 func TestTaskTagsRoundtrip(t *testing.T) {
 	db := newTestDB(t)
 	if _, err := db.CreateProject("api", nil); err != nil {
@@ -19,7 +19,7 @@ func TestTaskTagsRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(task.Tags) != 2 || task.Tags[0] != "blocked" || task.Tags[1] != "bug" {
-		t.Fatalf("tags creadas = %v, want [blocked bug]", task.Tags)
+		t.Fatalf("created tags = %v, want [blocked bug]", task.Tags)
 	}
 
 	got, err := db.GetTask(task.ID)
@@ -47,13 +47,13 @@ func TestAddRemoveSetTaskTags(t *testing.T) {
 	if _, err := db.AddTaskTags(task.ID, []string{"blocked"}); err != nil {
 		t.Fatal(err)
 	}
-	// Agregar una duplicada no la repite.
+	// Adding a duplicate does not repeat it.
 	got, err := db.AddTaskTags(task.ID, []string{"Blocked", "bug"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(got.Tags) != 2 {
-		t.Errorf("tags tras add = %v, want 2", got.Tags)
+		t.Errorf("tags after add = %v, want 2", got.Tags)
 	}
 
 	got, err = db.RemoveTaskTags(task.ID, []string{"bug"})
@@ -61,7 +61,7 @@ func TestAddRemoveSetTaskTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	if model.HasTag(got.Tags, "bug") || !model.HasTag(got.Tags, "blocked") {
-		t.Errorf("tags tras remove = %v", got.Tags)
+		t.Errorf("tags after remove = %v", got.Tags)
 	}
 
 	got, err = db.SetTaskTags(task.ID, []string{"urgent"})
@@ -69,6 +69,6 @@ func TestAddRemoveSetTaskTags(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(got.Tags) != 1 || got.Tags[0] != "urgent" {
-		t.Errorf("tags tras set = %v, want [urgent]", got.Tags)
+		t.Errorf("tags after set = %v, want [urgent]", got.Tags)
 	}
 }

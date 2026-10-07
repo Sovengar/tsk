@@ -6,159 +6,159 @@ import (
 	"testing"
 )
 
-// descriptionLines envuelve la descripción al ancho y la recorta a maxLines. El
-// recorte tiene dos mitades y las dos necesitan un caso exacto:
+// descriptionLines wraps the description to the width and truncates it to
+// maxLines. The truncation has two halves and both need an exact case:
 //
-//	si len(wrapped) > maxLines	-- hay más líneas de las que caben
-//	recortar a limit-1		-- reservar celda para la elipsis
+//	if len(wrapped) > maxLines	-- there are more lines than fit
+//	truncate to limit-1		-- reserve a cell for the ellipsis
 //
-// El "> maxLines" es lo que hace que un texto que cabe JUSTO no lleve elipsis
-// puesta: con ">= maxLines", un texto de exactamente maxLines líneas saldría
-// con "…" en la última, que es un texto que se ve entero y al que le aparece un
-// signo de que le falta algo.
+// The "> maxLines" is what makes a text that JUST fits not carry a planted
+// ellipsis: with ">= maxLines", a text of exactly maxLines lines would come
+// out with "…" on the last one, which is a text that looks whole and yet has
+// a sign on it that something is missing.
 //
-// Y el límite de recorte (limit-1, limit, limit-2) sólo se ve cuando la última
-// línea está LLENA, porque ansi.Wrap entrega líneas de limit columnas o menos.
+// And the truncation limit (limit-1, limit, limit-2) is only seen when the
+// last line is FULL, because ansi.Wrap delivers lines of limit columns or fewer.
 
-func TestPreviewBarNoPoneElipsisEnUnTextoQueCabeJusto(t *testing.T) {
-	// Se construye al revés: se elige un texto y se mide cuántas líneas ocupa,
-	// y se ajusta maxLines a ese número exacto.
-	const ancho = 40
-	desc := "primera linea con palabras " +
-		"segunda linea que continua " +
-		"tercera que tambien sigue"
+func TestPreviewBarOmitsEllipsisWhenTextFitsExactly(t *testing.T) {
+	// It is built the other way around: a text is chosen and how many lines it
+	// takes is measured, and maxLines is adjusted to that exact number.
+	const width = 40
+	desc := "first line with words " +
+		"second line continues here " +
+		"third one also follows"
 
-	// El texto ocupa exactamente tres líneas a este ancho, así que maxLines=3
-	// es el caso del borde: cabe todo y no sobra nada.
+	// The text takes exactly three lines at this width, so maxLines=3
+	// is the edge case: everything fits and nothing is left over.
 	for _, maxLines := range []int{3} {
-		t.Run(fmt.Sprintf("cabe en %d líneas", maxLines), func(t *testing.T) {
-			p := PreviewBar{width: ancho, maxLines: maxLines}
-			lineas := p.descriptionLines(desc)
-			if len(lineas) != maxLines {
-				t.Fatalf("con maxLines=%d salen %d líneas: el texto no cabe en ese número", maxLines, len(lineas))
+		t.Run(fmt.Sprintf("fits in %d lines", maxLines), func(t *testing.T) {
+			p := PreviewBar{width: width, maxLines: maxLines}
+			lines := p.descriptionLines(desc)
+			if len(lines) != maxLines {
+				t.Fatalf("with maxLines=%d there are %d lines: the text does not fit in that number", maxLines, len(lines))
 			}
-			// El texto original está entero, así que no le falta nada: la
-			// elipsis no tendría por qué aparecer.
-			plano := strings.Join(lineas, " ")
-			for _, palabra := range []string{"primera", "segunda", "tercera", "tambien"} {
-				if !strings.Contains(plano, palabra) {
-					t.Fatalf("el texto no cabe en %d líneas: falta %q, sale %q", maxLines, palabra, plano)
+			// The original text is whole, so nothing is missing from it: the
+			// ellipsis would have no reason to appear.
+			flat := strings.Join(lines, " ")
+			for _, word := range []string{"first", "second", "third", "also"} {
+				if !strings.Contains(flat, word) {
+					t.Fatalf("the text does not fit in %d lines: %q is missing, got %q", maxLines, word, flat)
 				}
 			}
-			if strings.Contains(plano, "…") {
-				t.Errorf("un texto que cabe justo lleva elipsis: %q", plano)
+			if strings.Contains(flat, "…") {
+				t.Errorf("a text that just fits carries an ellipsis: %q", flat)
 			}
 		})
 	}
 
-	// Y con una línea más de las que caben, la elipsis aparece y se pierde algo.
-	p := PreviewBar{width: ancho, maxLines: 1}
-	lineas := p.descriptionLines(desc)
-	if len(lineas) != 1 {
-		t.Fatalf("con maxLines=1 salen %d líneas", len(lineas))
+	// And with one more line than fits, the ellipsis appears and something is lost.
+	p := PreviewBar{width: width, maxLines: 1}
+	lines := p.descriptionLines(desc)
+	if len(lines) != 1 {
+		t.Fatalf("with maxLines=1 there are %d lines", len(lines))
 	}
-	if !strings.Contains(lineas[0], "…") {
-		t.Errorf("un texto que NO cabe no lleva elipsis: %q", lineas[0])
+	if !strings.Contains(lines[0], "…") {
+		t.Errorf("a text that does NOT fit carries no ellipsis: %q", lines[0])
 	}
-	if strings.Contains(strings.Join(lineas, " "), "tercera") {
-		t.Error("con recorte=no debería verse la última parte del texto")
+	if strings.Contains(strings.Join(lines, " "), "third") {
+		t.Error("when truncated the last part of the text should not be visible")
 	}
 }
 
-// El límite de recorte de la elipsis (limit-1, limit, limit-2) es
-// intentionally NO comprobado aquí: ansi.Wrap entrega líneas de limit columnas
-// o menos, así que truncar la última línea no quita nada y los tres límites dan
-// el mismo resultado. Es un mutante equivalente y está en .mutation-allowlist
-// con ese motivo, no con el de un hueco.
+// The ellipsis truncation limit (limit-1, limit, limit-2) is
+// intentionally NOT checked here: ansi.Wrap delivers lines of limit columns
+// or fewer, so truncating the last line removes nothing and the three limits
+// give the same result. It is an equivalent mutant and it is in
+// .mutation-allowlist for that reason, not for the hole one.
 //
-// Lo que sí importa y se comprueba arriba es que la línea CON la elipsis quepa
-// en el ancho interno: si el recorte no reservara la celda, el "…" la empujaría
-// una columna de más y bordered la re-wrapearía en dos.
+// What does matter and is checked above is that the line WITH the ellipsis
+// fits inside the inner width: if the truncation did not reserve the cell,
+// the "…" would push it one column too far and bordered would re-wrap it in two.
 
-// recortarParaElipsis: el suelo y el límite.
+// truncateForEllipsis: the floor and the limit.
 //
-// El límite es lo que hace el recorte correcto y el suelo es lo que evita el
-// pánico. Los dos se comprueban por sus lados, incluido el caso degenerado de un
-// límite más pequeño que la elipsis, que es una terminal muy estrecha.
-func TestRecortarParaElipsis(t *testing.T) {
-	t.Run("cabe entera", func(t *testing.T) {
-		got := recortarParaElipsis("texto corto", 40)
-		if !strings.Contains(got, "texto corto") {
-			t.Errorf("un texto que cabe ha perdido parte: %q", got)
+// The limit is what does the correct truncation and the floor is what
+// prevents the panic. Both are checked from their sides, including the
+// degenerate case of a limit smaller than the ellipsis, which is a very narrow terminal.
+func TestTruncateForEllipsis(t *testing.T) {
+	t.Run("fits whole", func(t *testing.T) {
+		got := truncateForEllipsis("short text", 40)
+		if !strings.Contains(got, "short text") {
+			t.Errorf("a text that fits lost part of itself: %q", got)
 		}
-		if !strings.HasSuffix(got, elipsisDescription) {
-			t.Errorf("falta la elipsis al final: %q", got)
+		if !strings.HasSuffix(got, ellipsisDescription) {
+			t.Errorf("the ellipsis is missing at the end: %q", got)
 		}
 	})
 
-	t.Run("no cabe y se recorta dejando hueco para la elipsis", func(t *testing.T) {
+	t.Run("does not fit and is truncated leaving room for the ellipsis", func(t *testing.T) {
 		const limit = 10
-		got := recortarParaElipsis(strings.Repeat("x", 100), limit)
+		got := truncateForEllipsis(strings.Repeat("x", 100), limit)
 
-		// La línea con la elipsis tiene que caber en el límite: si no, al
-		// rellenar la caja la re-wrapearía en dos y rompería el tope de alto.
+		// The line with the ellipsis has to fit in the limit: if not, on
+		// padding the box it would re-wrap in two and break the height cap.
 		if n := len([]rune(got)); n > limit {
-			t.Errorf("la línea recortada mide %d columnas y el límite es %d: %q", n, limit, got)
+			t.Errorf("the truncated line measures %d columns and the limit is %d: %q", n, limit, got)
 		}
-		if !strings.HasSuffix(got, elipsisDescription) {
-			t.Errorf("falta la elipsis: %q", got)
+		if !strings.HasSuffix(got, ellipsisDescription) {
+			t.Errorf("the ellipsis is missing: %q", got)
 		}
-		// Y con el límite exacto: el texto llena hasta el hueco de la elipsis.
+		// And with the exact limit: the text fills up to the ellipsis gap.
 		if n := len([]rune(got)); n != limit {
-			t.Errorf("la línea mide %d columnas, want %d (el límite entero)", n, limit)
+			t.Errorf("the line measures %d columns, want %d (the whole limit)", n, limit)
 		}
 	})
 
-	t.Run("límite menor que la elipsis", func(t *testing.T) {
-		// Aquí el suelo en 0 es lo que evita el negativo. Sale sólo la elipsis.
+	t.Run("limit smaller than the ellipsis", func(t *testing.T) {
+		// Here the floor at 0 is what prevents the negative. Only the ellipsis comes out.
 		for _, limit := range []int{0, 1} {
-			got := recortarParaElipsis("texto", limit)
-			if got != elipsisDescription {
-				t.Errorf("con límite %d sale %q, want sólo la elipsis", limit, got)
+			got := truncateForEllipsis("text", limit)
+			if got != ellipsisDescription {
+				t.Errorf("with limit %d got %q, want only the ellipsis", limit, got)
 			}
 		}
 	})
 
-	t.Run("texto vacío", func(t *testing.T) {
-		got := recortarParaElipsis("", 10)
-		if got != elipsisDescription {
-			t.Errorf("con texto vacío sale %q, want sólo la elipsis", got)
+	t.Run("empty text", func(t *testing.T) {
+		got := truncateForEllipsis("", 10)
+		if got != ellipsisDescription {
+			t.Errorf("with empty text got %q, want only the ellipsis", got)
 		}
 	})
 
-	t.Run("la elipsis ocupa lo que dice", func(t *testing.T) {
-		if anchoElipsis != len([]rune(elipsisDescription)) {
-			t.Errorf("anchoElipsis = %d pero la elipsis mide %d: el hueco reservado no es el real",
-				anchoElipsis, len([]rune(elipsisDescription)))
+	t.Run("the ellipsis takes what it says", func(t *testing.T) {
+		if ellipsisWidth != len([]rune(ellipsisDescription)) {
+			t.Errorf("ellipsisWidth = %d but the ellipsis measures %d: the reserved gap is not the real one",
+				ellipsisWidth, len([]rune(ellipsisDescription)))
 		}
 	})
 }
 
-// El ancho mínimo de una columna del kanban: la cabecera más los bordes, con el
-// suelo absoluto debajo.
-func TestAnchoMinimoDeColumna(t *testing.T) {
-	casos := []struct {
-		nombre   string
-		cabecera int
-		want     int
+// The minimum width of a kanban column: the header plus the borders, with
+// the absolute floor below.
+func TestMinColumnWidth(t *testing.T) {
+	cases := []struct {
+		name   string
+		header int
+		want   int
 	}{
-		{"cabe muy corta", 1, kanbanMinColWidth},
-		{"justo en el suelo", kanbanMinColWidth - anchosBorde, kanbanMinColWidth},
-		{"una más que el suelo", kanbanMinColWidth - anchosBorde + 1, kanbanMinColWidth + 1},
-		{"muy ancha", 100, 100 + anchosBorde},
+		{"fits very short", 1, kanbanMinColWidth},
+		{"exactly at the floor", kanbanMinColWidth - borderWidths, kanbanMinColWidth},
+		{"one more than the floor", kanbanMinColWidth - borderWidths + 1, kanbanMinColWidth + 1},
+		{"very wide", 100, 100 + borderWidths},
 	}
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
-			if got := anchoMinimoDeColumna(c.cabecera); got != c.want {
-				t.Errorf("anchoMinimoDeColumna(%d) = %d, want %d", c.cabecera, got, c.want)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := minColumnWidth(c.header); got != c.want {
+				t.Errorf("minColumnWidth(%d) = %d, want %d", c.header, got, c.want)
 			}
 		})
 	}
 
-	// La cuenta de los bordes es la que hace el borde entre "cabe por el suelo" y
-	// "cabe por la cabecera": con una columna menos de bordes, el primer caso
-	// cambiaría.
-	if got := anchoMinimoDeColumna(0); got != kanbanMinColWidth {
-		t.Errorf("una cabecera de 0 columnas da %d, want el suelo %d", got, kanbanMinColWidth)
+	// The count of the borders is what makes the edge between "fits by the
+	// floor" and "fits by the header": with one column less of borders, the
+	// first case would change.
+	if got := minColumnWidth(0); got != kanbanMinColWidth {
+		t.Errorf("a 0-column header gives %d, want the floor %d", got, kanbanMinColWidth)
 	}
 }

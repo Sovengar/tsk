@@ -9,12 +9,12 @@ import (
 	"tsk/internal/model"
 )
 
-// ctrlR arma el keypress de reset del modal de filtros.
+// ctrlR builds the reset keypress of the filter modal.
 func ctrlR() tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}
 }
 
-// filterOptionIndex busca una opción dentro de la lista de un campo.
+// filterOptionIndex looks up an option inside a field's list.
 func filterOptionIndex(opts []string, want string) int {
 	for i, o := range opts {
 		if o == want {
@@ -24,93 +24,93 @@ func filterOptionIndex(opts []string, want string) int {
 	return -1
 }
 
-// TestFilterStatusOptionsScopedToProject verifica que con un proyecto
-// seleccionado el selector de estado ofrezca sólo los estados de ese proyecto.
+// TestFilterStatusOptionsScopedToProject verifies that with a project
+// selected the status picker offers only the statuses of that project.
 func TestFilterStatusOptionsScopedToProject(t *testing.T) {
 	m := newTestModel(t)
 
 	m.filterProject = "api"
 	opts := m.filterFieldOptions(filterFieldStatus)
-	// api usa el workflow por defecto.
+	// api uses the default workflow.
 	for _, want := range append([]string{"all"}, model.DefaultWorkflow...) {
 		if filterOptionIndex(opts, want) < 0 {
-			t.Errorf("con api seleccionado falta %q en %v", want, opts)
+			t.Errorf("with api selected %q is missing in %v", want, opts)
 		}
 	}
-	// Ningún estado que no pertenezca a api.
+	// No status that does not belong to api.
 	if filterOptionIndex(opts, "reviewing") < 0 {
-		t.Errorf("api debería ofrecer reviewing: %v", opts)
+		t.Errorf("api should offer reviewing: %v", opts)
 	}
 
-	// web define un workflow propio más corto.
+	// web defines its own shorter workflow.
 	m.filterProject = "web"
 	opts = m.filterFieldOptions(filterFieldStatus)
 	for _, want := range []string{"all", "todo", "doing", "done"} {
 		if filterOptionIndex(opts, want) < 0 {
-			t.Errorf("con web seleccionado falta %q en %v", want, opts)
+			t.Errorf("with web selected %q is missing in %v", want, opts)
 		}
 	}
 	for _, absent := range []string{"backlog", "reviewing", "cancelled"} {
 		if filterOptionIndex(opts, absent) >= 0 {
-			t.Errorf("con web seleccionado no debería ofrecerse %q: %v", absent, opts)
+			t.Errorf("with web selected %q should not be offered: %v", absent, opts)
 		}
 	}
 }
 
-// TestFilterStatusClearedOnProjectSwitch verifica que al cambiar de proyecto
-// se limpie el filtro de estado si ese estado no existe en el nuevo contexto.
+// TestFilterStatusClearedOnProjectSwitch verifies that when switching project
+// the status filter is cleared if that status does not exist in the new context.
 func TestFilterStatusClearedOnProjectSwitch(t *testing.T) {
 	m := newTestModel(t)
 
-	// api tiene "reviewing"; web no.
+	// api has "reviewing"; web does not.
 	m.filterApplySelection(filterFieldProject, "api")
 	m.filterApplySelection(filterFieldStatus, "reviewing")
 	if m.filterStatus != "reviewing" {
-		t.Fatalf("precondición: filterStatus = %q, want reviewing", m.filterStatus)
+		t.Fatalf("precondition: filterStatus = %q, want reviewing", m.filterStatus)
 	}
 
 	m.filterApplySelection(filterFieldProject, "web")
 	if m.filterStatus != "" {
-		t.Errorf("al pasar a web, reviewing no existe: filterStatus = %q, want \"\"", m.filterStatus)
+		t.Errorf("when switching to web, reviewing does not exist: filterStatus = %q, want \"\"", m.filterStatus)
 	}
 
-	// Un estado común sobrevive el cambio.
+	// A common status survives the switch.
 	m.filterApplySelection(filterFieldProject, "api")
 	m.filterApplySelection(filterFieldStatus, "doing")
 	m.filterApplySelection(filterFieldProject, "web")
 	if m.filterStatus != "doing" {
-		t.Errorf("doing existe en web: filterStatus = %q, want doing", m.filterStatus)
+		t.Errorf("doing exists in web: filterStatus = %q, want doing", m.filterStatus)
 	}
 
-	// Volver a "all projects": sólo sobrevive lo que está en la intersección.
+	// Back to "all projects": only what is in the intersection survives.
 	m.filterApplySelection(filterFieldProject, "api")
 	m.filterApplySelection(filterFieldStatus, "cancelled")
 	m.filterApplySelection(filterFieldProject, "all")
 	if m.filterStatus != "" {
-		t.Errorf("cancelled no está en todos: filterStatus = %q, want \"\"", m.filterStatus)
+		t.Errorf("cancelled is not in all: filterStatus = %q, want \"\"", m.filterStatus)
 	}
 }
 
-// TestFilterStatusOptionsIncludeAllActiveAndAll verifica que el filtro de
-// estado ofrezca los dos modos agregados además de los estados del proyecto:
-// "all active" (default, sin terminales) y "all" (sin restricción).
+// TestFilterStatusOptionsIncludeAllActiveAndAll verifies that the status filter
+// offers the two aggregate modes in addition to the project's statuses:
+// "all active" (default, no terminals) and "all" (no restriction).
 func TestFilterStatusOptionsIncludeAllActiveAndAll(t *testing.T) {
 	m := newTestModel(t)
 
 	opts := m.filterFieldOptions(filterFieldStatus)
 	for _, want := range []string{"all active", "all"} {
 		if filterOptionIndex(opts, want) < 0 {
-			t.Errorf("faltan opciones de estado: %q no está en %v", want, opts)
+			t.Errorf("status options missing: %q is not in %v", want, opts)
 		}
 	}
 
 	if got := m.filterCurrentValue(filterFieldStatus); got != "all active" {
-		t.Errorf("default del filtro de estado = %q, want all active", got)
+		t.Errorf("status filter default = %q, want all active", got)
 	}
 }
 
-// TestStatusFilterAllActiveExcludesTerminal verifica que el default "all active"
-// deje fuera done/cancelled, y que "all" las incluya de nuevo.
+// TestStatusFilterAllActiveExcludesTerminal verifies that the "all active"
+// default leaves out done/cancelled, and that "all" includes them again.
 func TestStatusFilterAllActiveExcludesTerminal(t *testing.T) {
 	m := newTestModel(t)
 	markFirstDone(t, m)
@@ -121,12 +121,12 @@ func TestStatusFilterAllActiveExcludesTerminal(t *testing.T) {
 	all := len(m.filteredTasks())
 
 	if all != active+1 {
-		t.Errorf("all debe incluir la tarea done: active=%d all=%d", active, all)
+		t.Errorf("all must include the done task: active=%d all=%d", active, all)
 	}
 }
 
-// TestFilterStatusOptionsAllProjectsIsIntersection verifica que sin proyecto
-// seleccionado el selector sólo ofrezca estados comunes a todos los proyectos.
+// TestFilterStatusOptionsAllProjectsIsIntersection verifies that with no
+// project selected the picker only offers statuses common to all projects.
 func TestFilterStatusOptionsAllProjectsIsIntersection(t *testing.T) {
 	m := newTestModel(t)
 
@@ -134,78 +134,78 @@ func TestFilterStatusOptionsAllProjectsIsIntersection(t *testing.T) {
 	// api (default) ∩ web ([todo,doing,done]) = [todo,doing,done].
 	for _, want := range []string{"all", "todo", "doing", "done"} {
 		if filterOptionIndex(opts, want) < 0 {
-			t.Errorf("intersección: falta %q en %v", want, opts)
+			t.Errorf("intersection: %q is missing in %v", want, opts)
 		}
 	}
 	for _, absent := range []string{"backlog", "reviewing", "cancelled"} {
 		if filterOptionIndex(opts, absent) >= 0 {
-			t.Errorf("intersección no debería incluir %q (no está en todos): %v", absent, opts)
+			t.Errorf("the intersection should not include %q (it is not in all): %v", absent, opts)
 		}
 	}
 }
 
 // --- Modal UX ---
 
-// TestFilterModalOpenResetsSearchAndCursor verifica el estado inicial al abrir.
+// TestFilterModalOpenResetsSearchAndCursor verifies the initial state on open.
 func TestFilterModalOpenResetsSearchAndCursor(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "/")
 
 	if !m.filterOpen {
-		t.Fatal("/ debe abrir el modal de filtros")
+		t.Fatal("/ must open the filter modal")
 	}
 	if m.filterFieldIdx != filterFieldProject {
-		t.Errorf("foco inicial = %d, want project", m.filterFieldIdx)
+		t.Errorf("initial focus = %d, want project", m.filterFieldIdx)
 	}
 	if m.filterSearch != "" {
-		t.Errorf("búsqueda inicial = %q, want vacía", m.filterSearch)
+		t.Errorf("initial search = %q, want empty", m.filterSearch)
 	}
 	if m.filterOptionIdx != 0 {
-		t.Errorf("cursor inicial = %d, want 0 (all)", m.filterOptionIdx)
+		t.Errorf("initial cursor = %d, want 0 (all)", m.filterOptionIdx)
 	}
 }
 
-// TestFilterModalCursorNavigation verifica ↑↓ sobre el listado de opciones.
+// TestFilterModalCursorNavigation verifies ↑↓ over the list of options.
 func TestFilterModalCursorNavigation(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "/")
 
 	m, _ = press(m, "down")
 	if m.filterOptionIdx != 1 {
-		t.Errorf("tras down: cursor = %d, want 1", m.filterOptionIdx)
+		t.Errorf("after down: cursor = %d, want 1", m.filterOptionIdx)
 	}
 	m, _ = press(m, "up")
 	if m.filterOptionIdx != 0 {
-		t.Errorf("tras up: cursor = %d, want 0", m.filterOptionIdx)
+		t.Errorf("after up: cursor = %d, want 0", m.filterOptionIdx)
 	}
-	// up desde 0 vuelve al final (wrap).
+	// up from 0 goes back to the last one (wrap).
 	m, _ = press(m, "up")
 	if m.filterOptionIdx != len(m.filterFieldOptions(filterFieldProject))-1 {
-		t.Errorf("up desde 0 debe envolver, cursor = %d", m.filterOptionIdx)
+		t.Errorf("up from 0 must wrap, cursor = %d", m.filterOptionIdx)
 	}
 }
 
-// TestFilterModalFuzzySearchApplies verifica que escribir filtre las opciones y
-// Enter aplique el primer match y avance de campo.
+// TestFilterModalFuzzySearchApplies verifies that typing filters the options
+// and Enter applies the first match and advances the field.
 func TestFilterModalFuzzySearchApplies(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "/")
 
-	m, _ = press(m, "w") // filtra Project a [web, all]
+	m, _ = press(m, "w") // filters Project to [web, all]
 	opts := m.filterVisibleOptions()
 	if len(opts) == 0 || opts[0] != "web" {
-		t.Fatalf("opciones = %v, want web primero", opts)
+		t.Fatalf("options = %v, want web first", opts)
 	}
 	m, _ = press(m, "enter")
 	if m.filterProject != "web" {
 		t.Errorf("project = %q, want web", m.filterProject)
 	}
 	if m.filterFieldIdx != filterFieldStatus {
-		t.Errorf("enter debe avanzar a status, got %d", m.filterFieldIdx)
+		t.Errorf("enter must advance to status, got %d", m.filterFieldIdx)
 	}
 }
 
-// TestFilterModalEnterLastFieldCloses verifica que Enter en Tag cierre el modal.
+// TestFilterModalEnterLastFieldCloses verifies that Enter on Tag closes the modal.
 func TestFilterModalEnterLastFieldCloses(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "/")
@@ -213,21 +213,21 @@ func TestFilterModalEnterLastFieldCloses(t *testing.T) {
 		m, _ = press(m, "tab")
 	}
 	if m.filterFieldIdx != filterFieldTag {
-		t.Fatalf("campo = %d, want tag", m.filterFieldIdx)
+		t.Fatalf("field = %d, want tag", m.filterFieldIdx)
 	}
 	m, _ = press(m, "enter")
 	if m.filterOpen {
-		t.Error("Enter en el último campo debe cerrar el modal")
+		t.Error("Enter on the last field must close the modal")
 	}
 }
 
-// TestFilterModalReset verifica que Ctrl+R vuelva todo a su default, incluido
-// el estado "all active".
+// TestFilterModalReset verifies that Ctrl+R returns everything to its default,
+// including the "all active" status.
 func TestFilterModalReset(t *testing.T) {
 	m := newTestModel(t)
 	m.filterProject = "api"
 	m.filterStatus = "doing"
-	m.filterAssignee = "@juan"
+	m.filterAssignee = "@john"
 	m.filterPriority = 3
 	m.filterTag = "bug"
 
@@ -235,7 +235,7 @@ func TestFilterModalReset(t *testing.T) {
 	m, _ = send(m, ctrlR())
 
 	if m.filterProject != "" || m.filterAssignee != "" || m.filterTag != "" {
-		t.Errorf("reset dejó filtros: project=%q assignee=%q tag=%q",
+		t.Errorf("reset left filters: project=%q assignee=%q tag=%q",
 			m.filterProject, m.filterAssignee, m.filterTag)
 	}
 	if m.filterPriority != -1 {
@@ -246,7 +246,7 @@ func TestFilterModalReset(t *testing.T) {
 	}
 }
 
-// TestFilterModalCycleRemainsLive verifica que ←→ siga aplicando en vivo.
+// TestFilterModalCycleRemainsLive verifies that ←→ keeps applying live.
 func TestFilterModalCycleRemainsLive(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "/")
@@ -256,8 +256,8 @@ func TestFilterModalCycleRemainsLive(t *testing.T) {
 	}
 }
 
-// TestFilterModalRenders verifica que el modal muestre todos los campos, el
-// conteo en vivo y no desborde el ancho de la terminal.
+// TestFilterModalRenders verifies that the modal shows all the fields, the
+// live count and does not overflow the terminal width.
 func TestFilterModalRenders(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "/")
@@ -265,12 +265,12 @@ func TestFilterModalRenders(t *testing.T) {
 	out := ansi.Strip(m.View().Content)
 	for _, want := range []string{"Filters", "Project", "Status", "Assignee", "Priority", "Tag"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("el modal no muestra %q:\n%s", want, out)
+			t.Errorf("the modal does not show %q:\n%s", want, out)
 		}
 	}
 	for _, line := range strings.Split(out, "\n") {
 		if w := ansi.StringWidth(line); w > m.width {
-			t.Fatalf("línea de ancho %d supera el ancho %d: %q", w, m.width, line)
+			t.Fatalf("line of width %d exceeds the width %d: %q", w, m.width, line)
 		}
 	}
 }

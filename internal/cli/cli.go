@@ -1,5 +1,5 @@
-// Package cli implementa la interfaz de línea de comandos de tsk.
-// Todos los comandos devuelven JSON en stdout y errores en stderr.
+// Package cli implements the command line interface of tsk.
+// All commands return JSON on stdout and errors on stderr.
 package cli
 
 import (
@@ -17,8 +17,8 @@ import (
 	"tsk/internal/model"
 )
 
-// Run es el punto de entrada del CLI. Devuelve true si manejó un
-// subcomando; false si debe lanzar la TUI.
+// Run is the CLI entry point. Returns true if it handled a
+// subcommand; false if the TUI should be launched.
 func Run(args []string) bool {
 	if len(args) == 0 {
 		return false
@@ -88,9 +88,9 @@ func Run(args []string) bool {
 	return true
 }
 
-// stdout, stderr y exit son inyectables para que los tests puedan capturar la
-// salida y comprobar los caminos de error sin matar el proceso de test. En
-// produccion apuntan a os y no se tocan.
+// stdout, stderr and exit are injectable so tests can capture the
+// output and check the error paths without killing the test process. In
+// production they point to os and are never touched.
 var (
 	stdout io.Writer = os.Stdout
 	stderr io.Writer = os.Stderr
@@ -109,25 +109,25 @@ func outputError(msg string) {
 	exit(1)
 }
 
-// flagScanner recorre los argumentos de un comando consumiendo flags y sus
-// valores. Se apoya en reslicear (rest = rest[1:]) y no en un i++ dentro del
-// post de un for: ese avance escrito a mano es justo la operación que un
-// mutador puede invertir, y al invertirse el bucle no termina nunca (el test
-// cuelga y el mutant se reporta como TIMED OUT, no como muerto).
+// flagScanner walks a command's arguments consuming flags and their
+// values. It relies on re-slicing (rest = rest[1:]) rather than an i++ in the
+// post of a for: that hand-written advance is exactly the operation a
+// mutator can invert, and once inverted the loop never terminates (the test
+// hangs and the mutant is reported as TIMED OUT, not as killed).
 type flagScanner struct {
 	rest []string
 }
 
 func newFlagScanner(args []string, from int) flagScanner {
-	// from fuera de rango se recorta en vez de reventar: es un clamp, no una
-	// validación, y por eso se expresa con min/max y no con una rama que el
-	// mutador pueda volver equivalente (args[from:] y el clamp coinciden
-	// cuando from == len(args), así que un `from >= len(args)` no cambia nada).
+	// Out-of-range from is clamped instead of blowing up: it is a clamp, not a
+	// validation, and that's why it is expressed with min/max and not with a branch the
+	// mutator could make equivalent (args[from:] and the clamp match
+	// when from == len(args), so a `from >= len(args)` changes nothing).
 	return flagScanner{rest: args[min(max(from, 0), len(args)):]}
 }
 
-// next consume y devuelve el siguiente token. Se usa tanto para leer el flag
-// como, en el case correspondiente, para leer su valor.
+// next consumes and returns the next token. It is used both to read the flag
+// and, in the corresponding case, to read its value.
 func (s *flagScanner) next() (string, bool) {
 	if len(s.rest) == 0 {
 		return "", false
@@ -162,9 +162,9 @@ func openDB() *db.DB {
 	return database
 }
 
-// closeDB cierra la base de datos al final de un comando. El error de Close se
-// ignora a propósito: es limpieza de fin de proceso y no debe alterar el output
-// que el comando ya emitió.
+// closeDB closes the database at the end of a command. The Close error is
+// ignored on purpose: it is end-of-process cleanup and must not alter the output
+// the command already emitted.
 func closeDB(database *db.DB) {
 	_ = database.Close()
 }
@@ -439,8 +439,8 @@ func cmdProjectRemove(name string) {
 	outputJSON(map[string]any{"ok": true})
 }
 
-// cmdProjectArchive archiva un proyecto (soft delete): oculta él, sus tareas y
-// sus comentarios sin borrarlos.
+// cmdProjectArchive archives a project (soft delete): it hides it, its tasks and
+// its comments without deleting them.
 func cmdProjectArchive(name string) {
 	database := openDB()
 	defer closeDB(database)
@@ -452,7 +452,7 @@ func cmdProjectArchive(name string) {
 	outputJSON(map[string]any{"ok": true})
 }
 
-// cmdProjectUnarchive restaura un proyecto archivado.
+// cmdProjectUnarchive restores an archived project.
 func cmdProjectUnarchive(name string) {
 	database := openDB()
 	defer closeDB(database)
@@ -572,8 +572,8 @@ func cmdList(args []string) {
 		outputError(err.Error())
 	}
 
-	// El filtro por tag se aplica en memoria: el conjunto de datos es chico y
-	// evita acoplar el SQL a json_each para una sola etiqueta.
+	// The tag filter is applied in memory: the data set is small and
+	// avoids coupling the SQL to json_each for a single tag.
 	if tag != "" {
 		var byTag []model.Task
 		for _, t := range tasks {
@@ -637,7 +637,7 @@ func cmdShow(idStr string) {
 	outputJSON(map[string]any{"task": t, "comments": comments})
 }
 
-// cmdComment gestiona los subcomandos de comentarios: add, list, remove.
+// cmdComment manages the comment subcommands: add, list, remove.
 func cmdComment(args []string) {
 	if len(args) == 0 {
 		outputError("usage: tsk comment (add|list|remove) ...")
@@ -696,7 +696,7 @@ func cmdComment(args []string) {
 
 // ---- Off-day commands ----
 
-// cmdOffDay gestiona los subcomandos de días no laborables: add, list, remove.
+// cmdOffDay manages the non-working-day subcommands: add, list, remove.
 func cmdOffDay(args []string) {
 	if len(args) == 0 {
 		outputError("usage: tsk offday (add|list|remove) ...")
@@ -797,8 +797,8 @@ func cmdOffDay(args []string) {
 
 // ---- Gantt ----
 
-// cmdGantt proyecta la cola de cada persona y la imprime como Gantt (texto) o
-// como estructura JSON con fechas de inicio/fin por tarea.
+// cmdGantt projects each person's queue and prints it as a Gantt (text) or
+// as a JSON structure with start/end dates per task.
 func cmdGantt(args []string) {
 	var project, assignee, fromStr string
 	weeks := 0
@@ -824,10 +824,10 @@ func cmdGantt(args []string) {
 				fromStr = v
 			}
 		case "--weeks":
-			// Aquí no se descarta el cero ni los negativos: se acepta lo que
-			// Atoi entienda y lo normaliza el `if weeks <= 0` de abajo, que es
-			// donde se cae a la config. Filtrar en los dos sitios obligaba a
-			// tener la misma regla escrita dos veces.
+			// Here zero and negatives are not discarded: we accept what
+			// Atoi understands and the `if weeks <= 0` below normalizes it, which is
+			// where it falls back to the config. Filtering in both places forced
+			// the same rule to be written twice.
 			if v, ok := s.next(); ok {
 				if n, err := strconv.Atoi(v); err == nil {
 					weeks = n
@@ -856,9 +856,9 @@ func cmdGantt(args []string) {
 	database := openDB()
 	defer closeDB(database)
 
-	// La cola se calcula SIEMPRE con todas las tareas y off-days de cada
-	// persona: su capacidad es una sola y se reparte entre proyectos. --project
-	// y --assignee son filtros de vista (no cambian las fechas).
+	// The queue is ALWAYS computed with all tasks and off-days of each
+	// person: their capacity is a single one and is shared across projects. --project
+	// and --assignee are view filters (they do not change the dates).
 	tasks, err := database.ListTasks("", "", "")
 	if err != nil {
 		outputError(err.Error())
@@ -886,9 +886,9 @@ func cmdGantt(args []string) {
 	_, _ = fmt.Fprint(stdout, renderGanttText(sched, weeks))
 }
 
-// renderGanttText dibuja el Gantt en texto: una fila por tarea, una columna
-// por día, agrupadas por persona. Los días no laborables quedan dentro de la
-// barra (la barra cubre el rango calendario real de la tarea).
+// renderGanttText draws the Gantt in text: one row per task, one column
+// per day, grouped by person. Non-working days stay inside the
+// bar (the bar covers the task's real calendar range).
 func renderGanttText(s *model.Schedule, weeks int) string {
 	start, err := model.ParseDate(s.Start)
 	if err != nil {
@@ -908,8 +908,8 @@ func renderGanttText(s *model.Schedule, weeks int) string {
 		return int(d.Sub(start).Hours() / 24)
 	}
 
-	// Regla de semanas: etiqueta "1SEP" (semana del mes + mes) alineada a cada
-	// lunes.
+	// Week rule: label "1SEP" (week of month + month) aligned to each
+	// Monday.
 	ruler := make([]rune, labelW+1+totalDays)
 	for i := range ruler {
 		ruler[i] = ' '
@@ -952,9 +952,9 @@ func renderGanttText(s *model.Schedule, weeks int) string {
 				row[i] = ' '
 			}
 			d0, d1 := dayIndex(e.Start), dayIndex(e.End)
-			// Rango efectivo dentro de la ventana: se recorta en vez de
-			// recorrer con d++ a mano, porque un `d++` invertido deja el bucle
-			// colgado y el mutant se reporta como TIMED OUT en vez de muerto.
+			// Effective range inside the window: it is clamped instead of
+			// walking with d++ by hand, because an inverted `d++` leaves the loop
+			// hanging and the mutant is reported as TIMED OUT instead of killed.
 			lo, hi := max(d0, 0), min(d1, totalDays-1)
 			for i := range max(hi-lo+1, 0) {
 				row[lo+i] = '█'
@@ -979,7 +979,7 @@ func renderGanttText(s *model.Schedule, weeks int) string {
 	return b.String()
 }
 
-// truncateLabel corta un texto a w runas, con ".." si sobra.
+// truncateLabel cuts a text to w runes, with ".." if there is leftover.
 func truncateLabel(s string, w int) string {
 	r := []rune(s)
 	if len(r) <= w {
@@ -991,10 +991,10 @@ func truncateLabel(s string, w int) string {
 	return string(r[:w-2]) + ".."
 }
 
-// padRight rellena con espacios hasta w runas (no bytes, así los títulos UTF-8
-// no desalinean las columnas). Si el texto ya es más ancho se devuelve tal cual,
-// sin ramas: el `if n >= w` era un mutant equivalente (con n == w el
-// Repeat(0) devuelve la misma cadena).
+// padRight pads with spaces up to w runes (not bytes, so UTF-8
+// titles do not misalign the columns). If the text is already wider it is returned as is,
+// without branches: the `if n >= w` was an equivalent mutant (with n == w
+// Repeat(0) returns the same string).
 func padRight(s string, w int) string {
 	return s + strings.Repeat(" ", max(0, w-len([]rune(s))))
 }

@@ -10,7 +10,7 @@ import (
 	"tsk/internal/model"
 )
 
-// taskByTitle busca una tarea de prueba por título.
+// taskByTitle looks up a test task by title.
 func taskByTitle(t *testing.T, m *Model, title string) *model.Task {
 	t.Helper()
 	for i := range m.tasks {
@@ -18,11 +18,11 @@ func taskByTitle(t *testing.T, m *Model, title string) *model.Task {
 			return &m.tasks[i]
 		}
 	}
-	t.Fatalf("tarea %q no encontrada", title)
+	t.Fatalf("task %q not found", title)
 	return nil
 }
 
-// openDetail abre el modal de detalle para la tarea dada.
+// openDetail opens the detail modal for the given task.
 func openDetail(m *Model, task *model.Task) {
 	cp := *task
 	m.detailOpen = true
@@ -32,9 +32,9 @@ func openDetail(m *Model, task *model.Task) {
 	m.detailCommentSel = -1
 }
 
-// applyMsg aplica un mensaje al modelo, ejecuta el comando resultante y
-// aplica también su mensaje (un nivel), de forma que los flujos async se
-// resuelven en tests.
+// applyMsg applies a message to the model, runs the resulting command and
+// also applies its message (one level), so that async flows get
+// resolved in tests.
 func applyMsg(t *testing.T, m *Model, msg tea.Msg) *Model {
 	next, cmd := m.Update(msg)
 	m = asModel(next)
@@ -61,15 +61,15 @@ func asModel(v tea.Model) *Model {
 func TestDetailCommentSelection(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	mustAddComment(t, m.database, task.ID, "uno")
-	mustAddComment(t, m.database, task.ID, "dos")
+	mustAddComment(t, m.database, task.ID, "one")
+	mustAddComment(t, m.database, task.ID, "two")
 	openDetail(m, task)
 
 	if m.detailCommentSel != -1 {
 		t.Fatalf("initial sel = %d, want -1", m.detailCommentSel)
 	}
 
-	// j entra en la lista y selecciona el primero
+	// j enters the list and selects the first one
 	m, _ = press(m, "j")
 	if m.detailCommentSel != 0 {
 		t.Errorf("after j: sel = %d, want 0", m.detailCommentSel)
@@ -78,17 +78,17 @@ func TestDetailCommentSelection(t *testing.T) {
 	if m.detailCommentSel != 1 {
 		t.Errorf("after 2x j: sel = %d, want 1", m.detailCommentSel)
 	}
-	// j en el último no pasa de largo
+	// j on the last one does not go past it
 	m, _ = press(m, "j")
 	if m.detailCommentSel != 1 {
 		t.Errorf("j at bottom: sel = %d, want 1", m.detailCommentSel)
 	}
-	// k sube
+	// k goes up
 	m, _ = press(m, "k")
 	if m.detailCommentSel != 0 {
 		t.Errorf("after k: sel = %d, want 0", m.detailCommentSel)
 	}
-	// k en el primero deselecciona
+	// k on the first one deselects
 	m, _ = press(m, "k")
 	if m.detailCommentSel != -1 {
 		t.Errorf("k at top: sel = %d, want -1", m.detailCommentSel)
@@ -98,41 +98,41 @@ func TestDetailCommentSelection(t *testing.T) {
 func TestDetailDeleteComment(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	mustAddComment(t, m.database, task.ID, "uno")
-	mustAddComment(t, m.database, task.ID, "dos")
+	mustAddComment(t, m.database, task.ID, "one")
+	mustAddComment(t, m.database, task.ID, "two")
 	openDetail(m, task)
 
-	// Selecciona el primero y lo borra con d
+	// Selects the first one and deletes it with d
 	m, _ = press(m, "j")
 	m, cmd := press(m, "d")
 	if !m.detailOpen {
-		t.Error("el detalle debe seguir abierto al borrar un comentario")
+		t.Error("the detail must stay open when deleting a comment")
 	}
 	if cmd == nil {
-		t.Fatal("d con comentario seleccionado debe producir un comando")
+		t.Fatal("d with a comment selected must produce a command")
 	}
 
 	m = applyMsg(t, m, mustMsg(t, cmd))
 	if len(m.detailComments) != 1 {
 		t.Fatalf("comments = %d, want 1", len(m.detailComments))
 	}
-	if m.detailComments[0].Body != "dos" {
-		t.Errorf("quedó %q, want dos", m.detailComments[0].Body)
+	if m.detailComments[0].Body != "two" {
+		t.Errorf("left %q, want two", m.detailComments[0].Body)
 	}
 	if m.detailCommentSel != 0 {
-		t.Errorf("sel tras borrar = %d, want 0", m.detailCommentSel)
+		t.Errorf("sel after deleting = %d, want 0", m.detailCommentSel)
 	}
 
 	stored, _ := m.database.ListComments(task.ID)
 	if len(stored) != 1 {
-		t.Errorf("comentarios en DB = %d, want 1", len(stored))
+		t.Errorf("comments in DB = %d, want 1", len(stored))
 	}
 }
 
 func TestDetailDeleteLastCommentClearsSelection(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	mustAddComment(t, m.database, task.ID, "único")
+	mustAddComment(t, m.database, task.ID, "only")
 	openDetail(m, task)
 
 	m, _ = press(m, "j")
@@ -150,16 +150,16 @@ func TestDetailDeleteLastCommentClearsSelection(t *testing.T) {
 func TestDetailDoneWithoutCommentSelection(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	mustAddComment(t, m.database, task.ID, "nota")
+	mustAddComment(t, m.database, task.ID, "note")
 	openDetail(m, task)
 
-	// Sin selección, d marca done y cierra el modal.
+	// With no selection, d marks done and closes the modal.
 	m, cmd := press(m, "d")
 	if m.detailOpen {
-		t.Error("d sin selección debe cerrar el detalle")
+		t.Error("d with no selection must close the detail")
 	}
 	if cmd == nil {
-		t.Fatal("d sin selección debe producir el comando Done")
+		t.Fatal("d with no selection must produce the Done command")
 	}
 	applyMsg(t, m, mustMsg(t, cmd))
 
@@ -172,7 +172,7 @@ func TestDetailDoneWithoutCommentSelection(t *testing.T) {
 func TestDetailEscDeselectsThenCloses(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	mustAddComment(t, m.database, task.ID, "nota")
+	mustAddComment(t, m.database, task.ID, "note")
 	openDetail(m, task)
 
 	m, _ = press(m, "j")
@@ -180,19 +180,19 @@ func TestDetailEscDeselectsThenCloses(t *testing.T) {
 		t.Fatalf("sel = %d, want 0", m.detailCommentSel)
 	}
 
-	// Primer Esc deselecciona
+	// First Esc deselects
 	m, _ = press(m, "esc")
 	if m.detailCommentSel != -1 {
 		t.Errorf("esc 1: sel = %d, want -1", m.detailCommentSel)
 	}
 	if !m.detailOpen {
-		t.Error("esc 1 no debe cerrar el modal")
+		t.Error("esc 1 must not close the modal")
 	}
 
-	// Segundo Esc cierra
+	// Second Esc closes
 	m, _ = press(m, "esc")
 	if m.detailOpen {
-		t.Error("esc 2 debe cerrar el modal")
+		t.Error("esc 2 must close the modal")
 	}
 }
 
@@ -200,7 +200,7 @@ func TestRenderDetailCommentWindowRespectsHeight(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
 	for i := 0; i < 20; i++ {
-		mustAddComment(t, m.database, task.ID, "comentario "+string(rune('A'+i)))
+		mustAddComment(t, m.database, task.ID, "comment "+string(rune('A'+i)))
 	}
 	openDetail(m, task)
 	m.detailCommentSel = 15
@@ -209,11 +209,11 @@ func TestRenderDetailCommentWindowRespectsHeight(t *testing.T) {
 	out := m.renderDetail(task, budget)
 
 	if n := lineCount(out); n > budget {
-		t.Errorf("alto = %d, excede el presupuesto %d", n, budget)
+		t.Errorf("height = %d, exceeds the budget %d", n, budget)
 	}
-	// La ventana debe seguir a la selección.
-	if !strings.Contains(ansi.Strip(out), "comentario P") {
-		t.Errorf("el comentario seleccionado (#15) no está visible:\n%s", ansi.Strip(out))
+	// The window must follow the selection.
+	if !strings.Contains(ansi.Strip(out), "comment P") {
+		t.Errorf("the selected comment (#15) is not visible:\n%s", ansi.Strip(out))
 	}
 }
 
@@ -224,15 +224,15 @@ func TestRenderDetailNoComments(t *testing.T) {
 
 	out := ansi.Strip(m.renderDetail(task, 24))
 	if !strings.Contains(out, "Comments (0)") {
-		t.Errorf("falta el título de la caja de comentarios:\n%s", out)
+		t.Errorf("the comments box title is missing:\n%s", out)
 	}
 	if !strings.Contains(out, "(no comments)") {
-		t.Errorf("falta el placeholder de comentarios:\n%s", out)
+		t.Errorf("the comments placeholder is missing:\n%s", out)
 	}
 }
 
-// TestRenderDetailTwoBoxes verifica que el detalle dibuja dos cajas con borde
-// redondeado: tarea+descripción y comentarios.
+// TestRenderDetailTwoBoxes verifies that the detail draws two boxes with a
+// rounded border: task+description and comments.
 func TestRenderDetailTwoBoxes(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
@@ -240,18 +240,18 @@ func TestRenderDetailTwoBoxes(t *testing.T) {
 
 	out := ansi.Strip(m.renderDetail(task, 24))
 	if n := strings.Count(out, "╭"); n != 2 {
-		t.Errorf("bordes superiores = %d, want 2:\n%s", n, out)
+		t.Errorf("top borders = %d, want 2:\n%s", n, out)
 	}
 	if n := strings.Count(out, "╰"); n != 2 {
-		t.Errorf("bordes inferiores = %d, want 2:\n%s", n, out)
+		t.Errorf("bottom borders = %d, want 2:\n%s", n, out)
 	}
 	if !strings.Contains(out, "Description:") {
-		t.Errorf("la caja de tarea debe contener la descripción:\n%s", out)
+		t.Errorf("the task box must contain the description:\n%s", out)
 	}
 }
 
-// TestRenderDetailNoActionsLine verifica que el detalle ya no repite los
-// keybinds en una línea de acciones (viven en la KeybindsBar).
+// TestRenderDetailNoActionsLine verifies that the detail no longer repeats the
+// keybinds on an actions line (they live in the KeybindsBar).
 func TestRenderDetailNoActionsLine(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
@@ -259,48 +259,48 @@ func TestRenderDetailNoActionsLine(t *testing.T) {
 
 	out := ansi.Strip(m.renderDetail(task, 24))
 	if strings.Contains(out, "New comment") {
-		t.Errorf("el detalle no debe repetir los keybinds:\n%s", out)
+		t.Errorf("the detail must not repeat the keybinds:\n%s", out)
 	}
 }
 
-// TestRenderDetailIndentsDescription verifica que la descripción quede
-// indentada igual que la metadata.
+// TestRenderDetailIndentsDescription verifies that the description ends up
+// indented the same as the metadata.
 func TestRenderDetailIndentsDescription(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
 	taskCopy := *task
-	taskCopy.Description = "no entiendo"
+	taskCopy.Description = "I don't understand"
 	openDetail(m, &taskCopy)
 
 	out := ansi.Strip(m.renderDetail(&taskCopy, 24))
-	if !strings.Contains(out, "  no entiendo") {
-		t.Errorf("la descripción debe ir indentada con 2 espacios:\n%s", out)
+	if !strings.Contains(out, "  I don't understand") {
+		t.Errorf("the description must be indented by 2 spaces:\n%s", out)
 	}
 }
 
-// TestDetailHidesPreview verifica que al abrir el detalle desaparece la caja
-// de preview (la descripción ya se muestra dentro del modal).
+// TestDetailHidesPreview verifies that when the detail opens the preview box
+// disappears (the description is now shown inside the modal).
 func TestDetailHidesPreview(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "1")
 
 	withPreview := ansi.Strip(m.View().Content)
 	if !strings.Contains(withPreview, " Description ") {
-		t.Fatalf("sin detalle debería verse el preview:\n%s", withPreview)
+		t.Fatalf("without the detail the preview should be visible:\n%s", withPreview)
 	}
 
 	m, _ = press(m, "enter")
 	withDetail := ansi.Strip(m.View().Content)
 	if strings.Contains(withDetail, " Description ") {
-		t.Errorf("con el detalle abierto no debe verse el preview:\n%s", withDetail)
+		t.Errorf("with the detail open the preview must not be visible:\n%s", withDetail)
 	}
 	if !strings.Contains(withDetail, "Description:") {
-		t.Errorf("el detalle debe mostrar su propia descripción:\n%s", withDetail)
+		t.Errorf("the detail must show its own description:\n%s", withDetail)
 	}
 }
 
-// TestDetailViewHasThreeBoxes verifica que la vista del detalle muestra tres
-// cajas con borde redondeado: tarea+descripción, comentarios y keybinds.
+// TestDetailViewHasThreeBoxes verifies that the detail view shows three boxes
+// with a rounded border: task+description, comments and keybinds.
 func TestDetailViewHasThreeBoxes(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "1")
@@ -308,10 +308,10 @@ func TestDetailViewHasThreeBoxes(t *testing.T) {
 
 	out := ansi.Strip(m.View().Content)
 	if n := strings.Count(out, "╭"); n != 3 {
-		t.Errorf("cajas con borde = %d, want 3 (tarea, comentarios, keybinds):\n%s", n, out)
+		t.Errorf("bordered boxes = %d, want 3 (task, comments, keybinds):\n%s", n, out)
 	}
 	if !strings.Contains(out, "Keybinds · Detail") {
-		t.Errorf("falta la caja de keybinds del detalle:\n%s", out)
+		t.Errorf("the detail keybinds box is missing:\n%s", out)
 	}
 }
 
@@ -320,28 +320,28 @@ func TestCommentCmdEmptyBodyAddsNothing(t *testing.T) {
 	task := taskByTitle(t, m, "Fix N+1 query")
 	openDetail(m, task)
 
-	// Un comentario vacío no debe crear nada.
+	// An empty comment must not create anything.
 	m = applyMsg(t, m, commentFinishedMsg{taskID: task.ID, body: ""})
 	comments, _ := m.database.ListComments(task.ID)
 	if len(comments) != 0 {
-		t.Errorf("comentarios = %d, want 0", len(comments))
+		t.Errorf("comments = %d, want 0", len(comments))
 	}
 }
 
 func TestCommentAddedSelectsNewest(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
-	mustAddComment(t, m.database, task.ID, "viejo")
+	mustAddComment(t, m.database, task.ID, "old")
 	openDetail(m, task)
 
-	m = applyMsg(t, m, commentFinishedMsg{taskID: task.ID, body: "nuevo"})
+	m = applyMsg(t, m, commentFinishedMsg{taskID: task.ID, body: "new"})
 	if len(m.detailComments) != 2 {
 		t.Fatalf("comments = %d, want 2", len(m.detailComments))
 	}
 	if m.detailCommentSel != 1 {
-		t.Errorf("sel = %d, want 1 (el nuevo)", m.detailCommentSel)
+		t.Errorf("sel = %d, want 1 (the new one)", m.detailCommentSel)
 	}
-	if m.detailComments[1].Body != "nuevo" {
-		t.Errorf("último = %q, want nuevo", m.detailComments[1].Body)
+	if m.detailComments[1].Body != "new" {
+		t.Errorf("last = %q, want new", m.detailComments[1].Body)
 	}
 }

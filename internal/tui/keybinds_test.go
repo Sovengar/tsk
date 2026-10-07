@@ -9,13 +9,13 @@ import (
 	"tsk/internal/model"
 )
 
-// renderOverlay es la barra de teclas del modal activo. Cada overlay tiene su
-// propia lista y varias son literales en línea aquí dentro: si una se pierde al
-// tocar el switch, el modal aparece sin ninguna ayuda sin que nada falle.
+// renderOverlay is the key bar of the active modal. Each overlay has its own
+// list and several are inline literals in here: if one is lost when touching
+// the switch, the modal appears with no help at all and nothing fails.
 func TestKeybindsBarRenderOverlay(t *testing.T) {
 	tests := []struct {
 		overlay overlayKind
-		want    []string // al menos una de estas keys debe aparecer
+		want    []string // at least one of these keys must appear
 		absent  []string
 	}{
 		{overlayDetail, []string{"select comment", "close"}, nil},
@@ -37,23 +37,23 @@ func TestKeybindsBarRenderOverlay(t *testing.T) {
 
 			for _, want := range tt.want {
 				if !strings.Contains(out, want) {
-					t.Errorf("falta %q en el overlay:\n%s", want, out)
+					t.Errorf("%q is missing in the overlay:\n%s", want, out)
 				}
 			}
 			for _, absent := range tt.absent {
 				if strings.Contains(out, absent) {
-					t.Errorf("%q no debería aparecer en este overlay:\n%s", absent, out)
+					t.Errorf("%q should not appear in this overlay:\n%s", absent, out)
 				}
 			}
 			if len(tt.want) == 0 && out != "" {
-				t.Errorf("sin overlay no debería haber barra, got %q", out)
+				t.Errorf("with no overlay there should be no bar, got %q", out)
 			}
 		})
 	}
 }
 
-// Toda overlay conocida debe devolver ALGO: un overlay sin keybinds deja al
-// usuario sin pistas y es el fallo silencioso típico.
+// Every known overlay must return SOMETHING: an overlay with no keybinds
+// leaves the user without hints and it is the typical silent failure.
 func TestEveryOverlayHasKeybinds(t *testing.T) {
 	all := []overlayKind{
 		overlayDetail, overlayTag, overlayNewTask, overlayFilter,
@@ -66,13 +66,13 @@ func TestEveryOverlayHasKeybinds(t *testing.T) {
 		}
 		s := KeybindsBar{view: viewList, overlay: o, width: 200}
 		if rows := s.renderOverlay(); len(rows) == 0 {
-			t.Errorf("overlay %s sin keybinds", overlayName(o))
+			t.Errorf("overlay %s without keybinds", overlayName(o))
 		}
 	}
 }
 
-// El reparto en filas agrupa de keybindsPerRow en keybindsPerRow: una fila
-// nunca puede llevar más de ese número de acciones.
+// The split into rows groups in chunks of keybindsPerRow: a row can never
+// carry more than that number of actions.
 func TestKeybindsRowsRespectPerRow(t *testing.T) {
 	for _, n := range []int{0, 1, keybindsPerRow - 1, keybindsPerRow, keybindsPerRow + 1, keybindsPerRow * 3} {
 		kbs := make([]keybind, n)
@@ -87,18 +87,18 @@ func TestKeybindsRowsRespectPerRow(t *testing.T) {
 			wantRows = (n + keybindsPerRow - 1) / keybindsPerRow
 		}
 		if len(rows) != wantRows {
-			t.Errorf("n=%d: filas = %d, want %d", n, len(rows), wantRows)
+			t.Errorf("n=%d: rows = %d, want %d", n, len(rows), wantRows)
 		}
 		for _, row := range rows {
 			sep := styleStatusSep.Render(" · ")
 			if got := strings.Count(row, sep) + 1; got > keybindsPerRow {
-				t.Errorf("n=%d: fila con %d acciones, want <= %d: %q", n, got, keybindsPerRow, ansi.Strip(row))
+				t.Errorf("n=%d: row with %d actions, want <= %d: %q", n, got, keybindsPerRow, ansi.Strip(row))
 			}
 		}
 	}
 }
 
-// keysOf extrae las keys de una lista de keybinds.
+// keysOf extracts the keys of a keybinds list.
 func keysOf(kbs []keybind) []string {
 	out := make([]string, 0, len(kbs))
 	for _, kb := range kbs {
@@ -107,7 +107,7 @@ func keysOf(kbs []keybind) []string {
 	return out
 }
 
-// overlayName da un nombre legible al overlay para los subtests.
+// overlayName gives a readable name to the overlay for the subtests.
 func overlayName(o overlayKind) string {
 	switch o {
 	case overlayNone:
@@ -136,12 +136,12 @@ func overlayName(o overlayKind) string {
 	return "?"
 }
 
-// ---- clamps: comparten la misma forma (vacío→0, alto→n-1, negativo→0) y son
-// lo que evita que un cursor quede apuntando fuera de la lista. ----
+// ---- clamps: they share the same shape (empty→0, high→n-1, negative→0)
+// and they are what keeps a cursor from pointing outside the list. ----
 
-// Los clamps comparten la misma forma: lista vacía -> 0, índice por encima ->
-// último, índice negativo -> 0. El valor esperado se deriva del modelo en vez de
-// estar escrito a mano, porque el tamaño del roster depende de las fixtures.
+// The clamps share the same shape: empty list -> 0, index above -> last,
+// negative index -> 0. The expected value is derived from the model instead
+// of being written by hand, because the roster size depends on the fixtures.
 func TestClampIndexes(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -151,76 +151,76 @@ func TestClampIndexes(t *testing.T) {
 		want  func(m *Model) int
 	}{
 		{
-			name:  "assignee dentro de rango",
+			name:  "assignee within range",
 			setup: func(m *Model) { m.assigneeIdx = 1 },
 			clamp: func(m *Model) { m.clampAssigneeIdx() },
 			get:   func(m *Model) int { return m.assigneeIdx },
 			want:  func(m *Model) int { return 1 },
 		},
 		{
-			name:  "assignee demasiado alto cae al último",
+			name:  "assignee too high falls to the last",
 			setup: func(m *Model) { m.assigneeIdx = 99 },
 			clamp: func(m *Model) { m.clampAssigneeIdx() },
 			get:   func(m *Model) int { return m.assigneeIdx },
 			want:  func(m *Model) int { return len(m.assigneeRoster()) - 1 },
 		},
 		{
-			name:  "assignee negativo",
+			name:  "negative assignee",
 			setup: func(m *Model) { m.assigneeIdx = -3 },
 			clamp: func(m *Model) { m.clampAssigneeIdx() },
 			get:   func(m *Model) int { return m.assigneeIdx },
 			want:  func(m *Model) int { return 0 },
 		},
 		{
-			name:  "assignee sin roster",
+			name:  "assignee with no roster",
 			setup: func(m *Model) { m.assigneeIdx = 5; m.tasks = nil },
 			clamp: func(m *Model) { m.clampAssigneeIdx() },
 			get:   func(m *Model) int { return m.assigneeIdx },
 			want:  func(m *Model) int { return 0 },
 		},
 		{
-			name:  "offday dentro de rango",
+			name:  "offday within range",
 			setup: func(m *Model) { m.assigneeIdx = 0; m.assigneeOffdayIdx = 0 },
 			clamp: func(m *Model) { m.clampOffdayIdx() },
 			get:   func(m *Model) int { return m.assigneeOffdayIdx },
 			want:  func(m *Model) int { return 0 },
 		},
 		{
-			name:  "offday demasiado alto",
+			name:  "offday too high",
 			setup: func(m *Model) { m.assigneeIdx = 0; m.assigneeOffdayIdx = 99 },
 			clamp: func(m *Model) { m.clampOffdayIdx() },
 			get:   func(m *Model) int { return m.assigneeOffdayIdx },
 			want:  func(m *Model) int { return max(0, len(m.assigneeOffDays(m.currentAssignee()))-1) },
 		},
 		{
-			name:  "offday negativo",
+			name:  "negative offday",
 			setup: func(m *Model) { m.assigneeIdx = 0; m.assigneeOffdayIdx = -2 },
 			clamp: func(m *Model) { m.clampOffdayIdx() },
 			get:   func(m *Model) int { return m.assigneeOffdayIdx },
 			want:  func(m *Model) int { return 0 },
 		},
 		{
-			name:  "kanban columna fuera de rango cae a la última",
+			name:  "kanban column out of range falls to the last",
 			setup: func(m *Model) { m.kanbanCol = 99; m.kanbanRow = 0 },
 			clamp: func(m *Model) { m.clampKanbanCursor() },
 			get:   func(m *Model) int { return m.kanbanCol },
 			want:  func(m *Model) int { return len(m.kanbanColumns()) - 1 },
 		},
 		{
-			name:  "kanban columna negativa",
+			name:  "negative kanban column",
 			setup: func(m *Model) { m.kanbanCol = -1 },
 			clamp: func(m *Model) { m.clampKanbanCursor() },
 			get:   func(m *Model) int { return m.kanbanCol },
 			want:  func(m *Model) int { return 0 },
 		},
 		{
-			// Un proyecto con workflow vacío no produce columnas: es el único
-			// camino a la rama defensiva del clamp.
-			name: "kanban sin columnas",
+			// A project with an empty workflow produces no columns: it is the only
+			// path to the clamp's defensive branch.
+			name: "kanban with no columns",
 			setup: func(m *Model) {
 				m.currentView = viewKanban
-				m.projects = []model.Project{{Name: "vacio", Workflow: []string{}}}
-				m.filterProject = "vacio"
+				m.projects = []model.Project{{Name: "empty", Workflow: []string{}}}
+				m.filterProject = "empty"
 				m.kanbanCol, m.kanbanRow = 3, 3
 			},
 			clamp: func(m *Model) { m.clampKanbanCursor() },
@@ -234,15 +234,15 @@ func TestClampIndexes(t *testing.T) {
 			tt.setup(m)
 			tt.clamp(m)
 			if got, want := tt.get(m), tt.want(m); got != want {
-				t.Errorf("índice = %d, want %d", got, want)
+				t.Errorf("index = %d, want %d", got, want)
 			}
 		})
 	}
 }
 
-// El gantt no sólo recorta: además nunca deja el cursor en una fila de cabecera,
-// salta a la tarea más cercana. Con un índice alto, el recorte y el salto se
-// combinan.
+// The gantt does not only truncate: it also never leaves the cursor on a
+// header row, it jumps to the nearest task. With a high index, the
+// truncation and the jump combine.
 func TestSnapGanttCursorBoundsAndHeaderSkip(t *testing.T) {
 	m := newTestModel(t)
 	m.currentView = viewGantt
@@ -250,7 +250,7 @@ func TestSnapGanttCursorBoundsAndHeaderSkip(t *testing.T) {
 	m.ganttCursor = 99
 	m.snapGanttCursor()
 	if got := m.ganttCursor; got < 0 || got >= len(m.ganttRows()) {
-		t.Errorf("ganttCursor = %d, fuera de [0,%d)", got, len(m.ganttRows()))
+		t.Errorf("ganttCursor = %d, outside [0,%d)", got, len(m.ganttRows()))
 	}
 
 	m.ganttCursor = -4
@@ -260,21 +260,21 @@ func TestSnapGanttCursorBoundsAndHeaderSkip(t *testing.T) {
 	}
 }
 
-// El clamp del gantt tiene una regla extra: nunca debe dejar el cursor en una
-// fila de cabecera, salta a la tarea más cercana.
+// The gantt's clamp has an extra rule: it must never leave the cursor on a
+// header row; it jumps to the nearest task.
 func TestSnapGanttCursorSkipsHeaders(t *testing.T) {
 	m := newTestModel(t)
 	m.currentView = viewGantt
 	rows := m.ganttRows()
 	if len(rows) == 0 {
-		t.Skip("sin filas de gantt en las fixtures")
+		t.Skip("no gantt rows in the fixtures")
 	}
 
 	for i := range rows {
 		m.ganttCursor = i
 		m.snapGanttCursor()
 		if got := m.ganttRows()[m.ganttCursor]; got.kind != ganttTaskRow {
-			t.Errorf("cursor en %d sigue en una cabecera (%v), want tarea", i, got.kind)
+			t.Errorf("cursor at %d is still on a header (%v), want a task", i, got.kind)
 		}
 	}
 }

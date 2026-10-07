@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Project representa un proyecto registrado en tsk.
+// Project represents a project registered in tsk.
 type Project struct {
 	ID         int64    `json:"id"`
 	Name       string   `json:"name"`
@@ -17,15 +17,15 @@ type Project struct {
 	UpdatedAt  string   `json:"updated_at"`
 }
 
-// DefaultWorkflow es el flujo por defecto si no se especifica. Define la
-// progresión de las acciones; debe incluir "done".
+// DefaultWorkflow is the default flow when none is specified. It defines the
+// progression of the actions; it must include "done".
 var DefaultWorkflow = []string{"backlog", "todo", "doing", "delivered", "reviewing", "done", "cancelled"}
 
-// DefaultListOrder es el orden de presentación por defecto de la vista List.
-// Contiene los mismos estados que DefaultWorkflow, en otro orden.
+// DefaultListOrder is the default presentation order of the List view.
+// It contains the same states as DefaultWorkflow, in a different order.
 var DefaultListOrder = []string{"reviewing", "delivered", "doing", "todo", "backlog", "done", "cancelled"}
 
-// ParseWorkflow convierte un string "a,b,c" en []string.
+// ParseWorkflow converts an "a,b,c" string into []string.
 func ParseWorkflow(s string) ([]string, error) {
 	if s == "" {
 		return nil, nil
@@ -44,7 +44,7 @@ func ParseWorkflow(s string) ([]string, error) {
 	return parts, nil
 }
 
-// HasStatus verifica si el workflow contiene el estado dado.
+// HasStatus checks whether the workflow contains the given state.
 func HasStatus(workflow []string, status string) bool {
 	for _, s := range workflow {
 		if s == status {
@@ -54,7 +54,7 @@ func HasStatus(workflow []string, status string) bool {
 	return false
 }
 
-// FindStatus containing realiza búsqueda parcial (para "review").
+// FindStatus containing does a partial search (for "review").
 func FindStatusContaining(workflow []string, substr string) (string, bool) {
 	for _, s := range workflow {
 		if contains(s, substr) {
@@ -64,17 +64,17 @@ func FindStatusContaining(workflow []string, substr string) (string, bool) {
 	return "", false
 }
 
-// DoneStatus es el estado final al que mueve la acción "done". Debe estar
-// presente en el workflow del proyecto (se valida al crear/editar).
+// DoneStatus is the final state that the "done" action moves to. It must be
+// present in the project's workflow (validated on create/edit).
 const DoneStatus = "done"
 
-// TerminalStatus devuelve el estado terminal de las acciones de cierre: siempre
-// "done", con independencia de su posición en el workflow.
+// TerminalStatus returns the terminal state of the closing actions: always
+// "done", regardless of its position in the workflow.
 func TerminalStatus(workflow []string) string {
 	return DoneStatus
 }
 
-// StartStatus devuelve el segundo estado del workflow (después de backlog si existe).
+// StartStatus returns the second state of the workflow (after backlog if it exists).
 func StartStatus(workflow []string) string {
 	if len(workflow) <= 1 {
 		return TerminalStatus(workflow)
@@ -85,10 +85,10 @@ func StartStatus(workflow []string) string {
 	return workflow[0]
 }
 
-// CancelledStatus es el estado cancelado implícito.
+// CancelledStatus is the implicit cancelled state.
 const CancelledStatus = "cancelled"
 
-// NextStatus devuelve el siguiente estado en el workflow.
+// NextStatus returns the next state in the workflow.
 func NextStatus(workflow []string, current string) (string, bool) {
 	for i, s := range workflow {
 		if s == current && i+1 < len(workflow) {
@@ -98,7 +98,7 @@ func NextStatus(workflow []string, current string) (string, bool) {
 	return "", false
 }
 
-// PrevStatus devuelve el estado anterior en el workflow.
+// PrevStatus returns the previous state in the workflow.
 func PrevStatus(workflow []string, current string) (string, bool) {
 	for i, s := range workflow {
 		if s == current && i > 0 {
@@ -108,8 +108,8 @@ func PrevStatus(workflow []string, current string) (string, bool) {
 	return "", false
 }
 
-// ValidateWorkflow verifica que no haya duplicados y que incluya el estado
-// "done", necesario para las acciones de cierre.
+// ValidateWorkflow checks that there are no duplicates and that it includes the state
+// "done", required by the closing actions.
 func ValidateWorkflow(workflow []string) error {
 	seen := make(map[string]bool, len(workflow))
 	for _, s := range workflow {
@@ -124,9 +124,9 @@ func ValidateWorkflow(workflow []string) error {
 	return nil
 }
 
-// ValidateListOrder verifica que list_order no tenga duplicados y que cada
-// estado pertenezca al workflow del proyecto (cancelled siempre se permite).
-// Un list_order vacío es válido: significa "usar el orden del workflow".
+// ValidateListOrder checks that list_order has no duplicates and that every
+// state belongs to the project's workflow (cancelled is always allowed).
+// An empty list_order is valid: it means "use the workflow order".
 func ValidateListOrder(workflow, listOrder []string) error {
 	seen := make(map[string]bool, len(listOrder))
 	for _, s := range listOrder {
@@ -147,13 +147,13 @@ func ValidateListOrder(workflow, listOrder []string) error {
 	return nil
 }
 
-// WorkflowJSON serializa el workflow a JSON string para storage.
+// WorkflowJSON serializes the workflow to a JSON string for storage.
 func WorkflowJSON(workflow []string) string {
 	b, _ := json.Marshal(workflow)
 	return string(b)
 }
 
-// ParseWorkflowJSON deserializa un JSON string a []string.
+// ParseWorkflowJSON deserializes a JSON string into []string.
 func ParseWorkflowJSON(s string) ([]string, error) {
 	var w []string
 	if err := json.Unmarshal([]byte(s), &w); err != nil {
@@ -186,9 +186,9 @@ func trimSpace(s string) string {
 	return s[start:end]
 }
 
-// contains indica si substr aparece dentro de s. substr vacío nunca hace
-// match: sin el filtro, containsAt compararía contra la cadena vacía y
-// encontraría coincidencia en el índice 0.
+// contains tells whether substr appears inside s. An empty substr never
+// matches: without the filter, containsAt would compare against the empty string and
+// find a match at index 0.
 func contains(s, substr string) bool {
 	if substr == "" || len(substr) > len(s) {
 		return false

@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// fuzzyScore decide qué suggestions se muestran en el autocompletado y en el
-// modal de filtros. Es la pieza que más minion tenía sin cobertura y es puramente
-// funcional: sin IO, sin Bubbletea, y aun así decide lo que el usuario ve.
+// fuzzyScore decides which suggestions are shown in the autocomplete and in
+// the filter modal. It is the piece that had the most mutants uncovered and
+// it is purely functional: no IO, no Bubbletea, and still it decides what the user sees.
 func TestFuzzyScore(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -15,17 +15,17 @@ func TestFuzzyScore(t *testing.T) {
 		target   string
 		wantOK   bool
 		compare  string // "any" | "gt0" | "lt0"
-		wantMore string // si no está vacío, otro target que debe puntuar más
+		wantMore string // if not empty, another target that must score higher
 	}{
-		{name: "query vacío siempre matchea", query: "", target: "cualquiera", wantOK: true, compare: "any"},
-		{name: "query sólo de espacios equivale a vacío", query: "   ", target: "x", wantOK: true, compare: "any"},
-		{name: "substring al inicio", query: "jua", target: "juan", wantOK: true, compare: "gt0"},
-		{name: "substring case-insensitive", query: "JUA", target: "juan", wantOK: true, compare: "gt0"},
-		{name: "subtexto al final", query: "an", target: "juan", wantOK: true, compare: "gt0"},
-		{name: "subsecuencia", query: "jn", target: "juan", wantOK: true, compare: "gt0"},
-		{name: "no matchea", query: "zzz", target: "juan", wantOK: false, compare: "any"},
-		{name: "no matchea por orden", query: "naj", target: "juan", wantOK: false, compare: "any"},
-		{name: "query más largo que el target", query: "juanito", target: "juan", wantOK: false, compare: "any"},
+		{name: "empty query always matches", query: "", target: "anything", wantOK: true, compare: "any"},
+		{name: "query of only spaces is equivalent to empty", query: "   ", target: "x", wantOK: true, compare: "any"},
+		{name: "substring at the start", query: "joh", target: "john", wantOK: true, compare: "gt0"},
+		{name: "substring case-insensitive", query: "JOH", target: "john", wantOK: true, compare: "gt0"},
+		{name: "subtext at the end", query: "hn", target: "john", wantOK: true, compare: "gt0"},
+		{name: "subsequence", query: "jn", target: "john", wantOK: true, compare: "gt0"},
+		{name: "does not match", query: "zzz", target: "john", wantOK: false, compare: "any"},
+		{name: "does not match because of order", query: "nhoj", target: "john", wantOK: false, compare: "any"},
+		{name: "query longer than the target", query: "johnny", target: "john", wantOK: false, compare: "any"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -43,32 +43,32 @@ func TestFuzzyScore(t *testing.T) {
 	}
 }
 
-// Un match por substring tiene que ganar a un match por subsecuencia: por eso el
-// autocomplete ordena primero lo que se parece de verdad.
+// A substring match has to beat a subsequence match: that is why the
+// autocomplete orders what really looks like it first.
 func TestFuzzyScorePrefersSubstringOverSubsequence(t *testing.T) {
-	substr, _ := fuzzyScore("an", "juan")
-	subseq, ok := fuzzyScore("jn", "juan")
+	substr, _ := fuzzyScore("oh", "john")
+	subseq, ok := fuzzyScore("jn", "john")
 	if !ok {
-		t.Fatal("jn debería matchear por subsecuencia")
+		t.Fatal("jn should match by subsequence")
 	}
 	if substr <= subseq {
-		t.Errorf("substring %d no puntúa por encima de subsecuencia %d", substr, subseq)
+		t.Errorf("substring %d does not score above subsequence %d", substr, subseq)
 	}
 }
 
-// Entre dos substring, gana el que empieza antes.
+// Between two substrings, the one starting earlier wins.
 func TestFuzzyScorePrefersEarlierMatch(t *testing.T) {
-	early, _ := fuzzyScore("juan", "juan perez")
-	late, _ := fuzzyScore("juan", "maria juan")
+	early, _ := fuzzyScore("john", "john smith")
+	late, _ := fuzzyScore("john", "margo john")
 	if early <= late {
-		t.Errorf("match al inicio %d no puntúa por encima del final %d", early, late)
+		t.Errorf("match at the start %d does not score above the end %d", early, late)
 	}
 }
 
-// Los bordes que el TestFuzzyFilter de new_task_test.go no cubre: sin tope, sin
-// coincidencias y con acentos de mayúsculas.
+// The edges that new_task_test.go's TestFuzzyFilter does not cover: no cap,
+// no matches and with uppercase accents.
 func TestFuzzyFilterEdges(t *testing.T) {
-	items := []string{"@juan", "@maria", "@ana", "@bob"}
+	items := []string{"@john", "@margo", "@ann", "@bob"}
 
 	tests := []struct {
 		name  string
@@ -76,12 +76,12 @@ func TestFuzzyFilterEdges(t *testing.T) {
 		max   int
 		want  []string
 	}{
-		{"sin tope devuelve todo", "", 0, items},
-		{"sin coincidencias devuelve vacío", "zzz", 10, nil},
-		{"match por subcadena", "ma", 10, []string{"@maria"}},
-		{"ignora mayúsculas en el query", "MA", 10, []string{"@maria"}},
-		{"ignora espacios en el query", "  ma  ", 10, []string{"@maria"}},
-		{"el tope manda sobre el ranking", "a", 1, []string{"@ana"}},
+		{"no cap returns everything", "", 0, items},
+		{"no matches returns empty", "zzz", 10, nil},
+		{"match by substring", "ma", 10, []string{"@margo"}},
+		{"ignores uppercase in the query", "MA", 10, []string{"@margo"}},
+		{"ignores spaces in the query", "  ma  ", 10, []string{"@margo"}},
+		{"the cap rules over the ranking", "a", 1, []string{"@ann"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -95,33 +95,33 @@ func TestFuzzyFilterEdges(t *testing.T) {
 
 func TestFuzzyFilterEmptyInput(t *testing.T) {
 	if got := fuzzyFilter(nil, "", 5); len(got) != 0 {
-		t.Errorf("fuzzyFilter(nil, \"\", 5) = %v, want vacío", got)
+		t.Errorf("fuzzyFilter(nil, \"\", 5) = %v, want empty", got)
 	}
-	if got := fuzzyFilter([]string{"@juan"}, "zzz", 5); len(got) != 0 {
-		t.Errorf("sin coincidencias = %v, want vacío", got)
+	if got := fuzzyFilter([]string{"@john"}, "zzz", 5); len(got) != 0 {
+		t.Errorf("no matches = %v, want empty", got)
 	}
 }
 
-// fuzzyFilter no toca el slice de entrada: los callers lo reutilizan.
+// fuzzyFilter does not touch the input slice: the callers reuse it.
 func TestFuzzyFilterDoesNotMutateInput(t *testing.T) {
-	items := []string{"@juan", "@maria", "@ana"}
+	items := []string{"@john", "@margo", "@ann"}
 	before := strings.Join(items, ",")
 
 	_ = fuzzyFilter(items, "a", 1)
 	_ = fuzzyFilter(items, "", 2)
 
 	if after := strings.Join(items, ","); after != before {
-		t.Errorf("fuzzyFilter mutó la entrada: %q -> %q", before, after)
+		t.Errorf("fuzzyFilter mutated the input: %q -> %q", before, after)
 	}
 }
 
-// containsFold es la comprobación de "¿ya está en la lista?" que usan el alta de
-// tarea y las sugerencias: ignora mayúsculas y espacios.
-// containsFold recorta el VALOR pero no los elementos de la lista: los callers
-// pasan entradas ya normalizadas (model.ParseTags), así que un elemento con
-// espacios no se encuentra. Fijado aquí para que nadie asuma lo contrario.
+// containsFold is the "is it already in the list?" check that the task form
+// and the suggestions use: it ignores case and spaces.
+// containsFold trims the VALUE but not the list's elements: the callers
+// pass entries already normalized (model.ParseTags), so an element with
+// spaces is not found. Pinned here so that nobody assumes otherwise.
 func TestContainsFold(t *testing.T) {
-	items := []string{"Bug", "urgent", "bloqueado"}
+	items := []string{"Bug", "urgent", "blocked"}
 
 	tests := []struct {
 		value string
@@ -130,8 +130,8 @@ func TestContainsFold(t *testing.T) {
 		{"bug", true},
 		{"BUG", true},
 		{"urgent", true},
-		{"bloqueado", true},
-		{"  bloqueado  ", true}, // el valor sí se recorta
+		{"blocked", true},
+		{"  blocked  ", true}, // the value is trimmed
 		{"nope", false},
 		{"", false},
 		{"bug ", true},
@@ -143,19 +143,19 @@ func TestContainsFold(t *testing.T) {
 	}
 
 	if containsFold(nil, "x") {
-		t.Error("una lista vacía no contiene nada")
+		t.Error("an empty list contains nothing")
 	}
-	// Los elementos de la lista NO se recortan.
-	if containsFold([]string{" bloqueado "}, "bloqueado") {
-		t.Error("los elementos de la lista no se recortan: sólo el valor")
+	// The list's elements are NOT trimmed.
+	if containsFold([]string{" blocked "}, "blocked") {
+		t.Error("the list's elements are not trimmed: only the value")
 	}
 }
 
-// El score por substring es una fórmula exacta, no una escala: 1000 menos diez
-// por cada carácter de desplazamiento, menos lo que sobra del target. Estos
-// números son literales a propósito. Comparar sólo "mayor que cero" o "mejor
-// que el otro" deja vivos los signos: cambiar un + por un - mantiene el orden y
-// nadie lo nota hasta que el ranking sale raro.
+// The substring score is an exact formula, not a scale: 1000 minus ten per
+// shift character, minus what is left of the target. These numbers are
+// literals on purpose. Comparing only "greater than zero" or "better than
+// the other" leaves the signs alive: changing a + for a - keeps the order
+// and nobody notices until the ranking comes out weird.
 func TestFuzzyScoreExactValues(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -163,22 +163,22 @@ func TestFuzzyScoreExactValues(t *testing.T) {
 		target string
 		want   int
 	}{
-		{"coincidencia exacta", "juan", "juan", 1000},
-		{"prefijo de 3 de 4", "jua", "juan", 999},
-		{"sin shift, mayúsculas", "abc", "ABC", 1000},
-		{"en medio de una sola", "a", "banana", 985},
-		{"al final de una sola", "na", "banana", 976},
-		{"al final de un nombre", "an", "juan", 978},
-		{"al inicio de algo más largo", "juan", "juan perez", 994},
-		{"al final de algo más largo", "juan", "maria juan", 934},
-		{"subsecuencia vale su longitud", "jn", "juan", 2},
-		{"subsecuencia larga", "ao", "abaco", 2},
+		{"exact match", "john", "john", 1000},
+		{"prefix of 3 of 4", "joh", "john", 999},
+		{"no shift, uppercase", "abc", "ABC", 1000},
+		{"in the middle of a single one", "a", "banana", 985},
+		{"at the end of a single one", "na", "banana", 976},
+		{"at the end of a name", "hn", "john", 978},
+		{"at the start of something longer", "john", "john smith", 994},
+		{"at the end of something longer", "john", "margo john", 934},
+		{"subsequence is worth its length", "jn", "john", 2},
+		{"long subsequence", "ao", "tango", 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, ok := fuzzyScore(tt.query, tt.target)
 			if !ok {
-				t.Fatalf("fuzzyScore(%q, %q) no matchea", tt.query, tt.target)
+				t.Fatalf("fuzzyScore(%q, %q) does not match", tt.query, tt.target)
 			}
 			if got != tt.want {
 				t.Errorf("fuzzyScore(%q, %q) = %d, want %d", tt.query, tt.target, got, tt.want)
@@ -187,70 +187,70 @@ func TestFuzzyScoreExactValues(t *testing.T) {
 	}
 }
 
-// El desplazamiento pesa diez por carácter, así que dos coincidencias con la
-// misma longitud de target pero desplazadas diez columnas tienen exactamente
-// cien puntos de diferencia. Un signo cambiado aquí rompería el orden.
+// The shift weighs ten per character, so two matches with the same target
+// length but shifted ten columns apart have exactly
+// a hundred points of difference. A changed sign here would break the order.
 func TestFuzzyScoreOffsetCostsTenPerCharacter(t *testing.T) {
-	// Misma longitud de target, así que lo único que cambia es el desplazamiento:
-	// seis columnas de desfase son sesenta puntos, ni uno más ni uno menos.
-	inicio, _ := fuzzyScore("ab", "abxxxxxx")
-	despues, _ := fuzzyScore("ab", "xxxxxxab")
-	if inicio-despues != 60 {
-		t.Errorf("la diferencia entre desplazar 0 y 6 es %d, want 60", inicio-despues)
+	// Same target length, so the only thing that changes is the shift:
+	// six columns of offset are sixty points, neither one more nor one less.
+	start, _ := fuzzyScore("ab", "abxxxxxx")
+	after, _ := fuzzyScore("ab", "xxxxxxab")
+	if start-after != 60 {
+		t.Errorf("the difference between shifting 0 and 6 is %d, want 60", start-after)
 	}
 }
 
-// Cuando la subsecuencia se completa antes del final del target, el recorrido
-// tiene que parar ahí. Si no se parara, leería fuera de la query.
+// When the subsequence completes before the end of the target, the walk has
+// to stop there. If it did not stop, it would read outside the query.
 func TestFuzzyScoreStopsAtQueryEndMidTarget(t *testing.T) {
-	// "jy" se completa en el tercer carácter de un target de cuatro, y no es
-	// subcadena: si fuera, la fórmula del substring cortaría antes el recorrido.
+	// "jy" completes on the third character of a target of four, and it is not
+	// a substring: if it were, the substring formula would cut the walk earlier.
 	got, ok := fuzzyScore("jy", "jxyz")
 	if !ok {
-		t.Fatal("jy debería matchear jxyz por subsecuencia")
+		t.Fatal("jy should match jxyz by subsequence")
 	}
 	if got != 2 {
-		t.Errorf("score = %d, want 2 (la longitud de la query)", got)
+		t.Errorf("score = %d, want 2 (the query's length)", got)
 	}
 }
 
-// A igual score, el desempate es alfabético. Sin esto, dos nombres con la misma
-// puntuación saldrían en el orden que promotora el ranking, que es el del
-// llamante y no el que espera quien lee.
+// At equal score the tiebreaker is alphabetical. Without it, two names with
+// the same score would come out in the order the ranking promotes, which is
+// the caller's and not the one the reader expects.
 func TestFuzzyFilterTieBreaksAlphabetically(t *testing.T) {
-	// Las dos puntúan igual: la query aparece en la misma posición y los dos
-	// nombres miden lo mismo.
+	// Both score the same: the query appears at the same position and both
+	// names measure the same.
 	items := []string{"@zzab", "@aaab"}
 
 	got := fuzzyFilter(items, "ab", 10)
 	if strings.Join(got, ",") != "@aaab,@zzab" {
-		t.Errorf("fuzzyFilter = %v, want el desempate alfabético", got)
+		t.Errorf("fuzzyFilter = %v, want the alphabetical tiebreak", got)
 	}
 
 	for _, a := range got {
 		if _, ok := fuzzyScore("ab", a); !ok {
-			t.Errorf("%q no matchea, así que el test no mide el desempate", a)
+			t.Errorf("%q does not match, so the test does not measure the tiebreak", a)
 		}
 	}
 	if s1, _ := fuzzyScore("ab", got[0]); s1 <= 0 {
-		t.Errorf("el primero tiene score %d", s1)
+		t.Errorf("the first has score %d", s1)
 	}
 }
 
-// Y el desempate no se aplica entre scores distintos: el más alto va primero
-// aunque la letra diga lo contrario.
+// And the tiebreaker does not apply between different scores: the higher one
+// goes first even if the letter says otherwise.
 func TestFuzzyFilterScoreBeatsAlphabetical(t *testing.T) {
-	// "zzab" puntúa más que "@aaaab" (aparece en 0 frente a 3).
+	// "zzab" scores higher than "@aaaab" (it appears at 0 versus 3).
 	items := []string{"@aaaab", "@zzab"}
 
 	got := fuzzyFilter(items, "ab", 10)
 	if strings.Join(got, ",") != "@zzab,@aaaab" {
-		t.Errorf("fuzzyFilter = %v, want primero el de mayor score", got)
+		t.Errorf("fuzzyFilter = %v, want the higher-scoring one first", got)
 	}
 }
 
-// El ranking es estable entre elementos con la misma puntuación y el mismo
-// nombre: el orden de entrada manda cuando no hay nada que desempatar.
+// The ranking is stable between elements with the same score and the same
+// name: the input order rules when there is nothing to break the tie.
 func TestFuzzyFilterKeepsInputOrderOnFullTie(t *testing.T) {
 	items := []string{"ab", "ab", "ab"}
 	got := fuzzyFilter(items, "ab", 10)

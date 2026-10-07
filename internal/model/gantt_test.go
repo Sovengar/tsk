@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Mon es el lunes de referencia de varios tests (2026-09-14).
+// Mon is the reference Monday of several tests (2026-09-14).
 const monday = "2026-09-14"
 
 func mustDate(t *testing.T, s string) (d time.Time) {
@@ -66,7 +66,7 @@ func TestBuildScheduleSpillsToNextDay(t *testing.T) {
 }
 
 func TestBuildScheduleSkipsWeekend(t *testing.T) {
-	// Viernes 2026-09-18.
+	// Friday 2026-09-18.
 	friday := mustDate(t, "2026-09-18")
 	tasks := []Task{
 		task("@a", "todo", 1),
@@ -78,7 +78,7 @@ func TestBuildScheduleSkipsWeekend(t *testing.T) {
 	if a.Entries[0].Start != "2026-09-18" || a.Entries[0].End != "2026-09-18" {
 		t.Errorf("t1 = %s→%s, want Friday", a.Entries[0].Start, a.Entries[0].End)
 	}
-	// El segundo cae el lunes siguiente, saltando sáb/dom.
+	// The second falls on the next Monday, skipping Sat/Sun.
 	if a.Entries[1].Start != "2026-09-21" || a.Entries[1].End != "2026-09-21" {
 		t.Errorf("t2 = %s→%s, want Monday 2026-09-21", a.Entries[1].Start, a.Entries[1].End)
 	}
@@ -107,7 +107,7 @@ func TestBuildScheduleOffDayPerAssignee(t *testing.T) {
 }
 
 func TestBuildScheduleOffDayRange(t *testing.T) {
-	// Toda la semana laboral libre → arranca el lunes siguiente.
+	// The whole working week is free -> starts the next Monday.
 	offdays := []OffDay{
 		{Assignee: "@a", StartDate: monday, EndDate: "2026-09-18"},
 	}
@@ -134,56 +134,56 @@ func TestBuildScheduleDefaultEstimate(t *testing.T) {
 	}
 }
 
-// Un defaultEstimate no positivo se normaliza a 1 día. Los tests previos sólo
-// pasaban 1 y 2, así que el borde exacto (0 y negativo) quedaba sin cubrir.
-func TestBuildScheduleDefaultEstimateNoPositivo(t *testing.T) {
+// A non-positive defaultEstimate is normalized to 1 day. The previous tests only
+// passed 1 and 2, so the exact edge (0 and negative) was left uncovered.
+func TestBuildScheduleDefaultEstimateNonPositive(t *testing.T) {
 	tests := []struct {
 		name       string
 		defaultEst float64
 	}{
-		{"cero", 0},
-		{"negativo", -2.5},
+		{"zero", 0},
+		{"negative", -2.5},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := BuildSchedule([]Task{task("@a", "todo", 0)}, nil, mustDate(t, monday), tt.defaultEst)
 			e := s.Assignees[0].Entries[0]
 			if e.Estimate != 1 {
-				t.Errorf("estimate = %v, want 1 (normalizado)", e.Estimate)
+				t.Errorf("estimate = %v, want 1 (normalized)", e.Estimate)
 			}
 			if !e.EstimateDefaulted {
 				t.Error("EstimateDefaulted should be true")
 			}
 			if e.Start != monday || e.End != monday {
-				t.Errorf("range = %s→%s, want %s→%s (1 día = el lunes entero)", e.Start, e.End, monday, monday)
+				t.Errorf("range = %s→%s, want %s→%s (1 day = the whole Monday)", e.Start, e.End, monday, monday)
 			}
 		})
 	}
 }
 
-// Un estimate que no llega a medio minuto no consume NINGÚN día: no se reserva
-// nada, así que la entrada se queda sin día de inicio (FormatDate del zero value)
-// y el calendario no avanza. Fija ese suelo, que es lo que separa `restante > 0`
-// de `restante >= 0`.
+// An estimate below half a minute consumes NO day at all: nothing is
+// reserved, so the entry keeps no start day (FormatDate of the zero value)
+// and the calendar does not advance. It pins that floor, which is what separates `remaining > 0`
+// from `remaining >= 0`.
 //
-// Antes el suelo eran 1e-9 DÍAS y la comparación era de coma flotante, así que el
-// borde era inalcanzable: ningún estimate cae exactamente en 1e-9. Ahora la
-// aritmética es en minutos enteros, y 0 es un valor de verdad.
-func TestBuildScheduleEstimateEnElSuelo(t *testing.T) {
+// Before, the floor was 1e-9 DAYS and the comparison was floating point, so the
+// edge was unreachable: no estimate lands exactly on 1e-9. Now the
+// arithmetic is in whole minutes, and 0 is a real value.
+func TestBuildScheduleEstimateAtTheFloor(t *testing.T) {
 	s := BuildSchedule([]Task{task("@a", "todo", 1e-9)}, nil, mustDate(t, monday), 1)
 	e := s.Assignees[0].Entries[0]
 
 	if e.Estimate != 1e-9 {
-		t.Errorf("estimate = %v, want 1e-9 (no se sanea un estimate explícito)", e.Estimate)
+		t.Errorf("estimate = %v, want 1e-9 (an explicit estimate is not sanitized)", e.Estimate)
 	}
 	if e.EstimateDefaulted {
-		t.Error("1e-9 no es 0: no debería marcarse EstimateDefaulted")
+		t.Error("1e-9 is not 0: EstimateDefaulted should not be set")
 	}
 	if e.End != monday {
-		t.Errorf("end = %s, want %s (no consume día)", e.End, monday)
+		t.Errorf("end = %s, want %s (consumes no day)", e.End, monday)
 	}
 	if e.Start == monday {
-		t.Error("start = lunes: un estimate de epsilon no debería asignar día de inicio")
+		t.Error("start = Monday: an epsilon estimate should not assign a start day")
 	}
 }
 
@@ -232,8 +232,8 @@ func TestFilterScheduleKeepsRealDates(t *testing.T) {
 	}
 	full := BuildSchedule(tasks, nil, mustDate(t, monday), 1)
 
-	// Filtrar a "web" no debe recortar su fecha: sigue en el martes, aunque en
-	// la vista no se vea la tarea de "api" del lunes.
+	// Filtering to "web" must not trim its date: it stays on Tuesday, even though
+	// the "api" task from Monday is not visible in the view.
 	onlyWeb := FilterSchedule(full, func(t Task) bool { return t.ProjectName == "web" })
 	if len(onlyWeb.Assignees) != 1 || len(onlyWeb.Assignees[0].Entries) != 1 {
 		t.Fatalf("filtered assignees = %+v", onlyWeb.Assignees)
@@ -267,7 +267,7 @@ func TestFilterScheduleDropsEmptyAndFiltersUnassigned(t *testing.T) {
 }
 
 func TestWeekOfMonthLabel(t *testing.T) {
-	// t es el lunes que abre cada semana.
+	// t is the Monday that opens each week.
 	tests := map[string]string{
 		"2026-08-17": "3AUG",
 		"2026-08-24": "4AUG",
@@ -295,15 +295,15 @@ func TestFormatEstimate(t *testing.T) {
 
 func TestIsOffDay(t *testing.T) {
 	offdays := []OffDay{{Assignee: "@a", StartDate: monday, EndDate: "2026-09-15"}}
-	// Fin de semana siempre.
+	// Weekend, always.
 	if !IsOffDay(offdays, "@a", mustDate(t, "2026-09-19")) {
 		t.Error("Saturday should be off")
 	}
-	// Rango del assignee.
+	// The assignee's range.
 	if !IsOffDay(offdays, "@a", mustDate(t, "2026-09-15")) {
 		t.Error("off-day in range should be off")
 	}
-	// Otra persona no se ve afectada.
+	// Another person is unaffected.
 	if IsOffDay(offdays, "@b", mustDate(t, "2026-09-15")) {
 		t.Error("other assignee should work")
 	}
@@ -312,18 +312,18 @@ func TestIsOffDay(t *testing.T) {
 	}
 }
 
-// El borde del día lleno.
+// The full-day edge.
 //
-// El reparto empqueta tareas: dos de medio día caben en el mismo día, y al
-// llenarse la siguiente salta al laborable siguiente. Ese salto es un `libre == 0`
-// -- una comparación de igualdad, no un epsilon -- y se alcanza con cualquier
-// estimate que llene el día entero.
+// The split packs tasks: two half-day tasks fit in the same day, and once
+// it is full the next one jumps to the next working day. That jump is a `free == 0`
+// -- an equality comparison, not an epsilon -- and it is hit by any
+// estimate that fills the whole day.
 //
-// Estos dos casos son los lados opuestos del mismo borde, y son los que
-// separan `libre == 0` de `libre != 0`: si el salto no ocurriera, las dos tareas
-// de un día empezarían el mismo día.
-func TestBuildScheduleEmpaquetaYThenSalta(t *testing.T) {
-	t.Run("dos medias caben en el mismo día", func(t *testing.T) {
+// These two cases are the opposite sides of the same edge, and they are what
+// separate `free == 0` from `free != 0`: if the jump did not happen, both one-day
+// tasks would start on the same day.
+func TestBuildSchedulePacksThenJumps(t *testing.T) {
+	t.Run("two halves fit in the same day", func(t *testing.T) {
 		s := BuildSchedule([]Task{
 			task("@a", "todo", 0.5),
 			task("@a", "todo", 0.5),
@@ -331,15 +331,15 @@ func TestBuildScheduleEmpaquetaYThenSalta(t *testing.T) {
 
 		e := s.Assignees[0].Entries
 		if len(e) != 2 {
-			t.Fatalf("entradas = %d, want 2", len(e))
+			t.Fatalf("entries = %d, want 2", len(e))
 		}
 		if e[0].Start != monday || e[1].Start != monday {
-			t.Errorf("inicios = %s, %s; want %s los dos: medio día + medio día llena el día",
+			t.Errorf("starts = %s, %s; want %s both: half day + half day fills the day",
 				e[0].Start, e[1].Start, monday)
 		}
 	})
 
-	t.Run("al llenarse el día, la siguiente salta", func(t *testing.T) {
+	t.Run("when the day is full, the next one jumps", func(t *testing.T) {
 		s := BuildSchedule([]Task{
 			task("@a", "todo", 1.0),
 			task("@a", "todo", 1.0),
@@ -347,21 +347,21 @@ func TestBuildScheduleEmpaquetaYThenSalta(t *testing.T) {
 
 		e := s.Assignees[0].Entries
 		if len(e) != 2 {
-			t.Fatalf("entradas = %d, want 2", len(e))
+			t.Fatalf("entries = %d, want 2", len(e))
 		}
 		if e[0].Start != monday {
-			t.Errorf("la primera empieza el %s, want %s", e[0].Start, monday)
+			t.Errorf("the first starts on %s, want %s", e[0].Start, monday)
 		}
 		if e[1].Start == monday {
-			t.Errorf("la segunda también empieza el %s: el día ya estaba lleno y tenía que saltar",
+			t.Errorf("the second also starts on %s: the day was already full and had to jump",
 				e[1].Start)
 		}
 		if e[1].Start != "2026-09-15" {
-			t.Errorf("la segunda empieza el %s, want 2026-09-15 (el martes)", e[1].Start)
+			t.Errorf("the second starts on %s, want 2026-09-15 (Tuesday)", e[1].Start)
 		}
 	})
 
-	t.Run("tres medias no caben en un día", func(t *testing.T) {
+	t.Run("three halves do not fit in one day", func(t *testing.T) {
 		s := BuildSchedule([]Task{
 			task("@a", "todo", 0.5),
 			task("@a", "todo", 0.5),
@@ -370,101 +370,101 @@ func TestBuildScheduleEmpaquetaYThenSalta(t *testing.T) {
 		}, nil, mustDate(t, monday), 1)
 
 		e := s.Assignees[0].Entries
-		// Dos medias llenan el día; la tercera ya no cabe y salta. Es el mismo
-		// borde por el otro lado del relleno.
+		// Two halves fill the day; the third no longer fits and jumps. It is the
+		// same edge from the other side of the fill.
 		if e[0].Start != monday || e[1].Start != monday {
-			t.Errorf("inicios = %s, %s; want %s los dos", e[0].Start, e[1].Start, monday)
+			t.Errorf("starts = %s, %s; want %s both", e[0].Start, e[1].Start, monday)
 		}
 		for i := 2; i < len(e); i++ {
 			if e[i].Start == monday {
-				t.Errorf("la tarea %d empieza el %s: el día ya estaba lleno", i, e[i].Start)
+				t.Errorf("task %d starts on %s: the day was already full", i, e[i].Start)
 			}
 		}
 		if e[2].Start != "2026-09-15" {
-			t.Errorf("la tercera empieza el %s, want 2026-09-15", e[2].Start)
+			t.Errorf("the third starts on %s, want 2026-09-15", e[2].Start)
 		}
 	})
 }
 
-// El suelo en cero del estimate: por debajo de medio minuto no se pinta barra,
-// pero la tarea SIGUE en el calendario y el resto de la cola no se descuadra.
-func TestBuildScheduleSueloRedondeadoNoDescolocaLaCola(t *testing.T) {
+// The zero floor of the estimate: below half a minute no bar is painted,
+// but the task STILL is on the calendar and the rest of the queue does not go out of sync.
+func TestBuildScheduleRoundedFloorDoesNotShiftTheQueue(t *testing.T) {
 	s := BuildSchedule([]Task{
-		task("@a", "todo", 0.0001), // se redondea a 0 minutos
+		task("@a", "todo", 0.0001), // rounds to 0 minutes
 		task("@a", "todo", 1.0),
 	}, nil, mustDate(t, monday), 1)
 
 	e := s.Assignees[0].Entries
 	if len(e) != 2 {
-		t.Fatalf("entradas = %d, want 2", len(e))
+		t.Fatalf("entries = %d, want 2", len(e))
 	}
 	if e[0].Start == monday {
-		t.Error("la tarea de 0 minutos tiene día de inicio: no debería pintar barra")
+		t.Error("the 0-minute task has a start day: it should not paint a bar")
 	}
-	// Y la siguiente sigue en el lunes: la tarea de 0 minutos no ha gastado día.
+	// And the next one stays on Monday: the 0-minute task did not consume a day.
 	if e[1].Start != monday {
-		t.Errorf("la segunda empieza el %s, want %s: una tarea de 0 minutos no consume día",
+		t.Errorf("the second starts on %s, want %s: a 0-minute task consumes no day",
 			e[1].Start, monday)
 	}
 }
 
-// minutosDe es la función pura del refactor, y su redondeo es una decisión con
-// consecuencias visibles: por debajo de medio minuto no hay barra.
-func TestMinutosDeRedondeaAlMinuto(t *testing.T) {
-	casos := []struct {
+// estimateMinutes is the pure function of the refactor, and its rounding is a decision
+// with visible consequences: below half a minute there is no bar.
+func TestEstimateMinutesRoundsToTheMinute(t *testing.T) {
+	cases := []struct {
 		est  float64
 		want int
 	}{
 		{0, 0},
 		{0.0001, 0},
-		{1.0 / (3 * minutosPorDia), 0}, // un tercio de minuto, se redondea a 0
-		{1.0 / (2 * minutosPorDia), 1}, // medio minuto: round() va hacia arriba
+		{1.0 / (3 * minutesPerDay), 0}, // a third of a minute, rounds to 0
+		{1.0 / (2 * minutesPerDay), 1}, // half a minute: round() goes up
 		{0.5, 720},
-		{1, minutosPorDia},
+		{1, minutesPerDay},
 		{1.5, 2160},
-		{-1, -minutosPorDia},
+		{-1, -minutesPerDay},
 	}
-	for _, c := range casos {
-		if got := minutosDe(c.est); got != c.want {
-			t.Errorf("minutosDe(%v) = %d, want %d", c.est, got, c.want)
+	for _, c := range cases {
+		if got := estimateMinutes(c.est); got != c.want {
+			t.Errorf("estimateMinutes(%v) = %d, want %d", c.est, got, c.want)
 		}
 	}
 }
 
-// divRound redondea al entero más cercano, y el redondeo tiene un borde: la
-// mitad exacta.
+// divRound rounds to the nearest integer, and the rounding has an edge: the
+// exact half.
 //
-// Es el número de DÍAS COMPLETOS de una estimación. La cuenta decide cuántos
-// días completos se consumen por el bucle y cuál es el resto, así que un
-// redondeo distinto da un reparto distinto -- y es un reparto que se ve en las
-// fechas del calendario, no en un detalle interno.
+// It is the number of FULL DAYS of an estimate. The count decides how many
+// full days are consumed by the loop and what the remainder is, so a
+// different rounding gives a different split -- and it is a split visible in the
+// calendar dates, not in an internal detail.
 //
-// Los tres casos del borde: por debajo de la mitad (redondea a 0), justo en la
-// mitad (redondea a 1, que es lo que hace el `+ b/2`), y por encima (1).
-func TestDivRoundEnLaFronteraDeLaMitad(t *testing.T) {
-	const dia = minutosPorDia
+// The three edge cases: below the half (rounds to 0), exactly at the
+// half (rounds to 1, which is what `+ b/2` does), and above (1).
+func TestDivRoundAtTheHalfBoundary(t *testing.T) {
+	const day = minutesPerDay
 
-	casos := []struct {
-		nombre string
-		a, b   int
-		want   int
+	cases := []struct {
+		name string
+		a, b int
+		want int
 	}{
-		{"cero", 0, dia, 0},
-		{"muy por debajo de media jornada", 1, dia, 0},
-		{"casi media jornada", dia/2 - 1, dia, 0},
-		{"JUSTO media jornada", dia / 2, dia, 1},
-		{"casi una jornada", dia - 1, dia, 1},
-		{"una jornada", dia, dia, 1},
-		{"una jornada y un minuto", dia + 1, dia, 1},
-		{"justo una y media", dia + dia/2, dia, 2},
-		{"dos jornadas", 2 * dia, dia, 2},
+		{"zero", 0, day, 0},
+		{"well below half a workday", 1, day, 0},
+		{"almost half a workday", day/2 - 1, day, 0},
+		{"EXACTLY half a workday", day / 2, day, 1},
+		{"almost one workday", day - 1, day, 1},
+		{"one workday", day, day, 1},
+		{"one workday and one minute", day + 1, day, 1},
+		{"exactly one and a half", day + day/2, day, 2},
+		{"two workdays", 2 * day, day, 2},
 
-		{"media jornada exacta, en días", 0, 1, 0},
-		{"tres días y medio", 3*dia + dia/2, dia, 4},
+		{"exact half workday, in days", 0, 1, 0},
+		{"three and a half days", 3*day + day/2, day, 4},
 	}
 
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
 			if got := divRound(c.a, c.b); got != c.want {
 				t.Errorf("divRound(%d, %d) = %d, want %d", c.a, c.b, got, c.want)
 			}
@@ -472,79 +472,79 @@ func TestDivRoundEnLaFronteraDeLaMitad(t *testing.T) {
 	}
 }
 
-// El mismo borde, visto a través del calendario -- y en la tarea SIGUIENTE,
-// que es donde el redondeo se nota de verdad.
+// The same edge, seen through the calendar -- and in the NEXT task,
+// which is where the rounding really shows.
 //
-// El resto que deja un reparto es la capacidad que hereda la tarea siguiente. Un
-// redondeo que ceque de más deja la tarea siguiente con más sitio del que
-// corresponde, y entonces empieza un día antes. Es la diferencia entre el
-// redondeo correcto y uno que trunque, y se ve en las dos fechas.
-func TestElRedondeoSeVeEnLaTareaSiguiente(t *testing.T) {
-	// Dos y media jornadas, y luego una jornada entera.
+// The remainder a split leaves is the capacity the next task inherits. A
+// rounding that leaves too much behind gives the next task more room than it
+// deserves, and then it starts a day earlier. It is the difference between
+// correct rounding and one that truncates, and it shows in both dates.
+func TestRoundingShowsInTheNextTask(t *testing.T) {
+	// Two and a half workdays, and then a whole workday.
 	//
-	// Con el redondeo a entero más cercano: 2,5 jornadas son 2 días completos más
-	// media jornada de resto. La siguiente tarea hereda esa media jornada, no le
-	// cabe entera, y tiene que pasar al día siguiente.
+	// With rounding to the nearest integer: 2.5 workdays are 2 full days plus
+	// half a workday left over. The next task inherits that half workday, it does not
+	// fit as a whole, and has to move to the next day.
 	//
-	// Con un redondeo que trunque: los 2,5 jornadas son 2 días completos y el
-	// medio día que sobra no se descuenta. La siguiente tarea hereda un día entero
-	// libre, le cabe, y empieza el MISMO día.
-	casos := []struct {
-		nombre         string
-		primera        float64
-		segunda        float64
-		wantSegundaIni string
-		wantSegundaFin string
+	// With a truncating rounding: the 2.5 workdays are 2 full days and the
+	// leftover half day is not discounted. The next task inherits a whole free
+	// day, it fits, and starts the SAME day.
+	cases := []struct {
+		name            string
+		first           float64
+		second          float64
+		wantSecondStart string
+		wantSecondEnd   string
 	}{
-		{"2,5 jornadas y luego 1", 2.5, 1.0, "2026-09-16", "2026-09-17"},
-		{"3,5 jornadas y luego 1", 3.5, 1.0, "2026-09-17", "2026-09-18"},
-		{"2,5 jornadas y luego media", 2.5, 0.5, "2026-09-16", "2026-09-16"},
-		{"1,5 jornadas y luego 1", 1.5, 1.0, "2026-09-15", "2026-09-16"},
+		{"2.5 workdays then 1", 2.5, 1.0, "2026-09-16", "2026-09-17"},
+		{"3.5 workdays then 1", 3.5, 1.0, "2026-09-17", "2026-09-18"},
+		{"2.5 workdays then half", 2.5, 0.5, "2026-09-16", "2026-09-16"},
+		{"1.5 workdays then 1", 1.5, 1.0, "2026-09-15", "2026-09-16"},
 	}
 
-	for _, c := range casos {
-		t.Run(c.nombre, func(t *testing.T) {
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
 			s := BuildSchedule([]Task{
-				task("@a", "todo", c.primera),
-				task("@a", "todo", c.segunda),
+				task("@a", "todo", c.first),
+				task("@a", "todo", c.second),
 			}, nil, mustDate(t, monday), 1)
 
 			e := s.Assignees[0].Entries
 			if len(e) != 2 {
-				t.Fatalf("entradas = %d, want 2", len(e))
+				t.Fatalf("entries = %d, want 2", len(e))
 			}
-			if e[1].Start != c.wantSegundaIni {
-				t.Errorf("la segunda empieza el %s, want %s (la primera acaba el %s)",
-					e[1].Start, c.wantSegundaIni, e[0].End)
+			if e[1].Start != c.wantSecondStart {
+				t.Errorf("the second starts on %s, want %s (the first ends on %s)",
+					e[1].Start, c.wantSecondStart, e[0].End)
 			}
-			if e[1].End != c.wantSegundaFin {
-				t.Errorf("la segunda acaba el %s, want %s", e[1].End, c.wantSegundaFin)
+			if e[1].End != c.wantSecondEnd {
+				t.Errorf("the second ends on %s, want %s", e[1].End, c.wantSecondEnd)
 			}
 		})
 	}
 
-	// El caso de la mitad exacta, que es el que separa "redondeo" de "trunco".
-	// 1,5 jornadas son 1 día completo más media jornada de resto, así que la
-	// siguiente hereda media jornada y cabe en el mismo día.
+	// The exact-half case, which is what separates "rounding" from "truncating".
+	// 1.5 workdays are 1 full day plus half a workday left over, so the
+	// next one inherits half a workday and fits on the same day.
 	//
-	// Si el redondeo truncase, los 1,5 serían un día entero sin resto, la
-	// siguiente heredaría un día entero, y las dos acabarían el mismo día en vez
-	// de repartirse lunes y martes. Es el caso donde el redondeo se ve.
+	// If the rounding truncated, the 1.5 would be a whole day with no remainder,
+	// the next would inherit a whole day, and both would end on the same day instead
+	// of splitting into Monday and Tuesday. It is the case where rounding shows.
 	s := BuildSchedule([]Task{
 		task("@a", "todo", 1.5),
 		task("@a", "todo", 0.5),
 	}, nil, mustDate(t, monday), 1)
 	e := s.Assignees[0].Entries
 	if len(e) != 2 {
-		t.Fatalf("entradas = %d, want 2", len(e))
+		t.Fatalf("entries = %d, want 2", len(e))
 	}
 	if e[0].Start != "2026-09-14" || e[0].End != "2026-09-15" {
-		t.Errorf("la primera es %s→%s, want lunes→martes", e[0].Start, e[0].End)
+		t.Errorf("the first is %s→%s, want Monday→Tuesday", e[0].Start, e[0].End)
 	}
-	// La segunda, media jornada, cabe en el resto del martes: mismo día que el fin
-	// de la primera.
+	// The second one, half a workday, fits in the rest of Tuesday: same day as the end
+	// of the first.
 	if e[1].Start != "2026-09-15" || e[1].End != "2026-09-15" {
-		t.Errorf("la segunda es %s→%s, want martes→martes: la media jornada libre "+
-			"tiene que caber en el mismo día que acaba la primera", e[1].Start, e[1].End)
+		t.Errorf("the second is %s→%s, want Tuesday→Tuesday: the free half workday "+
+			"has to fit in the same day the first ends", e[1].Start, e[1].End)
 	}
 }

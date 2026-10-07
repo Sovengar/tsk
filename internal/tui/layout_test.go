@@ -17,11 +17,11 @@ func TestVisibleRange(t *testing.T) {
 		wantStart int
 		wantEnd   int
 	}{
-		{name: "entra todo", cursor: 3, total: 5, size: 10, wantStart: 0, wantEnd: 5},
-		{name: "cursor al inicio", cursor: 0, total: 20, size: 5, wantStart: 0, wantEnd: 5},
-		{name: "cursor centrado", cursor: 10, total: 20, size: 5, wantStart: 8, wantEnd: 13},
-		{name: "cursor al final", cursor: 19, total: 20, size: 5, wantStart: 15, wantEnd: 20},
-		{name: "sin elementos", cursor: 0, total: 0, size: 5, wantStart: 0, wantEnd: 0},
+		{name: "everything fits", cursor: 3, total: 5, size: 10, wantStart: 0, wantEnd: 5},
+		{name: "cursor at the start", cursor: 0, total: 20, size: 5, wantStart: 0, wantEnd: 5},
+		{name: "cursor centered", cursor: 10, total: 20, size: 5, wantStart: 8, wantEnd: 13},
+		{name: "cursor at the end", cursor: 19, total: 20, size: 5, wantStart: 15, wantEnd: 20},
+		{name: "no items", cursor: 0, total: 0, size: 5, wantStart: 0, wantEnd: 0},
 	}
 
 	for _, tt := range tests {
@@ -35,17 +35,17 @@ func TestVisibleRange(t *testing.T) {
 	}
 }
 
-// TestVisibleRangeContainsCursor verifica el invariante: el rango siempre es
-// válido y el cursor siempre cae dentro.
+// TestVisibleRangeContainsCursor verifies the invariant: the range is always
+// valid and the cursor always falls inside.
 func TestVisibleRangeContainsCursor(t *testing.T) {
 	const total, size = 37, 6
 	for cursor := 0; cursor < total; cursor++ {
 		start, end := visibleRange(cursor, total, size)
 		if start < 0 || end > total || start >= end {
-			t.Fatalf("rango inválido (%d, %d) para cursor %d", start, end, cursor)
+			t.Fatalf("invalid range (%d, %d) for cursor %d", start, end, cursor)
 		}
 		if cursor < start || cursor >= end {
-			t.Fatalf("cursor %d fuera del rango (%d, %d)", cursor, start, end)
+			t.Fatalf("cursor %d outside the range (%d, %d)", cursor, start, end)
 		}
 	}
 }
@@ -58,8 +58,8 @@ func TestContentBudget(t *testing.T) {
 		keybinds int
 		want     int
 	}{
-		{name: "descuenta ambos", total: 30, preview: 8, keybinds: 4, want: 18},
-		{name: "aplica el piso mínimo", total: 10, preview: 8, keybinds: 4, want: minContentHeight},
+		{name: "discounts both", total: 30, preview: 8, keybinds: 4, want: 18},
+		{name: "applies the minimum floor", total: 10, preview: 8, keybinds: 4, want: minContentHeight},
 	}
 
 	for _, tt := range tests {
@@ -77,9 +77,9 @@ func TestJoinSections(t *testing.T) {
 		sections []string
 		want     string
 	}{
-		{name: "salta vacíos", sections: []string{"a", "", "b"}, want: "a\nb"},
-		{name: "todo vacío", sections: []string{"", ""}, want: ""},
-		{name: "sin vacíos", sections: []string{"a", "b"}, want: "a\nb"},
+		{name: "skips empties", sections: []string{"a", "", "b"}, want: "a\nb"},
+		{name: "all empty", sections: []string{"", ""}, want: ""},
+		{name: "without empties", sections: []string{"a", "b"}, want: "a\nb"},
 	}
 
 	for _, tt := range tests {
@@ -101,53 +101,53 @@ func TestLineCount(t *testing.T) {
 }
 
 func TestSingleLineCollapsesNewlines(t *testing.T) {
-	if got := singleLine("hola\nque tal"); got != "hola que tal" {
-		t.Errorf("singleLine = %q, want %q", got, "hola que tal")
+	if got := singleLine("hello\nhow are you"); got != "hello how are you" {
+		t.Errorf("singleLine = %q, want %q", got, "hello how are you")
 	}
 }
 
-// TestCellWidthIgnoresAnsi verifica que el relleno se mida en columnas de
-// pantalla y no en bytes: una celda con color mide igual que una sin color.
-// Este es el bug que desalineaba la tabla de la List.
+// TestCellWidthIgnoresAnsi verifies that padding is measured in screen
+// columns and not in bytes: a colored cell measures the same as a colorless one.
+// This is the bug that misaligned the List table.
 func TestCellWidthIgnoresAnsi(t *testing.T) {
 	styled := stylePriorityHigh.Render("●") + " H"
 
 	if got := ansi.StringWidth(cellWidth(styled, 10)); got != 10 {
-		t.Errorf("cellWidth → ancho %d, want 10", got)
+		t.Errorf("cellWidth → width %d, want 10", got)
 	}
 	if got := ansi.Strip(cellWidth(styled, 10)); !strings.HasPrefix(got, "● H") {
-		t.Errorf("cellWidth alteró el contenido: %q", got)
+		t.Errorf("cellWidth altered the content: %q", got)
 	}
 
-	// Premisa del bug: %-Ns de fmt cuenta bytes, así que la celda coloreada no
-	// llega a las 10 columnas y corre todo lo que viene después.
+	// The bug's premise: fmt's %-Ns counts bytes, so the colored cell does not
+	// reach 10 columns and shifts everything that comes after.
 	if got := ansi.StringWidth(fmt.Sprintf("%-10s", styled)); got != 3 {
-		t.Errorf("premisa inválida: %%-10s midió %d columnas, se esperaba 3", got)
+		t.Errorf("invalid premise: %%-10s measured %d columns, expected 3", got)
 	}
 }
 
 func TestCellWidthTruncates(t *testing.T) {
-	if got := cellWidth("una palabra larga", 8); got != "una pa.." {
-		t.Errorf("cellWidth = %q, want %q", got, "una pa..")
+	if got := cellWidth("a long word", 8); got != "a long.." {
+		t.Errorf("cellWidth = %q, want %q", got, "a long..")
 	}
 }
 
-// El ancho útil de un modal: el total menos los dos bordes. modalWidthFor deja
-// siempre margen, así que en uso real nunca llega a 1; el suelo cubre el total
-// que venga ya recortado por otro camino.
+// The usable width of a modal: the total minus the two borders. modalWidthFor always
+// leaves margin, so in real use it never reaches 1; the floor covers the total
+// that arrives already trimmed down another path.
 func TestModalInnerWidth(t *testing.T) {
 	tests := []struct {
 		name string
 		in   int
 		want int
 	}{
-		{"ancho de un modal", 58, 56},
-		{"modal ancho", 120, 118},
-		{"modal de tres", 3, 1},
-		{"suelo en 1", 2, 1},
-		{"uno más del suelo", 1, 1},
-		{"cero", 0, 1},
-		{"negativo", -10, 1},
+		{"modal width", 58, 56},
+		{"wide modal", 120, 118},
+		{"three-wide modal", 3, 1},
+		{"floor at 1", 2, 1},
+		{"one above the floor", 1, 1},
+		{"zero", 0, 1},
+		{"negative", -10, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -158,8 +158,8 @@ func TestModalInnerWidth(t *testing.T) {
 	}
 }
 
-// Nunca devuelve 0 ni negativo: un ancho de recorte en 0 o menos haría que
-// truncateLines no recorte nada, que es lo contrario de lo que se quiere.
+// It never returns 0 or negative: a truncate width of 0 or less would make
+// truncateLines truncate nothing, which is the opposite of what is wanted.
 func TestModalInnerWidthNeverZero(t *testing.T) {
 	for w := -50; w <= 200; w++ {
 		if got := modalInnerWidth(w); got < 1 {

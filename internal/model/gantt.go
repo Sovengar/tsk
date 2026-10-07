@@ -9,15 +9,15 @@ import (
 	"time"
 )
 
-// dateLayout es el formato canónico de fecha del Gantt (YYYY-MM-DD).
+// dateLayout is the canonical Gantt date format (YYYY-MM-DD).
 const dateLayout = "2006-01-02"
 
-// UnassignedAssignee es el valor de assignee que no se proyecta en el Gantt.
+// UnassignedAssignee is the assignee value that is not projected into the Gantt.
 const UnassignedAssignee = "unassigned"
 
-// OffDay es un día no laborable de una persona: vacaciones, feriado o
-// ausencia. El rango [StartDate, EndDate] es inclusivo en ambos extremos; un
-// solo día usa la misma fecha en ambos campos.
+// OffDay is a non-working day of a person: vacation, holiday or
+// absence. The [StartDate, EndDate] range is inclusive at both ends; a
+// single day uses the same date in both fields.
 type OffDay struct {
 	ID        int64  `json:"id"`
 	Assignee  string `json:"assignee"`
@@ -26,7 +26,7 @@ type OffDay struct {
 	Note      string `json:"note,omitempty"`
 }
 
-// ScheduleEntry es una tarea proyectada en el calendario.
+// ScheduleEntry is a task projected onto the calendar.
 type ScheduleEntry struct {
 	Task              Task    `json:"task"`
 	Start             string  `json:"start"`
@@ -35,38 +35,38 @@ type ScheduleEntry struct {
 	EstimateDefaulted bool    `json:"estimate_defaulted"`
 }
 
-// AssigneeSchedule es la cola secuencial proyectada de una persona.
+// AssigneeSchedule is the projected sequential queue of one person.
 type AssigneeSchedule struct {
 	Assignee string          `json:"assignee"`
 	Entries  []ScheduleEntry `json:"entries"`
 	End      string          `json:"end"`
 }
 
-// Schedule es la proyección completa: una cola por persona más las tareas sin
-// responsable (que no se pueden agendar).
+// Schedule is the full projection: one queue per person plus the tasks without
+// an assignee (which cannot be scheduled).
 type Schedule struct {
 	Start      string             `json:"start"`
 	Assignees  []AssigneeSchedule `json:"assignees"`
 	Unassigned []Task             `json:"unassigned"`
 }
 
-// ParseDate convierte "YYYY-MM-DD" a time.Time en UTC.
+// ParseDate converts "YYYY-MM-DD" to a time.Time in UTC.
 func ParseDate(s string) (time.Time, error) {
 	return time.ParseInLocation(dateLayout, s, time.UTC)
 }
 
-// FormatDate formatea un time.Time como "YYYY-MM-DD".
+// FormatDate formats a time.Time as "YYYY-MM-DD".
 func FormatDate(t time.Time) string {
 	return t.Format(dateLayout)
 }
 
-// IsUnassigned indica si una tarea no tiene responsable y por tanto no se agenda.
+// IsUnassigned tells whether a task has no assignee and therefore is not scheduled.
 func IsUnassigned(assignee string) bool {
 	return assignee == "" || assignee == UnassignedAssignee
 }
 
-// IsOffDay indica si day es no laborable para assignee: fin de semana o un
-// off-day registrado. Se usa para pintar el calendario, no para agendar.
+// IsOffDay tells whether day is a non-working day for assignee: a weekend or a
+// registered off-day. It is used to paint the calendar, not to schedule.
 func IsOffDay(offdays []OffDay, assignee string, day time.Time) bool {
 	day = truncateDay(day)
 	if wd := day.Weekday(); wd == time.Saturday || wd == time.Sunday {
@@ -75,8 +75,8 @@ func IsOffDay(offdays []OffDay, assignee string, day time.Time) bool {
 	return isOff(day, assignee, offRangesByAssignee(offdays))
 }
 
-// FormatEstimate da formato a un estimate en días: entero sin decimales
-// ("2d") y fracción con su valor exacto ("0.5d").
+// FormatEstimate formats an estimate in days: integer with no decimals
+// ("2d") and a fraction with its exact value ("0.5d").
 func FormatEstimate(v float64) string {
 	if v == float64(int64(v)) {
 		return strconv.FormatInt(int64(v), 10) + "d"
@@ -84,28 +84,28 @@ func FormatEstimate(v float64) string {
 	return strconv.FormatFloat(v, 'f', -1, 64) + "d"
 }
 
-// WeekOfMonthLabel etiqueta la semana que empieza en el lunes t por su número
-// dentro del mes pegado al mes en mayúsculas, por ejemplo "1SEP" o "3OCT". La
-// semana y el mes se determinan por el jueves de esa semana (la semana que
-// contiene el día 1 es la 1), así el mes queda alineado con donde realmente cae.
+// WeekOfMonthLabel labels the week starting on Monday t by its number
+// within the month, glued to the month in uppercase, e.g. "1SEP" or "3OCT". The
+// week and the month are determined by that week's Thursday (the week that
+// contains day 1 is week 1), so the month lines up with where it really falls.
 func WeekOfMonthLabel(t time.Time) string {
-	thu := t.AddDate(0, 0, 3) // lunes + 3 = jueves
+	thu := t.AddDate(0, 0, 3) // Monday + 3 = Thursday
 	return fmt.Sprintf("%d%s", (thu.Day()-1)/7+1, strings.ToUpper(thu.Format("Jan")))
 }
 
-// offRange es un rango de días no laborables ya parseado a time.Time.
+// offRange is a range of non-working days already parsed to time.Time.
 type offRange struct {
 	start, end time.Time
 }
 
-// BuildSchedule proyecta una cola secuencial por persona: cada persona hace
-// una tarea a la vez, en el orden en que llegan (prioridad → estado → id), y
-// consume días laborables (lunes a viernes, salvo sus off-days). No hay
-// dependencias entre tareas ni paralelismo dentro de una persona.
+// BuildSchedule projects a sequential queue per person: each person does
+// one task at a time, in the order they arrive (priority -> status -> id), and
+// consumes working days (Monday to Friday, except their off-days). There are
+// no dependencies between tasks and no parallelism within one person.
 //
-// Las tareas done/cancelled se ignoran; las tareas sin responsable (vacío o
-// "unassigned") se devuelven en Unassigned sin agendar. Una tarea sin estimate
-// usa defaultEstimate y queda marcada con EstimateDefaulted.
+// Done/cancelled tasks are ignored; tasks without an assignee (empty or
+// "unassigned") are returned in Unassigned without scheduling. A task with no estimate
+// uses defaultEstimate and is flagged with EstimateDefaulted.
 func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstimate float64) *Schedule {
 	if defaultEstimate <= 0 {
 		defaultEstimate = 1
@@ -134,10 +134,10 @@ func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstim
 	for _, assignee := range order {
 		s := AssigneeSchedule{Assignee: assignee}
 		cursor := nextWorkingDay(start, assignee, lookup)
-		// libre son los minutos sin ocupar del día que está en cursor. Cruza
-		// de una tarea a otra a propósito: dos tareas de medio día se empaquetan
-		// en el mismo día, que es justo de lo que va el gantt.
-		libre := minutosPorDia
+		// free is the unoccupied minutes of the day at the cursor. It carries
+		// over from one task to the next on purpose: two half-day tasks are packed
+		// into the same day, which is exactly what the gantt is about.
+		free := minutesPerDay
 
 		for _, t := range queues[assignee] {
 			est := t.Estimate
@@ -147,55 +147,55 @@ func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstim
 				def = true
 			}
 
-			// La aritmética va en MINUTOS, no en fracciones de día. Con coma
-			// flotante, "queda un día entero" y "no queda nada" sólo se
-			// distinguían comparando contra epsilon, y como ningún estimate
-			// caía nunca exactamente en epsilon esas dos comparaciones no las
-			// podía matar ningún test: eran la clase de línea que parece decidir
-			// algo y no decide. En enteros el mismo borde es un `== 0` de
-			// verdad, que se alcanza con cualquier estimate redondo y que un test
-			// sí alcanza por los dos lados.
+			// The arithmetic runs in MINUTES, not in day fractions. With floating
+			// point, "a whole day remains" and "nothing remains" could only be
+			// told apart by comparing against epsilon, and since no estimate
+			// ever landed exactly on epsilon, no test could kill those two
+			// comparisons: they were the kind of line that seems to decide
+			// something and decides nothing. In integers the same edge is a real
+			// `== 0`, hit by any round estimate and that a test
+			// does hit from both sides.
 			//
-			// El cambio no altera ningún resultado: 1440 minutos son un día, así
-			// que el reparto sale igual. Lo que cambia es que ahora se puede
-			// comprobar.
-			total := minutosDe(est)
+			// The change alters no result: 1440 minutes are one day, so
+			// the split comes out the same. What changes is that now it can be
+			// verified.
+			total := estimateMinutes(est)
 			var entryStart time.Time
 			if total > 0 {
-				// El salto por día lleno va ANTES de fijar el inicio: si el día
-				// que estaba en cursor ya lo consumió la tarea anterior, esta
-				// empieza en el siguiente laborable, no en uno ya lleno. Por eso
-				// está aquí y no dentro del bucle, que ya sólo avanza cuando le
-				// queda trabajo a media tarea.
-				if libre == 0 {
-					cursor = siguienteDia(cursor, assignee, lookup)
-					libre = minutosPorDia
+				// The jump for a full day happens BEFORE setting the start: if the day
+				// at the cursor was already consumed by the previous task, this one
+				// starts on the next working day, not on a full one. That is why
+				// it is here and not inside the loop, which only advances when
+				// there is work left for a half task.
+				if free == 0 {
+					cursor = nextDay(cursor, assignee, lookup)
+					free = minutesPerDay
 				}
 				entryStart = cursor
 
-				// El reparto es un `for range` sobre el número de DÍAS COMPLETOS,
-				// no un bucle que descuenta un saldo. La cuenta no depende de que
-				// el saldo llegue a cero, así que ninguna mutación de la condición
-				// puede dejarla dando vueltas: con `restante >= 0` el saldo se
-				// quedaba en cero, libre en cero, y siguienteDia avanzaba el cursor
-				// para siempre. Un `for range` sobre un entero que no se decrementa
-				// dentro no puede colgar.
+				// The split is a `for range` over the number of FULL DAYS,
+				// not a loop that decrements a balance. The count does not depend on
+				// the balance reaching zero, so no mutation of the condition
+				// can leave it spinning: with `remaining >= 0` the balance stayed
+				// at zero, free at zero, and nextDay advanced the cursor
+				// forever. A `for range` over an integer that does not decrement
+				// inside cannot hang.
 				//
-				// El resto del día se consume a mano, después de los días completos.
-				// Es lo que quedaba como última vuelta del bucle anterior, y queda
-				// aquí porque así el bucle no tiene salida: siempre se sale por el
-				// final.
-				resto := libre
-				for range divRound(total, minutosPorDia) {
-					consumo := min(resto, total)
-					resto -= consumo
-					total -= consumo
+				// The rest of the day is consumed by hand, after the full days.
+				// It was what remained as the last lap of the previous loop, and it stays
+				// here because that way the loop has no exit: you always leave through
+				// the end.
+				remaining := free
+				for range divRound(total, minutesPerDay) {
+					consumed := min(remaining, total)
+					remaining -= consumed
+					total -= consumed
 					if total > 0 {
-						cursor = siguienteDia(cursor, assignee, lookup)
-						resto = minutosPorDia
+						cursor = nextDay(cursor, assignee, lookup)
+						remaining = minutesPerDay
 					}
 				}
-				libre = resto
+				free = remaining
 			}
 
 			s.Entries = append(s.Entries, ScheduleEntry{
@@ -205,10 +205,10 @@ func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstim
 				Estimate:          est,
 				EstimateDefaulted: def,
 			})
-			// End del assignee = fin de su última entrada. Se asigna dentro
-			// del bucle en vez de con `if n := len(s.Entries); n > 0`: la
-			// cola nunca está vacía (todo assignee viene de >= 1 tarea), así
-			// que ese `> 0` era siempre cierto y su mutant no se distinguía.
+			// End of the assignee = end of their last entry. It is assigned inside
+			// the loop instead of with `if n := len(s.Entries); n > 0`: the
+			// queue is never empty (every assignee comes from >= 1 task), so
+			// that `> 0` was always true and its mutant was indistinguishable.
 			s.End = s.Entries[len(s.Entries)-1].End
 		}
 		sched.Assignees = append(sched.Assignees, s)
@@ -216,11 +216,11 @@ func BuildSchedule(tasks []Task, offdays []OffDay, start time.Time, defaultEstim
 	return sched
 }
 
-// FilterSchedule devuelve una copia de s con sólo las tareas que cumplen keep.
-// Es un filtro de VISTA: no recalcula fechas ni colas, así que una tarea oculta
-// sigue ocupando su lugar en la línea de tiempo de la persona (puede haber
-// huecos entre las tareas visibles). Las personas que quedan sin tareas se
-// descartan.
+// FilterSchedule returns a copy of s with only the tasks that satisfy keep.
+// It is a VIEW filter: it recalculates neither dates nor queues, so a hidden task
+// still holds its place in the person's timeline (there may be
+// gaps between the visible tasks). People left without tasks are
+// dropped.
 func FilterSchedule(s *Schedule, keep func(Task) bool) *Schedule {
 	out := &Schedule{Start: s.Start, Assignees: []AssigneeSchedule{}, Unassigned: []Task{}}
 	for _, a := range s.Assignees {
@@ -244,37 +244,37 @@ func FilterSchedule(s *Schedule, keep func(Task) bool) *Schedule {
 	return out
 }
 
-// nextWorkingDay avanza day hasta el primer día laborable para assignee:
-// sábado y domingo siempre son no laborables, más sus off-days.
-// minutosPorDia es la capacidad de un día laborable, en minutos.
-const minutosPorDia = 24 * 60
+// nextWorkingDay advances day to the first working day for assignee:
+// Saturday and Sunday are always non-working, plus their off-days.
+// minutesPerDay is the capacity of a working day, in minutes.
+const minutesPerDay = 24 * 60
 
-// divRound divide redondeando al entero más cercano. Se usa para el número de
-// días completos de una estimación: un estimate de medio día son 0 días y el resto
-// se consume aparte, y uno de un día y medio es 1 día completo más medio minuto.
+// divRound divides rounding to the nearest integer. It is used for the number of
+// full days of an estimate: a half-day estimate is 0 days and the rest
+// is consumed separately, and one of a day and a half is 1 full day plus half a minute.
 //
-// El divisor es siempre minutosPorDia, así que la guarda contra cero no hace
-// falta: con ella, el `b < 1` tenía un borde (b == 1) que ningún test alcanza, y
-// por eso su mutante era indistinguible. El divisor es un parámetro para que los
-// tests puedan pasar otros, y se documenta que en producción es siempre 1440.
+// The divisor is always minutesPerDay, so the zero guard is not
+// needed: with it, `b < 1` had an edge (b == 1) that no test reaches, and
+// that is why its mutant was indistinguishable. The divisor is a parameter so that
+// tests can pass others, and it is documented that in production it is always 1440.
 func divRound(a, b int) int {
 	return (a + b/2) / b
 }
 
-// minutosDe convierte una estimación en días a minutos, redondeando.
+// estimateMinutes converts an estimate in days to minutes, rounding.
 //
-// El redondeo es lo que hace el suelo noticeable: por debajo de medio minuto
-// -- y por debajo de cero -- no se reserva nada, y la entrada se queda sin día de
-// inicio, que es lo que el calendario usa para no pintar una barra que no
-// representa nada. Antes ese suelo era epsilon en días, y comparar coma flotante
-// contra epsilon no se puede probar por los dos lados.
-func minutosDe(est float64) int {
-	return int(math.Round(est * minutosPorDia))
+// The rounding is what makes the floor noticeable: below half a minute
+// -- and below zero -- nothing is reserved, and the entry keeps no start
+// day, which is what the calendar uses so as not to paint a bar that
+// represents nothing. Before, that floor was epsilon in days, and comparing floating
+// point against epsilon cannot be tested from both sides.
+func estimateMinutes(est float64) int {
+	return int(math.Round(est * minutesPerDay))
 }
 
-// siguienteDia avanza un día natural y lo pasa a laborable, saltando fines de
-// semana y días no laborables de esa persona.
-func siguienteDia(day time.Time, assignee string, lookup map[string][]offRange) time.Time {
+// nextDay advances one calendar day and turns it into a working one, skipping
+// weekends and that person's non-working days.
+func nextDay(day time.Time, assignee string, lookup map[string][]offRange) time.Time {
 	return nextWorkingDay(day.AddDate(0, 0, 1), assignee, lookup)
 }
 
@@ -288,7 +288,7 @@ func nextWorkingDay(day time.Time, assignee string, lookup map[string][]offRange
 	}
 }
 
-// isOff indica si day cae dentro de algún off-day de assignee.
+// isOff tells whether day falls within any off-day of assignee.
 func isOff(day time.Time, assignee string, lookup map[string][]offRange) bool {
 	for _, r := range lookup[assignee] {
 		if !day.Before(r.start) && !day.After(r.end) {
@@ -298,8 +298,8 @@ func isOff(day time.Time, assignee string, lookup map[string][]offRange) bool {
 	return false
 }
 
-// offRangesByAssignee agrupa los off-days por persona, ignorando rangos con
-// fechas inválidas.
+// offRangesByAssignee groups off-days per person, ignoring ranges with
+// invalid dates.
 func offRangesByAssignee(offdays []OffDay) map[string][]offRange {
 	m := map[string][]offRange{}
 	for _, o := range offdays {
@@ -319,8 +319,8 @@ func offRangesByAssignee(offdays []OffDay) map[string][]offRange {
 	return m
 }
 
-// truncateDay normaliza un time.Time a medianoche UTC conservando el día de
-// calendario local de entrada.
+// truncateDay normalizes a time.Time to UTC midnight while keeping the local
+// calendar day of the input.
 func truncateDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }

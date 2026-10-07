@@ -9,43 +9,43 @@ import (
 	"tsk/internal/model"
 )
 
-// El editor externo es la única parte del programa que depende de otro binario,
-// y todo lo que hace con él está detrás de tea.ExecProcess: un Cmd que devuelve
-// un execMsg que sólo el bucle de Bubbletea sabe ejecutar. Lo que se puede
-// comprobar sin terminal es la mitad que decide qué hacer con lo que el editor
-// dejó, y esa mitad es readEditedFile.
+// The external editor is the only part of the program that depends on another
+// binary, and everything it does with it is behind tea.ExecProcess: a Cmd that
+// returns an execMsg that only the Bubbletea loop knows how to run. What can be
+// checked without a terminal is the half that decides what to do with what the
+// editor left behind, and that half is readEditedFile.
 
 func TestReadEditedFile(t *testing.T) {
-	t.Run("el editor falló", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "borrado.md")
-		if err := os.WriteFile(path, []byte("contenido"), 0o600); err != nil {
+	t.Run("the editor failed", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "deleted.md")
+		if err := os.WriteFile(path, []byte("content"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 
-		got, err := readEditedFile(path, errAccionFallida)
-		if !errors.Is(err, errAccionFallida) {
-			t.Errorf("el error es %v, want el del proceso", err)
+		got, err := readEditedFile(path, errActionFailed)
+		if !errors.Is(err, errActionFailed) {
+			t.Errorf("the error is %v, want the process's", err)
 		}
 		if got != "" {
-			t.Errorf("el contenido es %q, want vacío con el editor fallido", got)
+			t.Errorf("the content is %q, want empty when the editor failed", got)
 		}
-		// El temporal se borra también al fallar: si no, cada edición fallida
-		// dejaría un fichero en /tmp.
+		// The temp file is deleted even on failure: otherwise every failed edit
+		// would leave a file in /tmp.
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Error("el temporal no se ha borrado tras un editor fallido")
+			t.Error("the temp file was not deleted after a failed editor")
 		}
 	})
 
-	t.Run("el fichero ya no está", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "nunca-existio.md")
+	t.Run("the file is gone", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "never-existed.md")
 
 		if _, err := readEditedFile(path, nil); err == nil {
-			t.Error("leer un temporal inexistente no ha fallado")
+			t.Error("reading a missing temp file did not fail")
 		}
 	})
 
-	t.Run("el editor no escribió nada", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "vacio.md")
+	t.Run("the editor wrote nothing", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "empty.md")
 		if err := os.WriteFile(path, nil, 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -55,70 +55,70 @@ func TestReadEditedFile(t *testing.T) {
 			t.Fatalf("readEditedFile: %v", err)
 		}
 		if got != "" {
-			t.Errorf("el contenido es %q, want vacío", got)
+			t.Errorf("the content is %q, want empty", got)
 		}
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Error("el temporal no se ha borrado")
+			t.Error("the temp file was not deleted")
 		}
 	})
 
-	t.Run("el editor escribió algo", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "lleno.md")
-		if err := os.WriteFile(path, []byte("hola\n\n"), 0o600); err != nil {
+	t.Run("the editor wrote something", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "full.md")
+		if err := os.WriteFile(path, []byte("hello\n\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 
-		// El recorte no es cosa de aquí: quien decide si el comentario va
-		// recortado es commentCmd, y el editor externo conserva los saltos.
+		// The truncation is not this place's business: who decides whether the
+		// comment is truncated is commentCmd, and the external editor keeps the breaks.
 		got, err := readEditedFile(path, nil)
 		if err != nil {
 			t.Fatalf("readEditedFile: %v", err)
 		}
-		if got != "hola\n\n" {
-			t.Errorf("el contenido es %q, want %q sin recortar", got, "hola\n\n")
+		if got != "hello\n\n" {
+			t.Errorf("the content is %q, want %q untrimmed", got, "hello\n\n")
 		}
 	})
 }
 
-// Si el directorio de temporales no existe, no hay fichero que editar: el
-// comando devuelve el error con el id de la tarea en vez de romperse. Es lo que
-// pasa con un TMPDIR mal configurado, y antes de estos tests nadie lo había
-// visto pasar.
+// If the temp directory does not exist, there is no file to edit: the
+// command returns the error with the task id instead of breaking. That is
+// what happens with a misconfigured TMPDIR, and before these tests nobody had
+// ever seen it happen.
 func TestExternalEditorWithoutATempDir(t *testing.T) {
-	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "no-existe"))
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "does-not-exist"))
 
-	t.Run("comentario", func(t *testing.T) {
+	t.Run("comment", func(t *testing.T) {
 		msg := mustMsg(t, commentCmd(7, "nvim"))
 		finished, ok := msg.(commentFinishedMsg)
 		if !ok {
-			t.Fatalf("el mensaje es %T, want commentFinishedMsg", msg)
+			t.Fatalf("the message is %T, want commentFinishedMsg", msg)
 		}
 		if finished.err == nil {
-			t.Error("sin directorio de temporales no ha habido error")
+			t.Error("without a temp directory there was no error")
 		}
 		if finished.taskID != 7 {
-			t.Errorf("el mensaje lleva taskID %d, want 7 para que la UI sepa de qué tarea es", finished.taskID)
+			t.Errorf("the message carries taskID %d, want 7 so the UI knows which task it is", finished.taskID)
 		}
 	})
 
-	t.Run("editor de tarea", func(t *testing.T) {
+	t.Run("task editor", func(t *testing.T) {
 		msg := mustMsg(t, editTaskCmd(model.Task{ID: 9, Title: "t"}, "nvim"))
 		finished, ok := msg.(editorFinishedMsg)
 		if !ok {
-			t.Fatalf("el mensaje es %T, want editorFinishedMsg", msg)
+			t.Fatalf("the message is %T, want editorFinishedMsg", msg)
 		}
 		if finished.err == nil {
-			t.Error("sin directorio de temporales no ha habido error")
+			t.Error("without a temp directory there was no error")
 		}
 		if finished.taskID != 9 {
-			t.Errorf("el mensaje lleva taskID %d, want 9", finished.taskID)
+			t.Errorf("the message carries taskID %d, want 9", finished.taskID)
 		}
 	})
 }
 
-// Con la base cerrada, las tres operaciones de comentarios fallan y el mensaje
-// que sale es el de "recargado sin comentarios", no un panic. Lo importante es
-// que el detalle se queda usable y no con un índice de selección imposible.
+// With the DB closed, the three comment operations fail and the message that
+// comes out is the "reloaded without comments" one, not a panic. The important
+// thing is that the detail stays usable and not with an impossible selection index.
 func TestCommentCommandsWithAClosedDB(t *testing.T) {
 	m := newDetailModel(t, 2)
 	taskID := m.detailTask.ID
@@ -126,45 +126,45 @@ func TestCommentCommandsWithAClosedDB(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	t.Run("cargar", func(t *testing.T) {
+	t.Run("load", func(t *testing.T) {
 		msg := mustMsg(t, m.loadCommentsCmd(taskID))
 		loaded, ok := msg.(commentsLoadedMsg)
 		if !ok {
-			t.Fatalf("el mensaje es %T, want commentsLoadedMsg", msg)
+			t.Fatalf("the message is %T, want commentsLoadedMsg", msg)
 		}
 		if len(loaded.comments) != 0 || loaded.selectIdx != -1 {
-			t.Errorf("con la base cerrada han salido %d comentarios y sel=%d, want 0 y -1",
+			t.Errorf("with the DB closed there were %d comments and sel=%d, want 0 and -1",
 				len(loaded.comments), loaded.selectIdx)
 		}
 	})
 
-	t.Run("añadir", func(t *testing.T) {
-		msg := mustMsg(t, m.addCommentCmd(taskID, "nuevo"))
+	t.Run("add", func(t *testing.T) {
+		msg := mustMsg(t, m.addCommentCmd(taskID, "new"))
 		loaded := msg.(commentsLoadedMsg)
 		if len(loaded.comments) != 0 || loaded.selectIdx != -1 {
-			t.Errorf("con la base cerrada han salido %d comentarios y sel=%d, want 0 y -1",
+			t.Errorf("with the DB closed there were %d comments and sel=%d, want 0 and -1",
 				len(loaded.comments), loaded.selectIdx)
 		}
 	})
 
-	t.Run("borrar", func(t *testing.T) {
+	t.Run("delete", func(t *testing.T) {
 		msg := mustMsg(t, m.deleteCommentCmd(taskID, 1, 2))
 		loaded := msg.(commentsLoadedMsg)
 		if len(loaded.comments) != 0 {
-			t.Errorf("con la base cerrada han salido %d comentarios, want 0", len(loaded.comments))
+			t.Errorf("with the DB closed there were %d comments, want 0", len(loaded.comments))
 		}
-		// El borrado fallido conserva la selección para que el usuario vea qué
-		//评论 sigue ahí; el éxito la deja en -1.
+		// A failed delete keeps the selection so the user can see which
+		// comment is still there; success leaves it at -1.
 		if loaded.selectIdx != 2 {
-			t.Errorf("selectIdx = %d, want 2 (mantener la selección al fallar el borrado)",
+			t.Errorf("selectIdx = %d, want 2 (keep the selection when the delete fails)",
 				loaded.selectIdx)
 		}
 	})
 }
 
-// El guardado del editor externo reescribe cinco campos de golpe. Si la base
-// falla a mitad, el modelo tiene que quedarse como estaba en vez de mostrar una
-// tarea a medio guardar.
+// The external editor's save rewrites five fields at once. If the DB
+// fails halfway, the model has to stay as it was instead of showing a
+// half-saved task.
 func TestUpdateTaskFromEditWithAClosedDB(t *testing.T) {
 	m := newTestModel(t)
 	id := m.tasks[0].ID
@@ -172,64 +172,64 @@ func TestUpdateTaskFromEditWithAClosedDB(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	if msg := m.updateTaskFromEdit(id, "Title: otro\nStatus: todo\n")(); msg != nil {
-		t.Errorf("un guardado fallido ha devuelto %T, want nil", msg)
+	if msg := m.updateTaskFromEdit(id, "Title: other\nStatus: todo\n")(); msg != nil {
+		t.Errorf("a failed save returned %T, want nil", msg)
 	}
 }
 
-// Ni la tarea seleccionada ni el proyecto actual existen cuando el filtro no
-// deja nada: abrir el editor o el alta entonces no puede hacer nada.
+// Neither the selected task nor the current project exist when the filter
+// leaves nothing: opening the editor or the form then cannot do anything.
 func TestExternalEditorNeedsASelectedTask(t *testing.T) {
 	m := newTestModel(t)
 	m.filteredT = nil
 	m.tasks = nil
 
 	if cmd := m.editSelectedTask(); cmd != nil {
-		t.Error("sin tarea seleccionada el editor externo se ha lanzado igualmente")
+		t.Error("with no task selected the external editor was launched anyway")
 	}
 }
 
 func TestNewTaskNeedsACurrentProject(t *testing.T) {
-	// El filtro de proyecto sólo cuenta en lista y kanban; en el dashboard, sin
-	// proyectos, no hay proyecto actual y el alta no puede abrirse.
+	// The project filter only counts in List and Kanban; in the Dashboard, with
+	// no projects, there is no current project and the form cannot be opened.
 	m := newTestModel(t)
 	m.currentView = viewDashboard
 	m.filterProject = ""
 	m.projects = nil
 
 	if cmd := m.newTask(); cmd != nil {
-		t.Error("sin proyecto actual el alta se ha lanzado igualmente")
+		t.Error("with no current project the form was launched anyway")
 	}
 	if m.newTaskOpen {
-		t.Error("el alta se ha abierto sin proyecto")
+		t.Error("the form opened without a project")
 	}
 }
 
-// El comando del editor externo es lo que se indexa al componer el exec.Command,
-// así que un comando vacío haría panear. La configuración por defecto trae
-// "nvim"; una config con el campo vacío es posible y es el caso que esto cubre.
+// The external editor's command is what gets indexed when composing the
+// exec.Command, so an empty command would panic. The default config brings
+// "nvim"; a config with the field empty is possible and that is the case this covers.
 func TestEditorCommandFallsBackWhenUnset(t *testing.T) {
 	if got := editorCommand(""); got != "nvim" {
 		t.Errorf("editorCommand(%q) = %q, want nvim", "", got)
 	}
 	if got := editorCommand("hx"); got != "hx" {
-		t.Errorf("editorCommand(%q) = %q, want el comando de la config", "hx", got)
+		t.Errorf("editorCommand(%q) = %q, want the config command", "hx", got)
 	}
 }
 
-// Un editor externo que devuelve un fichero ilegible no deja la tarea en un
-// estado intermedio: se descarta el contenido y el modelo sigue como estaba.
+// An external editor that returns an unreadable file does not leave the task
+// in an intermediate state: the content is discarded and the model stays as it was.
 func TestEditorFinishedWithUnparseableContent(t *testing.T) {
 	m := newTestModel(t)
 	id := m.tasks[0].ID
-	antes := m.tasks[0].Title
+	before := m.tasks[0].Title
 
-	siguiente, _ := updateMsg(t, m, editorFinishedMsg{taskID: id, file: "esto no es el formato"})
-	tarea := taskByTitle(t, siguiente, antes)
-	if tarea == nil {
-		t.Fatalf("la tarea %q ha desaparecido tras un editor con basura", antes)
+	next, _ := updateMsg(t, m, editorFinishedMsg{taskID: id, file: "this is not the format"})
+	task := taskByTitle(t, next, before)
+	if task == nil {
+		t.Fatalf("the task %q disappeared after an editor with garbage", before)
 	}
-	if tarea.Title != antes {
-		t.Errorf("el título es %q, want %q", tarea.Title, antes)
+	if task.Title != before {
+		t.Errorf("the title is %q, want %q", task.Title, before)
 	}
 }

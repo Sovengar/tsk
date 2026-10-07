@@ -10,20 +10,20 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// DB envuelve la conexión SQLite con helpers.
+// DB wraps the SQLite connection with helpers.
 type DB struct {
 	conn *sql.DB
 }
 
-// Open abre la base de datos en la ruta dada, habilita WAL y ejecuta
-// las migraciones pendientes.
+// Open opens the database at the given path, enables WAL and runs
+// the pending migrations.
 func Open(path string) (*DB, error) {
 	if path == ":memory:" {
-		// El error de sql.Open se descarta a propósito, no por descuido: este
-		// driver no implementa driver.DriverContext, así que sql.Open sólo puede
-		// fallar con un driver no registrado, que no es el caso. El DSN se
-		// valida en la primera conexión, y esa es la que hace migrate(), que sí
-		// devuelve error.
+		// The sql.Open error is discarded on purpose, not by oversight: this
+		// driver does not implement driver.DriverContext, so sql.Open can only
+		// fail with an unregistered driver, which is not the case. The DSN is
+		// validated on the first connection, and that is the one migrate() makes, which
+		// does return an error.
 		conn, _ := sql.Open("sqlite", ":memory:?_pragma=foreign_keys(ON)")
 		db := &DB{conn: conn}
 		if err := db.migrate(); err != nil {
@@ -48,27 +48,27 @@ func Open(path string) (*DB, error) {
 	return db, nil
 }
 
-// OpenMemory abre una base de datos en memoria (para tests).
+// OpenMemory opens an in-memory database (for tests).
 func OpenMemory() (*DB, error) {
 	return Open(":memory:")
 }
 
-// NewTestDB crea una DB en memoria para tests.
+// NewTestDB creates an in-memory DB for tests.
 func NewTestDB() (*DB, error) {
 	return OpenMemory()
 }
 
-// Close cierra la conexión.
+// Close closes the connection.
 func (db *DB) Close() error {
 	return db.conn.Close()
 }
 
-// Conn devuelve la conexión sql.DB subyacente.
+// Conn returns the underlying sql.DB connection.
 func (db *DB) Conn() *sql.DB {
 	return db.conn
 }
 
-// DefaultPath devuelve la ruta por defecto de la base de datos: ~/.local/share/tsk/tsk.db
+// DefaultPath returns the default database path: ~/.local/share/tsk/tsk.db
 func DefaultPath() (string, error) {
 	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
 		return filepath.Join(x, "tsk", "tsk.db"), nil
@@ -80,21 +80,21 @@ func DefaultPath() (string, error) {
 	return filepath.Join(home, ".local", "share", "tsk", "tsk.db"), nil
 }
 
-// migrate ejecuta las migraciones pendientes.
+// migrate runs the pending migrations.
 func (db *DB) migrate() error {
-	// Crear tabla _meta si no existe
+	// Create _meta table if it does not exist
 	if _, err := db.conn.Exec(`CREATE TABLE IF NOT EXISTS _meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`); err != nil {
 		return err
 	}
 
-	// Obtener versión actual
+	// Get current version
 	var currentVersion int
 	row := db.conn.QueryRow(`SELECT value FROM _meta WHERE key = 'schema_version'`)
 	if err := row.Scan(&currentVersion); err != nil {
-		currentVersion = 0 // sin versión → primera migración
+		currentVersion = 0 // no version → first migration
 	}
 
-	// Ejecutar migraciones pendientes
+	// Run pending migrations
 	for _, m := range migrations {
 		v, _ := strconv.Atoi(m.version)
 		if v <= currentVersion {

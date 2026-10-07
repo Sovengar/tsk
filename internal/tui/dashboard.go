@@ -9,26 +9,26 @@ import (
 	"tsk/internal/tui/bordered"
 )
 
-// dashboardChrome es el alto de la caja del dashboard que no son columnas:
-// bordes superior e inferior, línea de proyectos y separador.
+// dashboardChrome is the height of the dashboard box that is not columns:
+// top and bottom borders, projects line and separator.
 const dashboardChrome = 4
 
-// dashboardTeamHeader son las líneas que ocupa la cabecera de Team Workload.
+// dashboardTeamHeader is the number of lines the Team Workload header takes.
 const dashboardTeamHeader = 3
 
-// dashStatusLabelWidth es lo que cabe de un estado en la columna del Overview.
-// El "%-14s" del formato reserva el hueco; recortar aquí evita que un nombre
-// largo desborde la barra que va detrás.
+// dashStatusLabelWidth is how much of a status fits in the Overview column.
+// The format's "%-14s" reserves the slot; truncating here keeps a long name
+// from overflowing the bar that goes behind it.
 const dashStatusLabelWidth = 14
 
-// dashboardActiveHeader son las líneas que ocupa la cabecera de Active.
+// dashboardActiveHeader is the number of lines the Active header takes.
 const dashboardActiveHeader = 2
 
-// renderDashboard renderiza la vista Dashboard dentro del alto disponible.
+// renderDashboard renders the Dashboard view within the available height.
 func (m *Model) renderDashboard(maxHeight int) string {
 	w := m.width
 
-	// Filas disponibles para las dos columnas.
+	// Rows available for the two columns.
 	colLines := maxHeight - dashboardChrome
 	colLines = max(colLines, 3)
 
@@ -75,15 +75,15 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	// Build status bars from project workflows
 	statusOrder := m.mergedWorkflow()
 	for _, status := range statusOrder {
-		// El recuento sale de un mapa de contadores, así que no puede ser
-		// negativo: la comparación con cero no tiene otro lado posible.
+		// The count comes out of a map of counters, so it cannot be
+		// negative: the comparison against zero has no other possible side.
 		count := byStatus[status]
 		if count == 0 {
 			continue
 		}
 		bar := strings.Repeat("░", count)
-		// min en vez de comparar longitudes: a exactamente 14 el recorte no hace
-		// nada, así que la comparación era otro mutante equivalente.
+		// min instead of comparing lengths: at exactly 14 the truncation does
+		// nothing, so the comparison was another equivalent mutant.
 		label := status[:min(len(status), dashStatusLabelWidth)]
 		overviewLines = append(overviewLines, fmt.Sprintf("  %-14s %d  %s", label, count, bar))
 	}
@@ -93,7 +93,7 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	// Team workload
 	assigneeTasks, assigneeActive := dashAssigneeCounts(m.tasks, selectedProject)
 
-	// Orden estable + tope de filas: el sobrante de alto se descarta por abajo.
+	// Stable order + row cap: the leftover height is discarded at the bottom.
 	assignees := make([]string, 0, len(assigneeTasks))
 	for assignee := range assigneeTasks {
 		assignees = append(assignees, assignee)
@@ -138,12 +138,12 @@ func (m *Model) renderDashboard(maxHeight int) string {
 	active := strings.Join(activeLines, "\n")
 
 	// Layout: two columns
-	innerW := w - 2 // ancho interior para el contenido dentro del borde
+	innerW := w - 2 // interior width for the content inside the border
 	leftW, rightW := dashColumnWidths(innerW)
 
-	// Recortar cada columna a su ancho antes de renderizarla: si una línea no
-	// entra, lipgloss la wrapéaría y la caja crecería más allá del alto
-	// calculado, empujando el KeybindsBar fuera de la pantalla.
+	// Truncate each column to its width before rendering it: if a line does
+	// not fit, lipgloss would wrap it and the box would grow beyond the
+	// calculated height, pushing the KeybindsBar off the screen.
 	leftContent := truncateLines(lipgloss.JoinVertical(lipgloss.Left, overview, team), leftW)
 	rightContent := truncateLines(active, rightW)
 
@@ -157,7 +157,7 @@ func (m *Model) renderDashboard(maxHeight int) string {
 		columns,
 	)
 
-	// Envolver con borde redondeado
+	// Wrap with a rounded border
 	borderFg := lipgloss.Color("8")
 	return bordered.RenderWithTitleEx(
 		lipgloss.RoundedBorder(),

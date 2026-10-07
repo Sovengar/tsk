@@ -7,18 +7,18 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// mustMsg ejecuta un cmd y devuelve su mensaje.
+// mustMsg runs a cmd and returns its message.
 //
-// Ejecuta en una goroutine con un techo de tiempo a propósito. Un cmd puede ser
-// un tea.Tick, que duerme varios segundos, y un test que ejecuta comandos a
-// ciegas se cuelga entero cuando un mutante cambia la rama que devuelve. Un
-// test colgado es la peor señal posible en mutation testing: el mutant se
-// reporta como TIMED OUT en vez de como muerto, y el gate lo cuenta como
-// "medición incompleta" en lugar de como un fallo real.
+// It runs in a goroutine with a time ceiling on purpose. A cmd can be
+// a tea.Tick, which sleeps for several seconds, and a test that runs commands
+// blindly hangs entirely when a mutant changes the branch it returns. A hung
+// test is the worst possible signal in mutation testing: the mutant gets
+// reported as TIMED OUT instead of dead, and the gate counts it as
+// an "incomplete measurement" instead of a real failure.
 func mustMsg(t *testing.T, cmd tea.Cmd) tea.Msg {
 	t.Helper()
 	if cmd == nil {
-		t.Fatal("cmd es nil")
+		t.Fatal("cmd is nil")
 	}
 
 	type result struct{ msg tea.Msg }
@@ -29,20 +29,20 @@ func mustMsg(t *testing.T, cmd tea.Cmd) tea.Msg {
 	case r := <-ch:
 		return r.msg
 	case <-time.After(250 * time.Millisecond):
-		t.Fatal("el comando no devolvió un mensaje a tiempo: parece un tea.Tick (duerme), no un cmd de E/S")
+		t.Fatal("the command did not return a message in time: it looks like a tea.Tick (it sleeps), not an I/O cmd")
 		return nil
 	}
 }
 
-// mustRun ejecuta un cmd y devuelve los mensajes que produce, aplanando los
-// tea.Batch. Los comandos que sólo duermen (un tea.Tick de un toast) se
-// saltan:.sleep es su trabajo, no un fallo, y el techo de tiempo los elimina
-// del camino en lugar de tumbar el test.
+// mustRun runs a cmd and returns the messages it produces, flattening the
+// tea.Batch. The commands that only sleep (a tea.Tick of a toast) are
+// skipped: sleeping is their job, not a failure, and the time ceiling removes them
+// from the path instead of killing the test.
 //
-// tea.Batch devuelve un único BatchMsg: no ejecuta lo que envuelve, sólo lo
-// agrupa para que el runtime de bubbletea lo reparta. Un test que usa mustMsg
-// sobre un batch obtiene el BatchMsg y el trabajo nunca se hace, así que las
-// assertions sobre la base de datos fallan sin que haya ningún bug detrás.
+// tea.Batch returns a single BatchMsg: it does not run what it wraps, it only
+// groups it so that the bubbletea runtime dispatches it. A test that uses mustMsg
+// on a batch gets the BatchMsg and the work never happens, so the
+// assertions on the database fail with no bug behind them.
 func mustRun(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	t.Helper()
 	if cmd == nil {
@@ -51,7 +51,7 @@ func mustRun(t *testing.T, cmd tea.Cmd) []tea.Msg {
 
 	msg := tryMsg(cmd)
 	if msg == nil {
-		return nil // dormía: un tick de aviso, no trabajo
+		return nil // it was sleeping: a toast tick, not work
 	}
 	if batch, ok := msg.(tea.BatchMsg); ok {
 		var out []tea.Msg
@@ -63,8 +63,8 @@ func mustRun(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	return []tea.Msg{msg}
 }
 
-// tryMsg ejecuta un cmd con el mismo techo que mustMsg pero devuelve nil en
-// vez de fallar cuando el comando no termina a tiempo.
+// tryMsg runs a cmd with the same ceiling as mustMsg but returns nil
+// instead of failing when the command does not finish in time.
 func tryMsg(cmd tea.Cmd) tea.Msg {
 	ch := make(chan tea.Msg, 1)
 	go func() { ch <- cmd() }()

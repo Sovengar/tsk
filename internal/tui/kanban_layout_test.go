@@ -6,9 +6,9 @@ import (
 	"testing"
 )
 
-// clampKanban mantiene el cursor dentro del board. Se prueba con el número de
-// tarjetas de cada columna como dato de entrada, sin construir el board: la
-// regla es "columna dentro, fila dentro de esa columna", y eso es lo que se fija.
+// clampKanban keeps the cursor inside the board. It is tested with the
+// number of cards of each column as input data, without building the board:
+// the rule is "column inside, row inside that column", and that is what is checked.
 func TestClampKanban(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -16,66 +16,66 @@ func TestClampKanban(t *testing.T) {
 		colLens          []int
 		wantCol, wantRow int
 	}{
-		{"sin columnas", 3, 5, nil, 0, 0},
+		{"no columns", 3, 5, nil, 0, 0},
 		{
-			name:    "cursor válido",
+			name:    "valid cursor",
 			colLens: []int{3, 2, 4}, col: 1, row: 1,
 			wantCol: 1, wantRow: 1,
 		},
 		{
-			name:    "columna negativa se sube a 0",
+			name:    "negative column is raised to 0",
 			colLens: []int{3, 2, 4}, col: -2, row: 1,
 			wantCol: 0, wantRow: 1,
 		},
 		{
-			name:    "columna más allá del final baja a la última",
+			name:    "column beyond the end drops to the last",
 			colLens: []int{3, 2, 4}, col: 9, row: 1,
 			wantCol: 2, wantRow: 1,
 		},
 		{
-			name:    "fila dentro",
+			name:    "row inside",
 			colLens: []int{5}, col: 0, row: 3,
 			wantCol: 0, wantRow: 3,
 		},
 		{
-			name:    "fila más allá del final de la columna se recorta",
+			name:    "row beyond the end of the column is clamped",
 			colLens: []int{2}, col: 0, row: 7,
 			wantCol: 0, wantRow: 1,
 		},
 		{
-			name:    "columna vacía deja la fila en 0",
+			name:    "empty column leaves the row at 0",
 			colLens: []int{3, 0, 2}, col: 1, row: 5,
 			wantCol: 1, wantRow: 0,
 		},
 		{
-			name:    "la columna vacía no borra la columna seleccionada",
+			name:    "the empty column does not clear the selected column",
 			colLens: []int{3, 0, 2}, col: 1, row: 0,
 			wantCol: 1, wantRow: 0,
 		},
 		{
-			name:    "una sola columna vacía",
+			name:    "a single empty column",
 			colLens: []int{0}, col: 0, row: 4,
 			wantCol: 0, wantRow: 0,
 		},
 		{
-			name:    "una sola columna con tarjetas",
+			name:    "a single column with cards",
 			colLens: []int{3}, col: 0, row: 99,
 			wantCol: 0, wantRow: 2,
 		},
 		{
-			// El caso que dispara el clamp: se filtró y la columna seleccionada
-			// perdió tarjetas, así que la fila ya no existe dentro de ella.
-			name:    "la columna perdió tarjetas al filtrar",
+			// The case that triggers the clamp: a filter was applied and the
+			// selected column lost cards, so the row no longer exists inside it.
+			name:    "the column lost cards when filtering",
 			colLens: []int{4, 1}, col: 1, row: 3,
 			wantCol: 1, wantRow: 0,
 		},
 		{
-			name:    "fila negativa se sube a 0",
+			name:    "negative row is raised to 0",
 			colLens: []int{3, 2}, col: 0, row: -5,
 			wantCol: 0, wantRow: 0,
 		},
 		{
-			name:    "todas las columnas vacías",
+			name:    "all columns empty",
 			colLens: []int{0, 0, 0}, col: 2, row: 2,
 			wantCol: 2, wantRow: 0,
 		},
@@ -91,8 +91,8 @@ func TestClampKanban(t *testing.T) {
 	}
 }
 
-// El resultado siempre está dentro del board: es la invariante de la que
-// depende selectedTask() para no indexar fuera de rango.
+// The result is always inside the board: it is the invariant that
+// selectedTask() depends on to not index out of range.
 func TestClampKanbanAlwaysInRange(t *testing.T) {
 	boards := [][]int{
 		nil, {}, {0}, {1}, {3, 0, 2}, {2, 2, 2}, {5, 1, 0, 4},
@@ -103,25 +103,25 @@ func TestClampKanbanAlwaysInRange(t *testing.T) {
 				gotCol, gotRow := clampKanban(col, row, colLens)
 				if len(colLens) == 0 {
 					if gotCol != 0 || gotRow != 0 {
-						t.Fatalf("clampKanban(%d,%d,%v) = (%d,%d), want (0,0) sin columnas",
+						t.Fatalf("clampKanban(%d,%d,%v) = (%d,%d), want (0,0) with no columns",
 							col, row, colLens, gotCol, gotRow)
 					}
 					continue
 				}
 				if gotCol < 0 || gotCol >= len(colLens) {
-					t.Fatalf("clampKanban(%d,%d,%v) dio columna %d, fuera de [0,%d)",
+					t.Fatalf("clampKanban(%d,%d,%v) gave column %d, outside [0,%d)",
 						col, row, colLens, gotCol, len(colLens))
 				}
 				n := colLens[gotCol]
 				if n == 0 {
 					if gotRow != 0 {
-						t.Fatalf("clampKanban(%d,%d,%v) dio fila %d en una columna vacía",
+						t.Fatalf("clampKanban(%d,%d,%v) gave row %d in an empty column",
 							col, row, colLens, gotRow)
 					}
 					continue
 				}
 				if gotRow < 0 || gotRow >= n {
-					t.Fatalf("clampKanban(%d,%d,%v) dio fila %d, fuera de [0,%d)",
+					t.Fatalf("clampKanban(%d,%d,%v) gave row %d, outside [0,%d)",
 						col, row, colLens, gotRow, n)
 				}
 			}
@@ -129,31 +129,31 @@ func TestClampKanbanAlwaysInRange(t *testing.T) {
 	}
 }
 
-// kanbanMaxCards: cuántas tarjetas enteras caben en el alto disponible.
+// kanbanMaxCards: how many whole cards fit in the available height.
 func TestKanbanMaxCards(t *testing.T) {
 	tests := []struct {
 		name   string
 		height int
 		want   int
 	}{
-		{"terminal grande", 40, (40 - kanbanBoardChrome - filterHeaderRows + 1) / kanbanCardRows},
-		{"justo para 1 tarjeta", kanbanBoardChrome + filterHeaderRows + kanbanCardRows, 1},
-		// El round-up cuenta la última aunque sólo entre su parte superior:
-		// con 5 filas de contenido entran 2 tarjetas y la segunda se recorta.
-		{"la última tarjeta se cuenta aunque se recorte", kanbanBoardChrome + filterHeaderRows + 2*kanbanCardRows - 1, 2},
-		{"para 2 tarjetas justas", kanbanBoardChrome + filterHeaderRows + 2*kanbanCardRows, 2},
-		{"terminal mediano", 20, (20 - kanbanBoardChrome - filterHeaderRows + 1) / kanbanCardRows},
-		{"altura mínima da 1", 0, 1},
-		{"altura negativa da 1", -5, 1},
-		// El redondeo: con 4 filas de contenido entra 1 tarjeta, no 2. Es el
-		// borde donde sumar una fila de más al presupuesto cambiaría el
-		// resultado, así que fija que las columnas son las que son.
-		{"con 4 filas de contenido entra 1 tarjeta", kanbanBoardChrome + filterHeaderRows + 4, 1},
-		{"con 5 filas de contenido entran 2 tarjetas", kanbanBoardChrome + filterHeaderRows + 5, 2},
-		{"con 2 filas de contenido entra 1", kanbanBoardChrome + filterHeaderRows + 2, 1},
-		{"con 1 fila de contenido entra 1", kanbanBoardChrome + filterHeaderRows + 1, 1},
-		{"con 0 filas de contenido entra 1", kanbanBoardChrome + filterHeaderRows, 1},
-		{"con contenido negativo entra 1", kanbanBoardChrome + filterHeaderRows - 1, 1},
+		{"large terminal", 40, (40 - kanbanBoardChrome - filterHeaderRows + 1) / kanbanCardRows},
+		{"just enough for 1 card", kanbanBoardChrome + filterHeaderRows + kanbanCardRows, 1},
+		// The round-up counts the last one even if only its top part fits:
+		// with 5 content rows 2 cards fit and the second one is truncated.
+		{"the last card is counted even if truncated", kanbanBoardChrome + filterHeaderRows + 2*kanbanCardRows - 1, 2},
+		{"for exactly 2 cards", kanbanBoardChrome + filterHeaderRows + 2*kanbanCardRows, 2},
+		{"medium terminal", 20, (20 - kanbanBoardChrome - filterHeaderRows + 1) / kanbanCardRows},
+		{"minimum height gives 1", 0, 1},
+		{"negative height gives 1", -5, 1},
+		// The rounding: with 4 content rows 1 card fits, not 2. It is the
+		// edge where adding one row too many to the budget would change the
+		// result, so it pins down that the columns are what they are.
+		{"with 4 content rows 1 card fits", kanbanBoardChrome + filterHeaderRows + 4, 1},
+		{"with 5 content rows 2 cards fit", kanbanBoardChrome + filterHeaderRows + 5, 2},
+		{"with 2 content rows 1 fits", kanbanBoardChrome + filterHeaderRows + 2, 1},
+		{"with 1 content row 1 fits", kanbanBoardChrome + filterHeaderRows + 1, 1},
+		{"with 0 content rows 1 fits", kanbanBoardChrome + filterHeaderRows, 1},
+		{"with negative content 1 fits", kanbanBoardChrome + filterHeaderRows - 1, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -164,7 +164,7 @@ func TestKanbanMaxCards(t *testing.T) {
 	}
 }
 
-// Nunca menos de 1: un tablero sin tarjetas visibles no es un tablero.
+// Never less than 1: a board with no visible cards is not a board.
 func TestKanbanMaxCardsNeverZero(t *testing.T) {
 	for h := -20; h <= 100; h++ {
 		if got := kanbanMaxCards(h); got < 1 {
@@ -173,21 +173,21 @@ func TestKanbanMaxCardsNeverZero(t *testing.T) {
 	}
 }
 
-// Más alto nunca da menos tarjetas.
+// Taller never gives fewer cards.
 func TestKanbanMaxCardsGrowsWithHeight(t *testing.T) {
 	prev := 0
 	for h := 0; h <= 80; h++ {
 		got := kanbanMaxCards(h)
 		if got < prev {
-			t.Fatalf("kanbanMaxCards(%d) = %d < %d del terminal anterior", h, got, prev)
+			t.Fatalf("kanbanMaxCards(%d) = %d < %d of the previous terminal", h, got, prev)
 		}
 		prev = got
 	}
 }
 
-// kanbanHeader: con tarjetas ocultas dice cuántas de cuántas; si caben todas,
-// sólo el total. El texto cambia de longitud, y ese ancho es el mínimo de la
-// columna, así que equivocarse descuadra el board entero.
+// kanbanHeader: with hidden cards it says how many of how many; if they all
+// fit, only the total. The text changes length, and that width is the
+// minimum of the column, so getting it wrong throws the whole board off.
 func TestKanbanHeader(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -195,11 +195,11 @@ func TestKanbanHeader(t *testing.T) {
 		shown, total int
 		want         string
 	}{
-		{"todo visible", "doing", 5, 5, "─ doing (5) "},
-		{"todo visible en cero", "todo", 0, 0, "─ todo (0) "},
-		{"con recorte", "doing", 3, 12, "─ doing (3/12) "},
-		{"recorte de una", "backlog", 1, 20, "─ backlog (1/20) "},
-		{"recorte de todo menos uno", "done", 9, 10, "─ done (9/10) "},
+		{"all visible", "doing", 5, 5, "─ doing (5) "},
+		{"all visible at zero", "todo", 0, 0, "─ todo (0) "},
+		{"truncated", "doing", 3, 12, "─ doing (3/12) "},
+		{"truncated by one", "backlog", 1, 20, "─ backlog (1/20) "},
+		{"all but one truncated", "done", 9, 10, "─ done (9/10) "},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -211,65 +211,65 @@ func TestKanbanHeader(t *testing.T) {
 	}
 }
 
-// shown > total no puede pasar por el visor, pero la función es total: cae en la
-// rama de "todo visible" en vez de inventar un porcentaje imposible.
+// shown > total cannot happen through the viewer, but the function is total:
+// it lands in the "everything visible" branch instead of inventing an impossible percentage.
 func TestKanbanHeaderShownAboveTotal(t *testing.T) {
 	got := kanbanHeader("doing", 12, 5)
 	want := fmt.Sprintf("─ %s (%d) ", "doing", 5)
 	if got != want {
-		t.Errorf("con shown > total = %q, want %q", got, want)
+		t.Errorf("with shown > total = %q, want %q", got, want)
 	}
 }
 
-// La rama del recorte es exactamente "no caben todas": en el borde shown == total
-// ya no cabe el porcentaje.
+// The truncation branch is exactly "they do not all fit": at the shown == total
+// edge the percentage no longer fits.
 func TestKanbanHeaderBoundary(t *testing.T) {
 	for total := 0; total <= 20; total++ {
 		at := kanbanHeader("s", total, total)
 		if strings.Contains(at, "/") {
-			t.Errorf("shown == total = %q, no debería llevar porcentaje", at)
+			t.Errorf("shown == total = %q, it should not carry a percentage", at)
 		}
 		below := kanbanHeader("s", total-1, total)
 		if total > 0 && !strings.Contains(below, "/") {
-			t.Errorf("shown = total-1 = %q, debería llevar porcentaje", below)
+			t.Errorf("shown = total-1 = %q, it should carry a percentage", below)
 		}
 	}
 }
 
-// kanbanColumnWidths reparte el sobrante en partes iguales y da las columnas
-// sobrantes a las primeras. Ya era pura; lo que faltaba eran los bordes.
+// kanbanColumnWidths spreads the remainder in equal parts and gives the
+// leftover columns to the first ones. It was already pure; what was missing were the borders.
 func TestKanbanColumnWidthsEdges(t *testing.T) {
 	tests := []struct {
 		name  string
 		mins  []int
 		avail int
 	}{
-		{"una sola columna", []int{12}, 40},
-		{"sobra exacto", []int{10, 10}, 22}, // 20 + gap 2 = 22, free 0
-		{"sobra de 1", []int{10, 10}, 23},   // free 1: una columna +1
-		{"sobra de 2", []int{10, 10}, 24},   // free 2: las dos +1
-		{"sobra de 3", []int{10, 10}, 25},   // free 3: 1 cada una +1 a la primera
-		{"mínimos negativos", []int{-5, -5}, 40},
-		{"sin espacio", []int{30, 30, 30}, 10},
-		{"avail negativo", []int{10, 10}, -50},
+		{"a single column", []int{12}, 40},
+		{"exact remainder", []int{10, 10}, 22}, // 20 + gap 2 = 22, free 0
+		{"remainder of 1", []int{10, 10}, 23},  // free 1: one column +1
+		{"remainder of 2", []int{10, 10}, 24},  // free 2: both +1
+		{"remainder of 3", []int{10, 10}, 25},  // free 3: 1 each +1 to the first
+		{"negative minimums", []int{-5, -5}, 40},
+		{"no space", []int{30, 30, 30}, 10},
+		{"negative avail", []int{10, 10}, -50},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			widths := kanbanColumnWidths(tt.mins, tt.avail)
 			if len(widths) != len(tt.mins) {
-				t.Fatalf("got %d columnas, want %d", len(widths), len(tt.mins))
+				t.Fatalf("got %d columns, want %d", len(widths), len(tt.mins))
 			}
 			for i, w := range widths {
 				if w < tt.mins[i] {
-					t.Errorf("columna %d: ancho %d menor al mínimo %d", i, w, tt.mins[i])
+					t.Errorf("column %d: width %d below the minimum %d", i, w, tt.mins[i])
 				}
 			}
 		})
 	}
 }
 
-// El reparto aprovecha todo el sobrante: el ancho total más los huecos es
-// exactamente el disponible, o los mínimos si no cabe.
+// The split uses up all the remainder: the total width plus the gaps is
+// exactly the available one, or the minimums if it does not fit.
 func TestKanbanColumnWidthsUsesAllSpace(t *testing.T) {
 	for _, mins := range [][]int{
 		{16, 12, 20, 15, 13},
@@ -289,29 +289,29 @@ func TestKanbanColumnWidthsUsesAllSpace(t *testing.T) {
 			total += kanbanGap * (len(widths) - 1)
 
 			if minsTotal+kanbanGap*(len(mins)-1) >= avail {
-				// No cabe: se respetan los mínimos y no se inventa espacio.
+				// It does not fit: the minimums are respected and no space is invented.
 				if total != minsTotal+kanbanGap*(len(mins)-1) {
-					t.Errorf("mins=%v avail=%d: sin espacio, el total debería ser %d y es %d",
+					t.Errorf("mins=%v avail=%d: no space, the total should be %d and is %d",
 						mins, avail, minsTotal+kanbanGap*(len(mins)-1), total)
 				}
 				continue
 			}
 			if total != avail {
-				t.Errorf("mins=%v avail=%d: el total es %d, want %d (queda o falta espacio)",
+				t.Errorf("mins=%v avail=%d: the total is %d, want %d (space left over or missing)",
 					mins, avail, total, avail)
 			}
 		}
 	}
 }
 
-// Las columnas difieren como mucho en 1: es lo que hace que el reparto sea
-// "repartido en partes iguales" y no arbitrario.
+// The columns differ by at most 1: that is what makes the split
+// "spread into equal parts" and not arbitrary.
 func TestKanbanColumnWidthsBalanced(t *testing.T) {
 	for _, mins := range [][]int{{16, 12, 20, 15, 13}, {10, 10}, {12, 12, 12}} {
 		for avail := 40; avail <= 200; avail++ {
 			widths := kanbanColumnWidths(mins, avail)
-			// Sin sobrante no hay nada que repartir: cada columna se queda con
-			// su mínimo, que puede ser muy desigual entre sí.
+			// With no remainder there is nothing to spread: each column keeps
+			// its minimum, which may be very unequal among them.
 			total := 0
 			for _, w := range widths {
 				total += w
@@ -325,7 +325,7 @@ func TestKanbanColumnWidthsBalanced(t *testing.T) {
 				maxW = max(maxW, w)
 			}
 			if maxW-minW > 1 {
-				t.Fatalf("mins=%v avail=%d: reparto desigual %v", mins, avail, widths)
+				t.Fatalf("mins=%v avail=%d: uneven split %v", mins, avail, widths)
 			}
 		}
 	}
@@ -333,9 +333,9 @@ func TestKanbanColumnWidthsBalanced(t *testing.T) {
 
 func TestKanbanColumnWidthsEmpty(t *testing.T) {
 	if got := kanbanColumnWidths(nil, 100); got != nil {
-		t.Errorf("got %v, want nil sin columnas", got)
+		t.Errorf("got %v, want nil with no columns", got)
 	}
 	if got := kanbanColumnWidths([]int{}, 100); len(got) != 0 {
-		t.Errorf("got %v, want vacío", got)
+		t.Errorf("got %v, want empty", got)
 	}
 }

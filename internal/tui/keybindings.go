@@ -2,13 +2,13 @@ package tui
 
 import "charm.land/bubbletea/v2"
 
-// keybind es un par tecla/descripción mostrado en la barra y en la ayuda.
+// keybind is a key/description pair shown in the bar and in the help.
 type keybind struct {
 	key  string
 	desc string
 }
 
-// viewKind es la vista activa.
+// viewKind is the active view.
 type viewKind int
 
 const (
@@ -32,15 +32,15 @@ func (v viewKind) String() string {
 	return "?"
 }
 
-// keybindsForView devuelve, en orden de prioridad, las teclas de una vista. Es
-// la única fuente de verdad para la KeybindsBar y el modal de ayuda.
+// keybindsForView returns, in priority order, the keys of a view. It is
+// the single source of truth for the KeybindsBar and the help modal.
 //
-// Las teclas comunes (1/2/3/4, hjkl, ?, q) van primero por ser las más
-// repetidas; después el resto por frecuencia de uso. La barra las reparte en
-// filas de keybindsPerRow, así que bastan 7 entradas para llenar una fila.
+// The common keys (1/2/3/4, hjkl, ?, q) come first for being the most
+// repeated; then the rest by frequency of use. The bar spreads them over
+// rows of keybindsPerRow, so 7 entries are enough to fill a row.
 func keybindsForView(v viewKind) []keybind {
-	// Comunes: aplican en casi cualquier vista, pero se listan dentro de cada
-	// una (no como fila "global") para poder omitirlas donde no aplican.
+	// Common: they apply in almost any view, but they are listed inside each
+	// one (not as a "global" row) so they can be omitted where they do not apply.
 	common := []keybind{
 		{"1/2/3/4", "List / Kanban / Gantt / Dash"},
 		{"hjkl", "arrows"},
@@ -96,8 +96,8 @@ func keybindsForView(v viewKind) []keybind {
 	return append(common, viewKeys...)
 }
 
-// handleGlobalKeys procesa teclas que funcionan en todas las vistas.
-// Devuelve true si la tecla fue manejada.
+// handleGlobalKeys processes keys that work in every view.
+// Returns true if the key was handled.
 func handleGlobalKeys(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	key := msg.String()
 
@@ -120,11 +120,11 @@ func handleGlobalKeys(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		m.currentView = viewDashboard
 		return m, nil, true
 	case "esc":
-		// La ayuda y el filtro abierto los cierra su propio modal, y el filtro
-		// activo lo limpia aquí. La rama que cerraba filterOpen estaba aquí por
-		// simetría con las otras dos, pero handleKey enruta al modal de filtro
-		// ANTES de las teclas globales, así que nunca llegaba con el filtro
-		// abierto: era código muerto.
+		// The help and the open filter close their own modal, and the active
+		// filter clears it here. The branch that closed filterOpen was here for
+		// symmetry with the other two, but handleKey routes to the filter modal
+		// BEFORE the global keys, so it never arrived with the filter
+		// open: it was dead code.
 		if m.helpOpen {
 			m.helpOpen = false
 			return m, nil, true

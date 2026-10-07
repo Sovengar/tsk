@@ -12,10 +12,10 @@ func TestDefaultsPageSize(t *testing.T) {
 	}
 }
 
-// TestLoadNumericDefaults cubre el triple contrato de los knobs numéricos que
-// Load sanea: 0 y negativos caen al default (límite exacto del `<= 0`, que un
-// `< 0` no distingue), y un valor positivo distinto del default se respeta
-// (si no, el saneo se aplicaría siempre).
+// TestLoadNumericDefaults covers the triple contract of the numeric knobs that
+// Load sanitizes: 0 and negatives fall back to the default (exact boundary of `<= 0`, which a
+// `< 0` does not distinguish), and a positive value different from the default is respected
+// (otherwise the sanitizing would always apply).
 func TestLoadNumericDefaults(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -23,10 +23,10 @@ func TestLoadNumericDefaults(t *testing.T) {
 		wantEst   float64
 		wantWeeks int
 	}{
-		{"valores válidos", "default_estimate_days = 3.5\ngantt_weeks = 12\n", 3.5, 12},
-		{"cero usa default", "default_estimate_days = 0\ngantt_weeks = 0\n", DefaultEstimateDays, DefaultGanttWeeks},
-		{"negativo usa default", "default_estimate_days = -2\ngantt_weeks = -1\n", DefaultEstimateDays, DefaultGanttWeeks},
-		{"sin fichero usa default", "", DefaultEstimateDays, DefaultGanttWeeks},
+		{"valid values", "default_estimate_days = 3.5\ngantt_weeks = 12\n", 3.5, 12},
+		{"zero uses default", "default_estimate_days = 0\ngantt_weeks = 0\n", DefaultEstimateDays, DefaultGanttWeeks},
+		{"negative uses default", "default_estimate_days = -2\ngantt_weeks = -1\n", DefaultEstimateDays, DefaultGanttWeeks},
+		{"no file uses default", "", DefaultEstimateDays, DefaultGanttWeeks},
 	}
 
 	for _, tt := range tests {
@@ -56,10 +56,10 @@ func TestLoadPageSize(t *testing.T) {
 		content string
 		want    int
 	}{
-		{"valor válido", "list_page_size = 25\n", 25},
-		{"cero usa default", "list_page_size = 0\n", DefaultPageSize},
-		{"negativo usa default", "list_page_size = -3\n", DefaultPageSize},
-		{"sin fichero usa default", "", DefaultPageSize},
+		{"valid value", "list_page_size = 25\n", 25},
+		{"zero uses default", "list_page_size = 0\n", DefaultPageSize},
+		{"negative uses default", "list_page_size = -3\n", DefaultPageSize},
+		{"no file uses default", "", DefaultPageSize},
 	}
 
 	for _, tt := range tests {

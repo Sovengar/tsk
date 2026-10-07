@@ -17,8 +17,8 @@ func hasOption(opts []string, want string) bool {
 	return false
 }
 
-// TestFilterTagOptionsAndMatch verifica que las tags en uso se ofrezcan como
-// opciones del filtro y que filtrar por tag recorte las tareas.
+// TestFilterTagOptionsAndMatch verifies that the tags in use are offered as
+// filter options and that filtering by tag trims the tasks.
 func TestFilterTagOptionsAndMatch(t *testing.T) {
 	m := newTestModel(t)
 	task := m.tasks[0]
@@ -30,34 +30,34 @@ func TestFilterTagOptionsAndMatch(t *testing.T) {
 	m.invalidateFilterCache()
 
 	if opts := m.filterFieldOptions(filterFieldTag); !hasOption(opts, "blocked") {
-		t.Fatalf("opciones de tag no incluyen blocked: %v", opts)
+		t.Fatalf("tag options do not include blocked: %v", opts)
 	}
 
 	m.filterApplySelection(filterFieldTag, "blocked")
 	filtered := m.filteredTasks()
 	if len(filtered) == 0 {
-		t.Fatal("filtrar por blocked no devolvió tareas")
+		t.Fatal("filtering by blocked returned no tasks")
 	}
 	for _, tk := range filtered {
 		if !model.HasTag(tk.Tags, "blocked") {
-			t.Errorf("tarea sin la tag pasó el filtro: %+v", tk)
+			t.Errorf("a task without the tag passed the filter: %+v", tk)
 		}
 	}
 
 	m.filterApplySelection(filterFieldTag, "all")
 	if m.filterTag != "" {
-		t.Errorf("filterTag = %q, want vacío tras all", m.filterTag)
+		t.Errorf("filterTag = %q, want empty after all", m.filterTag)
 	}
 }
 
-// TestEditParsesTags verifica que el editor externo persista las tags.
+// TestEditParsesTags verifies that the external editor persists the tags.
 func TestEditParsesTags(t *testing.T) {
 	m := newTestModel(t)
 	task := m.tasks[0]
 
 	content := "# T\n\nD\n\n---\nassignee: @bob\npriority: 1\nestimate: 2\ntags: Blocked, bug\n"
 	if cmd := m.updateTaskFromEdit(task.ID, content); cmd == nil {
-		t.Fatal("updateTaskFromEdit devolvió nil")
+		t.Fatal("updateTaskFromEdit returned nil")
 	} else {
 		mustMsg(t, cmd)
 	}
@@ -71,8 +71,8 @@ func TestEditParsesTags(t *testing.T) {
 	}
 }
 
-// TestKanbanColumnsScopedToProject verifica que al filtrar por un proyecto el
-// board use su workflow, no la unión de todos.
+// TestKanbanColumnsScopedToProject verifies that when filtering by a project the
+// board uses its workflow, not the union of all of them.
 func TestKanbanColumnsScopedToProject(t *testing.T) {
 	m := newTestModel(t)
 
@@ -88,22 +88,22 @@ func TestKanbanColumnsScopedToProject(t *testing.T) {
 	got := statuses()
 	for _, want := range []string{"todo", "doing", "done"} {
 		if !got[want] {
-			t.Errorf("con web falta la columna %q: %v", want, got)
+			t.Errorf("with web the column %q is missing: %v", want, got)
 		}
 	}
 	for _, absent := range []string{"backlog", "reviewing"} {
 		if got[absent] {
-			t.Errorf("con web no debería estar la columna %q: %v", absent, got)
+			t.Errorf("with web the column %q should not be there: %v", absent, got)
 		}
 	}
 
 	m.filterApplySelection(filterFieldProject, "all")
 	if !statuses()["backlog"] {
-		t.Errorf("en all projects debería volver la unión (backlog): %v", statuses())
+		t.Errorf("in all projects the union (backlog) should return: %v", statuses())
 	}
 }
 
-// TestRenderListShowsTags verifica que la columna Tags se vea en un ancho común.
+// TestRenderListShowsTags verifies that the Tags column is visible at a common width.
 func TestRenderListShowsTags(t *testing.T) {
 	m := newTestModel(t)
 	task := m.tasks[0]
@@ -117,9 +117,9 @@ func TestRenderListShowsTags(t *testing.T) {
 
 	out := ansi.Strip(m.renderList(m.height))
 	if !strings.Contains(out, "Tags") {
-		t.Errorf("con ancho 120 debería verse la cabecera Tags:\n%s", out)
+		t.Errorf("with width 120 the Tags header should be visible:\n%s", out)
 	}
 	if !strings.Contains(out, "blocked") {
-		t.Errorf("con ancho 120 debería verse la tag blocked:\n%s", out)
+		t.Errorf("with width 120 the tag blocked should be visible:\n%s", out)
 	}
 }

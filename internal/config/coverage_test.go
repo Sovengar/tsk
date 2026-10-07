@@ -6,20 +6,20 @@ import (
 	"testing"
 )
 
-// Path tiene tres rutas y sólo se probaba la del entorno de pruebas: la variable
-// de entorno propia del programa y la de XDG.
+// Path has three routes and only the test-environment one was tested: the program's own
+// environment variable and the XDG one.
 func TestPathResolution(t *testing.T) {
-	t.Run("TSK_CONFIG manda sobre todo", func(t *testing.T) {
+	t.Run("TSK_CONFIG overrides everything", func(t *testing.T) {
 		t.Setenv("TSK_CONFIG", "/mi/ruta/config.toml")
 		t.Setenv("XDG_CONFIG_HOME", "/xdg")
-		t.Setenv("HOME", "/home/alguien")
+		t.Setenv("HOME", "/home/someone")
 
 		got, err := Path()
 		if err != nil {
 			t.Fatalf("Path: %v", err)
 		}
 		if got != "/mi/ruta/config.toml" {
-			t.Errorf("Path = %q, want la de TSK_CONFIG", got)
+			t.Errorf("Path = %q, want the TSK_CONFIG one", got)
 		}
 	})
 
@@ -39,93 +39,93 @@ func TestPathResolution(t *testing.T) {
 	t.Run("HOME", func(t *testing.T) {
 		t.Setenv("TSK_CONFIG", "")
 		t.Setenv("XDG_CONFIG_HOME", "")
-		t.Setenv("HOME", "/home/alguien")
+		t.Setenv("HOME", "/home/someone")
 
 		got, err := Path()
 		if err != nil {
 			t.Fatalf("Path: %v", err)
 		}
-		if want := filepath.Join("/home/alguien", ".config", "tsk", FileName); got != want {
+		if want := filepath.Join("/home/someone", ".config", "tsk", FileName); got != want {
 			t.Errorf("Path = %q, want %q", got, want)
 		}
 	})
 
-	t.Run("sin HOME", func(t *testing.T) {
+	t.Run("without HOME", func(t *testing.T) {
 		t.Setenv("TSK_CONFIG", "")
 		t.Setenv("XDG_CONFIG_HOME", "")
 		t.Setenv("HOME", "")
 
 		if _, err := Path(); err == nil {
-			t.Error("Path sin HOME ni XDG: want error")
+			t.Error("Path without HOME nor XDG: want error")
 		}
 	})
 }
 
-// Load nunca falla: un config ilegible es un config que no existe. Es la
-// política del paquete -- "config nunca falla, defaults + warning" -- y lo que no
-// se probaba era justo el caso que la justifica.
+// Load never fails: an unreadable config is a config that does not exist. It is the
+// package policy -- "config never fails, defaults + warning" -- and what was
+// not tested was exactly the case that justifies it.
 func TestLoadNeverFails(t *testing.T) {
-	t.Run("sin fichero", func(t *testing.T) {
-		t.Setenv("TSK_CONFIG", filepath.Join(t.TempDir(), "no-existe.toml"))
+	t.Run("no file", func(t *testing.T) {
+		t.Setenv("TSK_CONFIG", filepath.Join(t.TempDir(), "does-not-exist.toml"))
 
 		cfg := Load()
 		if cfg.ListPageSize != DefaultPageSize {
-			t.Errorf("ListPageSize = %d, want el default %d", cfg.ListPageSize, DefaultPageSize)
+			t.Errorf("ListPageSize = %d, want the default %d", cfg.ListPageSize, DefaultPageSize)
 		}
 		if cfg.DefaultEstimateDays != DefaultEstimateDays {
-			t.Errorf("DefaultEstimateDays = %v, want el default %v",
+			t.Errorf("DefaultEstimateDays = %v, want the default %v",
 				cfg.DefaultEstimateDays, DefaultEstimateDays)
 		}
 	})
 
-	t.Run("fichero malformado", func(t *testing.T) {
+	t.Run("malformed file", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "roto.toml")
-		if err := os.WriteFile(path, []byte("esto = [no es toml"), 0o600); err != nil {
+		if err := os.WriteFile(path, []byte("this = [is not toml"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		t.Setenv("TSK_CONFIG", path)
 
-		// Ni un error ni un panic: los defaults, y punto.
+		// Neither an error nor a panic: the defaults, period.
 		cfg := Load()
 		if cfg.ListPageSize != DefaultPageSize {
-			t.Errorf("con un TOML roto ListPageSize = %d, want el default %d",
+			t.Errorf("with a broken TOML ListPageSize = %d, want the default %d",
 				cfg.ListPageSize, DefaultPageSize)
 		}
 	})
 
-	t.Run("sin ruta resoluble", func(t *testing.T) {
+	t.Run("no resolvable path", func(t *testing.T) {
 		t.Setenv("TSK_CONFIG", "")
 		t.Setenv("XDG_CONFIG_HOME", "")
 		t.Setenv("HOME", "")
 
-		// Sin Path() no hay dónde leer: defaults, y con la ruta de base de
-		// datos vacía para que la app la resuelva por su cuenta.
+		// Without Path() there is nowhere to read: defaults, with the database
+		// path empty so the app resolves it on its own.
 		cfg := Load()
 		if cfg.Database.Path != "" {
-			t.Errorf("Database.Path = %q, want vacío si no se puede resolver la ruta",
+			t.Errorf("Database.Path = %q, want empty when the path cannot be resolved",
 				cfg.Database.Path)
 		}
 		if cfg.ListPageSize != DefaultPageSize {
-			t.Errorf("ListPageSize = %d, want el default %d", cfg.ListPageSize, DefaultPageSize)
+			t.Errorf("ListPageSize = %d, want the default %d", cfg.ListPageSize, DefaultPageSize)
 		}
 	})
 
-	t.Run("valores imposibles", func(t *testing.T) {
+	t.Run("impossible values", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "config.toml")
 		if err := os.WriteFile(path, []byte("list_page_size = -5\ndefault_estimate_days = -1\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		t.Setenv("TSK_CONFIG", path)
 
-		// Un tamaño de página negativo haría que la lista no mostrara nada, así
-		// que el default hace de suelo.
+		// A negative page size would make the list show nothing, so
+		// the default acts as the floor.
 		cfg := Load()
 		if cfg.ListPageSize != DefaultPageSize {
-			t.Errorf("ListPageSize = %d con un -5 en el fichero, want el default %d",
+			t.Errorf("ListPageSize = %d with a -5 in the file, want the default %d",
 				cfg.ListPageSize, DefaultPageSize)
 		}
 		if cfg.DefaultEstimateDays != DefaultEstimateDays {
-			t.Errorf("DefaultEstimateDays = %v con un -1 en el fichero, want el default %v",
+			t.Errorf("DefaultEstimateDays = %v with a -1 in the file, want the default %v",
 				cfg.DefaultEstimateDays, DefaultEstimateDays)
 		}
 	})

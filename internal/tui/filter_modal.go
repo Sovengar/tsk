@@ -16,19 +16,19 @@ const (
 	filterFieldTag      = 4
 )
 
-// filterFieldCount es la cantidad de campos del modal de filtros.
+// filterFieldCount is the number of fields of the filter modal.
 const filterFieldCount = 5
 
-// filterMaxVisibleOptions acota las opciones listadas del campo activo para que
-// el modal no crezca sin control con muchas tags o assignees.
+// filterMaxVisibleOptions bounds the listed options of the active field so
+// the modal does not grow out of control with many tags or assignees.
 const filterMaxVisibleOptions = 6
 
-// statusFilterAllActive es el valor por defecto del filtro de estado: muestra
-// todas las tareas salvo las terminales (done/cancelled). El valor "" (mostrado
-// como "all") es el que no restringe el estado.
+// statusFilterAllActive is the default value of the status filter: it shows
+// all tasks except the terminal ones (done/cancelled). The "" value (shown
+// as "all") is the one that does not restrict the status.
 const statusFilterAllActive = "all active"
 
-// filterFieldOptions retorna las opciones disponibles para un campo.
+// filterFieldOptions returns the available options for a field.
 func (m *Model) filterFieldOptions(field int) []string {
 	switch field {
 	case filterFieldProject:
@@ -39,8 +39,8 @@ func (m *Model) filterFieldOptions(field int) []string {
 		return opts
 	case filterFieldStatus:
 		opts := []string{statusFilterAllActive, "all"}
-		// El estado es un concepto por-proyecto: si hay uno seleccionado, sólo
-		// se ofrecen sus estados; en "all projects", sólo los comunes a todos.
+		// The status is a per-project concept: if one is selected, only its
+		// statuses are offered; in "all projects", only those common to all.
 		if m.filterProject != "" {
 			if p := m.projectByName(m.filterProject); p != nil {
 				return append(opts, p.Workflow...)
@@ -64,7 +64,7 @@ func (m *Model) filterFieldOptions(field int) []string {
 	return nil
 }
 
-// filterFieldLabel devuelve el nombre del campo.
+// filterFieldLabel returns the field's name.
 func filterFieldLabel(field int) string {
 	switch field {
 	case filterFieldProject:
@@ -81,7 +81,7 @@ func filterFieldLabel(field int) string {
 	return "?"
 }
 
-// filterCurrentValue retorna el valor actual del filtro para un campo.
+// filterCurrentValue returns the current value of the filter for a field.
 func (m *Model) filterCurrentValue(field int) string {
 	switch field {
 	case filterFieldProject:
@@ -100,9 +100,9 @@ func (m *Model) filterCurrentValue(field int) string {
 		}
 		return m.filterAssignee
 	case filterFieldPriority:
-		// Sólo los cuatro valores que son un filtro de verdad. -1 es "sin filtro"
-		// y cualquier otra cosa también: las dos caen en el "all" del final, así
-		// que ponerlas como un caso más sólo añadía una rama indistinguible de ésa.
+		// Only the four values that are a real filter. -1 is "no filter" and
+		// anything else too: both fall into the final "all", so putting them
+		// as one more case only added a branch indistinguishable from that one.
 		switch m.filterPriority {
 		case 0:
 			return "none"
@@ -122,7 +122,7 @@ func (m *Model) filterCurrentValue(field int) string {
 	return "all"
 }
 
-// filterApplySelection aplica el valor seleccionado al filtro.
+// filterApplySelection applies the selected value to the filter.
 func (m *Model) filterApplySelection(field int, value string) {
 	switch field {
 	case filterFieldProject:
@@ -131,8 +131,8 @@ func (m *Model) filterApplySelection(field int, value string) {
 		} else {
 			m.filterProject = value
 		}
-		// El estado es por-proyecto: si el filtro activo ya no existe en el
-		// nuevo contexto (otro proyecto, o la intersección en "all"), se limpia.
+		// The status is per-project: if the active filter no longer exists in
+		// the new context (another project, or the intersection in "all"), it is cleared.
 		m.clearInvalidStatusFilter()
 	case filterFieldStatus:
 		if value == "all" {
@@ -169,50 +169,50 @@ func (m *Model) filterApplySelection(field int, value string) {
 	m.invalidateFilterCache()
 }
 
-// cycleProjectFilter avanza (dir=+1) o retrocede (dir=-1) el filtro Project a
-// través de sus opciones ("all" + proyectos activos). Reutiliza las mismas
-// opciones y validaciones del modal de filtros, de modo que Tab se comporta
-// igual en List, Kanban y Gantt. Con 0 o 1 opción no hace nada.
+// cycleProjectFilter advances (dir=+1) or goes back (dir=-1) the Project
+// filter through its options ("all" + active projects). It reuses the same
+// options and validations of the filter modal, so that Tab behaves the same
+// in List, Kanban and Gantt. With 0 or 1 option it does nothing.
 func (m *Model) cycleProjectFilter(dir int) {
-	// El salto entero vive en siguienteOpcion, una función pura. Aquí no queda
-	// ninguna condición: ni el "no hay lista" ni el "el valor actual no está en
-	// la lista" -- los dos casos los resuelve ella y los dos se pueden probar
-	// pasándole la lista directamente.
+	// The whole jump lives in nextOption, a pure function. Nothing is
+	// left here: neither the "there is no list" nor the "the current value is
+	// not in the list" -- she solves both cases and both can be tested by
+	// passing her the list directly.
 	//
-	// El `if len(opts) <= 1` que había antes era un bug, no una guarda: las
-	// opciones del filtro de proyecto SIEMPRE empiezan por "all", así que con un
-	// solo proyecto hay DOS opciones y el Tab no movía nada. Contaba mal porque
-	// trataba "all" como si no contara.
+	// The `if len(opts) <= 1` that was before was a bug, not a guard: the
+	// project filter's options ALWAYS start with "all", so with a single
+	// project there are TWO options and Tab did not move anything. It counted
+	// wrong because it treated "all" as if it did not count.
 	m.filterApplySelection(filterFieldProject,
-		siguienteOpcion(m.filterFieldOptions(filterFieldProject),
+		nextOption(m.filterFieldOptions(filterFieldProject),
 			m.filterCurrentValue(filterFieldProject), dir))
 }
 
-// siguienteOpcion devuelve la opción que va una posición antes o después de
-// current en opts, dando la vuelta por los extremos.
+// nextOption returns the option that goes one position before or after
+// current in opts, wrapping around at the extremes.
 //
-// Con opts vacía devuelve "", que es un valor que ninguna opción puede tener: las
-// opciones del filtro de proyecto empiezan siempre por "all", así que la lista
-// nunca está vacía de verdad, pero la función es total y se puede probar con nil.
-func siguienteOpcion(opts []string, current string, dir int) string {
+// With empty opts it returns "", a value no option can have: the project
+// filter's options always start with "all", so the list is never really
+// empty, but the function is total and can be tested with nil.
+func nextOption(opts []string, current string, dir int) string {
 	if len(opts) == 0 {
 		return ""
 	}
-	// El índice arranca en 0 y slices.Index devuelve -1 cuando no lo encuentra, de
-	// modo que el "no está en la lista" se resuelve con un max y no con un if:
-	// `max(idx, 0)` y el `if idx < 0 { idx = 0 }` dan lo mismo, y con el if el
-	// mutante de su condición no tenía un valor que lo distinguiera del índice 0
-	// que ya produce el max.
+	// The index starts at 0 and slices.Index returns -1 when it does not find
+	// it, so the "is not in the list" is solved with a max and not with an if:
+	// `max(idx, 0)` and the `if idx < 0 { idx = 0 }` give the same, and with
+	// the if the mutant of its condition had no value telling it apart from
+	// the index 0 that max already produces.
 	//
-	// El valor actual puede no estar en la lista: un proyecto borrado, o un
-	// nombre escrito a mano. Se arranca por el principio en vez de quedarse donde
-	// está.
+	// The current value may not be in the list: a deleted project, or a
+	// hand-written name. It starts at the beginning instead of staying where
+	// it is.
 	idx := max(slices.Index(opts, current), 0)
 	return opts[cycleIndex(idx, len(opts), dir)]
 }
 
-// clearInvalidStatusFilter limpia el filtro de estado cuando dejó de existir en
-// el contexto del proyecto actual. "" (all) siempre es válido.
+// clearInvalidStatusFilter clears the status filter when it stopped existing
+// in the current project's context. "" (all) is always valid.
 func (m *Model) clearInvalidStatusFilter() {
 	if m.filterStatus == "" {
 		return
@@ -225,8 +225,8 @@ func (m *Model) clearInvalidStatusFilter() {
 	m.filterStatus = ""
 }
 
-// filterKeybinds lista las teclas del modal de filtros. Es la fuente única para
-// la barra de keybinds y el modal de ayuda.
+// filterKeybinds lists the filter modal's keys. It is the single source for
+// the keybinds bar and the help modal.
 func filterKeybinds() []keybind {
 	return []keybind{
 		{"Tab", "field"},
@@ -238,8 +238,8 @@ func filterKeybinds() []keybind {
 	}
 }
 
-// openFilterModal abre el modal con el foco en el primer campo y el cursor de
-// opciones sincronizado con el valor aplicado.
+// openFilterModal opens the modal with focus on the first field and the
+// option cursor synced with the applied value.
 func (m *Model) openFilterModal() tea.Cmd {
 	m.filterOpen = true
 	m.filterFieldIdx = filterFieldProject
@@ -247,15 +247,15 @@ func (m *Model) openFilterModal() tea.Cmd {
 	return nil
 }
 
-// filterVisibleOptions devuelve las opciones del campo activo, filtradas por la
-// búsqueda fuzzy. Los modos agregados ("all active"/"all") quedan siempre
-// disponibles para poder volver atrás sin borrar la búsqueda.
-// filterVisibleOptions devuelve las opciones del campo activo, con la búsqueda
-// escrita encima.
+// filterVisibleOptions returns the options of the active field, filtered by
+// the fuzzy search. The aggregate modes ("all active"/"all") always stay
+// available so you can go back without erasing the search.
+// filterVisibleOptions returns the options of the active field, with the
+// search written on top.
 //
-// El resultado nunca está vacío: "all" es un agregador y se cuela siempre, esté
-// o no la búsqueda. Los llamantes que preguntaban "y si no hay opciones" estaban
-// protegiéndose de algo que no puede pasar.
+// The result is never empty: "all" is an aggregator and always slips in,
+// search or not. The callers asking "and if there are no options" were
+// protecting themselves against something that cannot happen.
 func (m *Model) filterVisibleOptions() []string {
 	opts := m.filterFieldOptions(m.filterFieldIdx)
 	if m.filterSearch == "" {
@@ -271,13 +271,13 @@ func (m *Model) filterVisibleOptions() []string {
 			matches = append(matches, o)
 		}
 	}
-	// Los matches van primero para que el cursor quede sobre el mejor candidato;
-	// los modos agregados quedan al final, siempre accesibles.
+	// The matches go first so the cursor lands on the best candidate; the
+	// aggregate modes stay at the end, always accessible.
 	return append(matches, aggregators...)
 }
 
-// filterSyncOption limpia la búsqueda y posiciona el cursor sobre el valor
-// aplicado del campo activo.
+// filterSyncOption clears the search and positions the cursor on the
+// applied value of the active field.
 func (m *Model) filterSyncOption() {
 	m.filterSearch = ""
 	opts := m.filterFieldOptions(m.filterFieldIdx)
@@ -291,24 +291,24 @@ func (m *Model) filterSyncOption() {
 	}
 }
 
-// clampFilterOption mantiene el cursor de opciones dentro de la lista visible.
+// clampFilterOption keeps the option cursor inside the visible list.
 func (m *Model) clampFilterOption() {
 	m.filterOptionIdx = clampTo(m.filterOptionIdx, len(m.filterVisibleOptions()))
 }
 
-// filterMoveField mueve el foco entre campos y resincroniza el cursor.
+// filterMoveField moves the focus between fields and resyncs the cursor.
 func (m Model) filterMoveField(delta int) (tea.Model, tea.Cmd) {
 	m.filterFieldIdx = (m.filterFieldIdx + delta + filterFieldCount) % filterFieldCount
 	m.filterSyncOption()
 	return m, nil
 }
 
-// filterMoveOption mueve el cursor dentro de las opciones visibles.
+// filterMoveOption moves the cursor within the visible options.
 func (m *Model) filterMoveOption(delta int) {
 	m.filterOptionIdx = cycleIndex(m.filterOptionIdx, len(m.filterVisibleOptions()), delta)
 }
 
-// filterCycle aplica en vivo la opción anterior/siguiente del campo activo.
+// filterCycle applies the previous/next option of the active field live.
 func (m *Model) filterCycle(forward bool) {
 	opts := m.filterVisibleOptions()
 	if len(opts) == 0 {
@@ -323,8 +323,8 @@ func (m *Model) filterCycle(forward bool) {
 	m.filterSyncOption()
 }
 
-// resetFilters vuelve todos los filtros a su valor por defecto, incluido el
-// estado "all active".
+// resetFilters returns all filters to their default value, including the
+// "all active" status.
 func (m *Model) resetFilters() {
 	m.filterProject = ""
 	m.filterStatus = statusFilterAllActive
@@ -336,10 +336,10 @@ func (m *Model) resetFilters() {
 	m.filterSyncOption()
 }
 
-// handleFilterModalKey procesa las teclas del modal de filtros. Tab/Shift+Tab
-// mueven el foco, ↑↓ mueven el cursor de opciones, ←→ ciclan el valor aplicado
-// en vivo, escribir filtra las opciones, Enter aplica y avanza, Ctrl+R resetea
-// todo y Esc cierra.
+// handleFilterModalKey processes the filter modal's keys. Tab/Shift+Tab
+// move the focus, ↑↓ move the option cursor, ←→ cycle the applied value
+// live, typing filters the options, Enter applies and advances, Ctrl+R
+// resets everything and Esc closes.
 func (m Model) handleFilterModalKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
@@ -370,14 +370,14 @@ func (m Model) handleFilterModalKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "enter":
-		// opts nunca está vacío, así que la comprobación que había aquí no podía
-		// ser falsa. Lo que sí hace falta es acotar el índice: el render ya lo
-		// hace, pero entre el render y esta tecla la lista puede haber cambiado
-		// de tamaño.
+		// opts is never empty, so the check that was here could
+		// never be false. What does need bounding is the index: the render
+		// already does it, but between the render and this key the list may
+		// have changed size.
 		opts := m.filterVisibleOptions()
 		m.filterOptionIdx = clampTo(m.filterOptionIdx, len(opts))
 		m.filterApplySelection(m.filterFieldIdx, opts[m.filterOptionIdx])
-		// En el último campo, Enter cierra; en el resto, avanza.
+		// In the last field, Enter closes; in the rest, it advances.
 		if m.filterFieldIdx == filterFieldTag {
 			m.filterOpen = false
 			return m, nil
@@ -392,7 +392,7 @@ func (m Model) handleFilterModalKey(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Texto imprimible: filtra las opciones del campo activo.
+	// Printable text: filters the options of the active field.
 	if len(key) == 1 && key[0] >= 33 && key[0] < 127 {
 		m.filterSearch += key
 		m.filterOptionIdx = 0
@@ -400,9 +400,9 @@ func (m Model) handleFilterModalKey(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderFilterModal renderiza el modal de filtros: filas con foco resaltado y,
-// en el campo activo, un input de búsqueda y el listado de opciones con el valor
-// aplicado (●) y el cursor (▸). El título muestra el conteo en vivo.
+// renderFilterModal renders the filter modal: rows with highlighted focus
+// and, in the active field, a search input and the list of options with the
+// applied value (●) and the cursor (▸). The title shows the live count.
 func (m *Model) renderFilterModal(content string) string {
 	w := m.width
 	m.clampFilterOption()
@@ -431,7 +431,7 @@ func (m *Model) renderFilterModal(content string) string {
 			continue
 		}
 
-		// Nunca sin opciones: "all" sobrevive a cualquier búsqueda.
+		// Never without options: "all" survives any search.
 		opts := m.filterVisibleOptions()
 		start, end := visibleRange(m.filterOptionIdx, len(opts), filterMaxVisibleOptions)
 		for i, opt := range opts[start:end] {

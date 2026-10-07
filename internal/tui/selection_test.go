@@ -11,73 +11,73 @@ import (
 	"tsk/internal/model"
 )
 
-// pasteMsg es el mensaje de pegado de bubbletea, que es lo que llega al handler.
+// pasteMsg is bubbletea's paste message, which is what reaches the handler.
 func pasteMsg(content string) tea.PasteMsg { return tea.PasteMsg{Content: content} }
 
-// ---- selección de tarea editable: fuente única para el editor externo y el
-// inline. Sin esto, un mutant de un límite de índice pasa desapercibido. ----
+// ---- editable task selection: single source for the external editor and
+// the inline one. Without this, an index-limit mutant goes unnoticed. ----
 
 func TestSelectedEditableTaskByView(t *testing.T) {
 	tests := []struct {
 		name  string
 		setup func(m *Model)
-		want  string // título esperado, "" = nil
+		want  string // expected title, "" = nil
 	}{
 		{
-			name:  "list: la tarea bajo el cursor",
+			name:  "list: the task under the cursor",
 			setup: func(m *Model) { m.currentView = viewList; m.cursor = 0 },
 			want:  "Fix checkout",
 		},
 		{
-			name:  "list: cursor fuera de rango",
+			name:  "list: cursor out of range",
 			setup: func(m *Model) { m.currentView = viewList; m.cursor = 999 },
 			want:  "",
 		},
 		{
-			name:  "list: sin tareas",
+			name:  "list: no tasks",
 			setup: func(m *Model) { m.currentView = viewList; m.tasks = nil; m.cursor = 0 },
 			want:  "",
 		},
 		{
-			name:  "kanban: tarea de la columna y fila actuales",
+			name:  "kanban: task of the current column and row",
 			setup: func(m *Model) { m.currentView = viewKanban; m.kanbanCol = 0; m.kanbanRow = 0 },
 			want:  "Add caching",
 		},
 		{
-			name:  "kanban: columna fuera de rango",
+			name:  "kanban: column out of range",
 			setup: func(m *Model) { m.currentView = viewKanban; m.kanbanCol = 99; m.kanbanRow = 0 },
 			want:  "",
 		},
 		{
-			name:  "kanban: fila fuera de rango",
+			name:  "kanban: row out of range",
 			setup: func(m *Model) { m.currentView = viewKanban; m.kanbanCol = 0; m.kanbanRow = 99 },
 			want:  "",
 		},
 		{
-			name: "dashboard: sólo con el detalle abierto",
+			name: "dashboard: only with the detail open",
 			setup: func(m *Model) {
 				m.currentView = viewDashboard
 				m.detailOpen = true
-				m.detailTask = &model.Task{Title: "en detalle"}
+				m.detailTask = &model.Task{Title: "in detail"}
 			},
-			want: "en detalle",
+			want: "in detail",
 		},
 		{
-			name: "dashboard: detalle cerrado",
+			name: "dashboard: detail closed",
 			setup: func(m *Model) {
 				m.currentView = viewDashboard
 				m.detailOpen = false
-				m.detailTask = &model.Task{Title: "en detalle"}
+				m.detailTask = &model.Task{Title: "in detail"}
 			},
 			want: "",
 		},
 		{
-			name:  "dashboard: sin tarea en detalle",
+			name:  "dashboard: no task in the detail",
 			setup: func(m *Model) { m.currentView = viewDashboard; m.detailOpen = true; m.detailTask = nil },
 			want:  "",
 		},
 		{
-			name:  "vista sin tarea editable propia (gantt)",
+			name:  "view with no editable task of its own (gantt)",
 			setup: func(m *Model) { m.currentView = viewGantt },
 			want:  "",
 		},
@@ -104,11 +104,11 @@ func TestSelectedEditableTaskByView(t *testing.T) {
 	}
 }
 
-// ---- paste en los campos de texto: los saltos de línea se aplanan. ----
+// ---- paste in the text fields: line breaks are flattened. ----
 
 func TestHandleNewTaskPasteFlattensNewlines(t *testing.T) {
-	// Cada campo tiene su valor inicial y su indice de sugerencia: pegar sólo
-	// toca el campo activo, y suelta la sugerencia de ESE campo.
+	// Each field has its initial value and its suggestion index: pasting only
+	// touches the active field, and drops the suggestion of THAT field.
 	tests := []struct {
 		name          string
 		field         int
@@ -118,9 +118,9 @@ func TestHandleNewTaskPasteFlattensNewlines(t *testing.T) {
 		suggReset     bool
 		otherSuggHold bool
 	}{
-		{"titulo", newTaskFieldTitle, "pre-", "uno\ndos\rtres", "pre-uno dos tres", true, true},
-		{"assignee", newTaskFieldAssignee, "@pre ", "uno\ndos", "@pre uno dos", true, true},
-		{"tags", newTaskFieldTags, "pre ", "uno\ndos", "pre uno dos", true, true},
+		{"title", newTaskFieldTitle, "pre-", "one\ntwo\rthree", "pre-one two three", true, true},
+		{"assignee", newTaskFieldAssignee, "@pre ", "one\ntwo", "@pre one two", true, true},
+		{"tags", newTaskFieldTags, "pre ", "one\ntwo", "pre one two", true, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestHandleNewTaskPasteFlattensNewlines(t *testing.T) {
 			_ = m
 			m.newTaskAssigneeSuggIdx = 3
 			m.newTaskTagSuggIdx = 3
-			m.newTaskErr = "error anterior"
+			m.newTaskErr = "previous error"
 
 			set := func(mm *Model, s string) {
 				switch tt.field {
@@ -155,7 +155,7 @@ func TestHandleNewTaskPasteFlattensNewlines(t *testing.T) {
 			case newTaskFieldTitle:
 				value = after.newTaskTitle
 				if tt.suggReset && after.newTaskAssigneeSuggIdx == -1 {
-					t.Error("la sugerencia de assignee no debería resetearse al pegar en el título")
+					t.Error("the assignee suggestion should not reset when pasting in the title")
 				}
 			case newTaskFieldAssignee:
 				value = after.newTaskAssignee
@@ -163,10 +163,10 @@ func TestHandleNewTaskPasteFlattensNewlines(t *testing.T) {
 				value = after.newTaskTagInput
 			}
 			if value != tt.want {
-				t.Errorf("campo = %q, want %q", value, tt.want)
+				t.Errorf("field = %q, want %q", value, tt.want)
 			}
 
-			// La sugerencia del campo pegado se suelta; las otras no.
+			// The pasted field's suggestion is dropped; the others are not.
 			activeSugg := -1
 			switch tt.field {
 			case newTaskFieldAssignee:
@@ -175,33 +175,33 @@ func TestHandleNewTaskPasteFlattensNewlines(t *testing.T) {
 				activeSugg = after.newTaskTagSuggIdx
 			}
 			if tt.suggReset && tt.field != newTaskFieldTitle && activeSugg != -1 {
-				t.Errorf("la sugerencia del campo pegado debería quedar en -1, got %d", activeSugg)
+				t.Errorf("the pasted field's suggestion should end up at -1, got %d", activeSugg)
 			}
 		})
 	}
 }
 
-// El campo descripción es el único que delega en el textarea: el texto llega
-// allí con sus saltos de línea intactos, no a newTaskTitle.
+// The description field is the only one that delegates to the textarea: the
+// text arrives there with its line breaks intact, not to newTaskTitle.
 func TestHandleNewTaskPasteGoesToTextareaOnDescription(t *testing.T) {
 	m := newTestModel(t)
 	m.newTaskOpen = true
 	m.newTaskFieldIdx = newTaskFieldDescription
-	m.newTaskTitle = "intacto"
-	m.newTaskErr = "error anterior"
+	m.newTaskTitle = "untouched"
+	m.newTaskErr = "previous error"
 
-	got, _ := m.handleNewTaskPaste(pasteMsg("con\nsaltos"))
+	got, _ := m.handleNewTaskPaste(pasteMsg("with\nbreaks"))
 	after := got.(Model)
 
-	if after.newTaskTitle != "intacto" {
-		t.Errorf("newTaskTitle = %q, want intacto: la descripción va al textarea", after.newTaskTitle)
+	if after.newTaskTitle != "untouched" {
+		t.Errorf("newTaskTitle = %q, want untouched: the description goes to the textarea", after.newTaskTitle)
 	}
-	if after.newTaskErr != "error anterior" {
-		t.Errorf("newTaskErr = %q: el paste en descripción no valida el campo", after.newTaskErr)
+	if after.newTaskErr != "previous error" {
+		t.Errorf("newTaskErr = %q: pasting in the description does not validate the field", after.newTaskErr)
 	}
 }
 
-// ---- paste de tags: mismo aplanado, y siempre resetea la sugerencia. ----
+// ---- tag paste: same flattening, and it always resets the suggestion. ----
 
 func TestHandleTagPaste(t *testing.T) {
 	tests := []struct {
@@ -211,8 +211,8 @@ func TestHandleTagPaste(t *testing.T) {
 		want    string
 	}{
 		{"simple", "", "bug", "bug"},
-		{"aplana saltos", "a ", "b\nc\rd", "a b c d"},
-		{"vacío", "a", "", "a"},
+		{"flattens line breaks", "a ", "b\nc\rd", "a b c d"},
+		{"empty", "a", "", "a"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -234,7 +234,7 @@ func TestHandleTagPaste(t *testing.T) {
 	}
 }
 
-// ---- selección de proyecto: decide si la vista pasa a archivados. ----
+// ---- project selection: decides whether the view goes to archived. ----
 
 func TestSelectProjectByNameSwitchesArchivedView(t *testing.T) {
 	tests := []struct {
@@ -245,10 +245,10 @@ func TestSelectProjectByNameSwitchesArchivedView(t *testing.T) {
 		wantShowArch  bool
 		wantUnchanged bool
 	}{
-		{"activo", nil, "api", 0, false, false},
-		{"activo más abajo", nil, "web", 1, false, false},
-		{"archivado", []model.Project{{Name: "viejo"}}, "viejo", 0, true, false},
-		{"inexistente", nil, "nope", 0, false, true},
+		{"active", nil, "api", 0, false, false},
+		{"active further down", nil, "web", 1, false, false},
+		{"archived", []model.Project{{Name: "old"}}, "old", 0, true, false},
+		{"missing", nil, "nope", 0, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -261,7 +261,7 @@ func TestSelectProjectByNameSwitchesArchivedView(t *testing.T) {
 
 			if tt.wantUnchanged {
 				if m.dashProjectIdx != -1 || m.showArchived == tt.wantShowArch {
-					t.Errorf("un nombre inexistente no debe tocar nada: idx=%d showArchived=%v", m.dashProjectIdx, m.showArchived)
+					t.Errorf("a missing name must touch nothing: idx=%d showArchived=%v", m.dashProjectIdx, m.showArchived)
 				}
 				return
 			}
@@ -275,8 +275,8 @@ func TestSelectProjectByNameSwitchesArchivedView(t *testing.T) {
 	}
 }
 
-// Un proyecto aparece en las dos listas: manda la de activos, porque es donde
-// vive y el índice corresponde a esa lista.
+// A project appears in both lists: the active one rules, because that is
+// where it lives and the index belongs to that list.
 func TestSelectProjectByNamePrefersActiveList(t *testing.T) {
 	m := newTestModel(t)
 	m.archivedProjects = []model.Project{{Name: "api"}}
@@ -286,14 +286,14 @@ func TestSelectProjectByNamePrefersActiveList(t *testing.T) {
 	m.selectProjectByName("api")
 
 	if m.showArchived {
-		t.Error("showArchived = true, want false (gana la lista de activos)")
+		t.Error("showArchived = true, want false (the active list wins)")
 	}
 	if m.dashProjectIdx != 0 {
-		t.Errorf("dashProjectIdx = %d, want 0 (índice en la lista de activos)", m.dashProjectIdx)
+		t.Errorf("dashProjectIdx = %d, want 0 (index in the active list)", m.dashProjectIdx)
 	}
 }
 
-// ---- modal de ayuda: es la documentación de las keybinds dentro de la app. ----
+// ---- help modal: it is the keybinds documentation inside the app. ----
 
 func TestRenderHelpModalListsEveryKeybindSource(t *testing.T) {
 	views := []viewKind{viewList, viewKanban, viewGantt, viewDashboard}
@@ -305,47 +305,47 @@ func TestRenderHelpModalListsEveryKeybindSource(t *testing.T) {
 			out := m.renderHelpModal("")
 			plain := ansi.Strip(out)
 
-			// Las cuatro secciones del modal.
+			// The modal's four sections.
 			for _, section := range []string{
 				"Task detail (modal)",
 				"New task (modal)",
 				"Filters (modal)",
 			} {
 				if !strings.Contains(plain, section) {
-					t.Errorf("falta la sección %q", section)
+					t.Errorf("missing section %q", section)
 				}
 			}
-			// Y al menos una key de cada fuente de verdad. Si una lista de
-			// keybinds se vacía o se deja de renderizar, esto salta.
+			// And at least one key from each source of truth. If a keybinds
+			// list is emptied or stops being rendered, this trips.
 			for _, kb := range detailKeybinds() {
 				if !strings.Contains(plain, kb.key) {
-					t.Errorf("falta la key del detalle %q", kb.key)
+					t.Errorf("missing detail key %q", kb.key)
 				}
 			}
 			for _, kb := range newTaskKeybinds() {
 				if !strings.Contains(plain, kb.key) {
-					t.Errorf("falta la key del modal de nueva tarea %q", kb.key)
+					t.Errorf("missing new task modal key %q", kb.key)
 				}
 			}
 			for _, kb := range filterKeybinds() {
 				if !strings.Contains(plain, kb.key) {
-					t.Errorf("falta la key del modal de filtros %q", kb.key)
+					t.Errorf("missing filter modal key %q", kb.key)
 				}
 			}
 			if !strings.Contains(plain, "to close") {
-				t.Error("falta el pie con cómo cerrar la ayuda")
+				t.Error("missing the footer saying how to close the help")
 			}
 		})
 	}
 }
 
-// ---- sugerencias de los campos con autocompletado: la lógica de "crear una
-// nueva" vive aquí, no en el render. ----
+// ---- suggestions of the autocomplete fields: the logic of "create a new
+// one" lives here, not in the render. ----
 
 func TestRenderAssigneeSuggestions(t *testing.T) {
-	// El roster de las fixtures es Me, @juan y @maria. Con input vacío se
-	// listan todos; el match exacto se EXCLUYE de la lista (ya está elegido) y
-	// sólo aparece la pista de "crear nueva" cuando no hay nadie con ese nombre.
+	// The fixtures' roster is Me, @john and @margo. With an empty input all
+	// of them are listed; the exact match is EXCLUDED from the list (it is
+	// already chosen) and the "create new" hint only appears when there is nobody with that name.
 	tests := []struct {
 		name     string
 		typed    string
@@ -353,11 +353,11 @@ func TestRenderAssigneeSuggestions(t *testing.T) {
 		wantNew  bool
 		wantHas  string
 	}{
-		{"input vacío lista todo el roster", "", 3, false, "@juan"},
-		{"el match exacto no se sugiere", "@juan", 0, false, ""},
-		{"prefijo: quedan los parciales", "@ma", 2, true, "@maria"},
-		{"nadie con ese nombre", "@nuevo", 1, true, ""},
-		{"sólo espacios cuenta como vacío", "   ", 3, false, "@juan"},
+		{"empty input lists the whole roster", "", 3, false, "@john"},
+		{"the exact match is not suggested", "@john", 0, false, ""},
+		{"prefix: the partial ones remain", "@ma", 2, true, "@margo"},
+		{"nobody with that name", "@new", 1, true, ""},
+		{"only spaces counts as empty", "   ", 3, false, "@john"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -370,29 +370,29 @@ func TestRenderAssigneeSuggestions(t *testing.T) {
 			plain := ansi.Strip(strings.Join(lines, " | "))
 
 			if len(lines) != tt.wantRows {
-				t.Errorf("líneas = %d, want %d (%q)", len(lines), tt.wantRows, plain)
+				t.Errorf("lines = %d, want %d (%q)", len(lines), tt.wantRows, plain)
 			}
 			if got := strings.Contains(plain, "new:"); got != tt.wantNew {
-				t.Errorf("ofrece crear = %v, want %v (%q)", got, tt.wantNew, plain)
+				t.Errorf("offers to create = %v, want %v (%q)", got, tt.wantNew, plain)
 			}
 			if tt.wantHas != "" && !strings.Contains(plain, tt.wantHas) {
-				t.Errorf("falta %q en %q", tt.wantHas, plain)
+				t.Errorf("missing %q in %q", tt.wantHas, plain)
 			}
 		})
 	}
 }
 
 func TestRenderTagSuggestions(t *testing.T) {
-	// La tarea ya tiene "bug": ni se sugiere ni se ofrece crear.
+	// The task already has "bug": it is neither suggested nor offered to create.
 	tests := []struct {
 		name     string
 		typed    string
 		wantRows int
 		wantNew  bool
 	}{
-		{"input vacío sin tags conocidas", "", 0, false},
-		{"ya está en la tarea", "bug", 0, false},
-		{"no existe", "nueva", 1, true},
+		{"empty input with no known tags", "", 0, false},
+		{"already on the task", "bug", 0, false},
+		{"does not exist", "new", 1, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -406,17 +406,17 @@ func TestRenderTagSuggestions(t *testing.T) {
 			plain := ansi.Strip(strings.Join(lines, " | "))
 
 			if len(lines) != tt.wantRows {
-				t.Errorf("líneas = %d, want %d (%q)", len(lines), tt.wantRows, plain)
+				t.Errorf("lines = %d, want %d (%q)", len(lines), tt.wantRows, plain)
 			}
 			if got := strings.Contains(plain, "new:"); got != tt.wantNew {
-				t.Errorf("ofrece crear = %v, want %v (%q)", got, tt.wantNew, plain)
+				t.Errorf("offers to create = %v, want %v (%q)", got, tt.wantNew, plain)
 			}
 		})
 	}
 }
 
-// La sugerencia seleccionada se marca con ▸: es lo que el usuario ve antes de
-// pulsar tab, así que un mutante que marque la fila equivocada se nota aquí.
+// The selected suggestion is marked with ▸: it is what the user sees before
+// pressing tab, so a mutant marking the wrong row shows up here.
 func TestRenderSuggestionsMarkTheSelectedRow(t *testing.T) {
 	m := newTestModel(t)
 	m.newTaskOpen = true
@@ -430,16 +430,16 @@ func TestRenderSuggestionsMarkTheSelectedRow(t *testing.T) {
 		}
 		lines := m.renderNewTaskAssigneeSuggestions()
 		if len(lines) == 0 {
-			t.Fatal("sin sugerencias")
+			t.Fatal("no suggestions")
 		}
 		marked := strings.Contains(ansi.Strip(lines[0]), "▸")
 		if marked != wantMarked {
-			t.Errorf("suggIdx %d: marcada = %v, want %v", idx, marked, wantMarked)
+			t.Errorf("suggIdx %d: marked = %v, want %v", idx, marked, wantMarked)
 		}
 	}
 }
 
-// ---- formulario de off-day: navegación de campos y validaciones. ----
+// ---- off-day form: field navigation and validations. ----
 
 func TestHandleOffdayFormKeyFieldNavigation(t *testing.T) {
 	tests := []struct {
@@ -448,10 +448,10 @@ func TestHandleOffdayFormKeyFieldNavigation(t *testing.T) {
 		key  string
 		want int
 	}{
-		{"tab avanza", 0, "tab", 1},
-		{"tab da la vuelta", 2, "tab", 0},
-		{"shift+tab retrocede", 1, "shift+tab", 0},
-		{"shift+tab da la vuelta", 0, "shift+tab", 2},
+		{"tab advances", 0, "tab", 1},
+		{"tab wraps around", 2, "tab", 0},
+		{"shift+tab goes back", 1, "shift+tab", 0},
+		{"shift+tab wraps around", 0, "shift+tab", 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -461,7 +461,7 @@ func TestHandleOffdayFormKeyFieldNavigation(t *testing.T) {
 
 			got, _ := m.handleOffdayFormKey(tt.key)
 			if after := got.(Model); after.offdayFormField != tt.want {
-				t.Errorf("campo = %d, want %d", after.offdayFormField, tt.want)
+				t.Errorf("field = %d, want %d", after.offdayFormField, tt.want)
 			}
 		})
 	}
@@ -485,23 +485,23 @@ func TestHandleOffdayFormKeyWritesIntoTheActiveField(t *testing.T) {
 
 			got, _ := m.handleOffdayFormKey(tt.key)
 			if v := tt.check(got.(Model)); v != "a" {
-				t.Errorf("campo %d = %q, want a", tt.field, v)
+				t.Errorf("field %d = %q, want a", tt.field, v)
 			}
 		})
 	}
 }
 
 func TestHandleOffdayFormKeyValidations(t *testing.T) {
-	t.Run("esc cierra", func(t *testing.T) {
+	t.Run("esc closes", func(t *testing.T) {
 		m := newTestModel(t)
 		m.offdayFormOpen = true
 		got, _ := m.handleOffdayFormKey("esc")
 		if got.(Model).offdayFormOpen {
-			t.Error("esc debería cerrar el formulario")
+			t.Error("esc should close the form")
 		}
 	})
 
-	t.Run("sin assignee no guarda", func(t *testing.T) {
+	t.Run("without assignee it does not save", func(t *testing.T) {
 		m := newTestModel(t)
 		m.offdayFormOpen = true
 		m.assigneeIdx = -1
@@ -509,14 +509,14 @@ func TestHandleOffdayFormKeyValidations(t *testing.T) {
 
 		got, cmd := m.handleOffdayFormKey("enter")
 		if cmd == nil {
-			t.Error("debería emitir un toast de error")
+			t.Error("it should emit an error toast")
 		}
 		if !got.(Model).offdayFormOpen {
-			t.Error("el formulario no debería cerrarse sin assignee")
+			t.Error("the form should not close without an assignee")
 		}
 	})
 
-	t.Run("sin fecha no guarda", func(t *testing.T) {
+	t.Run("without a date it does not save", func(t *testing.T) {
 		m := newTestModel(t)
 		m.offdayFormOpen = true
 		m.assigneeIdx = 0
@@ -524,15 +524,15 @@ func TestHandleOffdayFormKeyValidations(t *testing.T) {
 
 		got, cmd := m.handleOffdayFormKey("enter")
 		if cmd == nil {
-			t.Error("debería emitir un toast de error")
+			t.Error("it should emit an error toast")
 		}
 		if !got.(Model).offdayFormOpen {
-			t.Error("el formulario no debería cerrarse sin fecha")
+			t.Error("the form should not close without a date")
 		}
 	})
 }
 
-// ---- modal de proyecto: navegación, escritura y validaciones. ----
+// ---- project modal: navigation, typing and validations. ----
 
 func TestHandleProjectModalKeyFieldNavigation(t *testing.T) {
 	tests := []struct {
@@ -541,10 +541,10 @@ func TestHandleProjectModalKeyFieldNavigation(t *testing.T) {
 		key  string
 		want int
 	}{
-		{"tab avanza", 0, "tab", 1},
-		{"tab da la vuelta", 2, "tab", 0},
-		{"shift+tab retrocede", 1, "shift+tab", 0},
-		{"shift+tab da la vuelta", 0, "shift+tab", 2},
+		{"tab advances", 0, "tab", 1},
+		{"tab wraps around", 2, "tab", 0},
+		{"shift+tab goes back", 1, "shift+tab", 0},
+		{"shift+tab wraps around", 0, "shift+tab", 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -554,7 +554,7 @@ func TestHandleProjectModalKeyFieldNavigation(t *testing.T) {
 
 			got, _ := m.handleProjectModalKey(tt.key)
 			if after := got.(Model); after.projectModalField != tt.want {
-				t.Errorf("campo = %d, want %d", after.projectModalField, tt.want)
+				t.Errorf("field = %d, want %d", after.projectModalField, tt.want)
 			}
 		})
 	}
@@ -580,50 +580,50 @@ func TestHandleProjectModalKeyWritesIntoTheActiveField(t *testing.T) {
 
 			got, _ := m.handleProjectModalKey("x")
 			if v := tt.check(got.(Model)); v != "x" {
-				t.Errorf("campo %d = %q, want x", tt.field, v)
+				t.Errorf("field %d = %q, want x", tt.field, v)
 			}
 		})
 	}
 }
 
 func TestHandleProjectModalKeyEnter(t *testing.T) {
-	t.Run("esc cierra", func(t *testing.T) {
+	t.Run("esc closes", func(t *testing.T) {
 		m := newTestModel(t)
 		m.projectModalOpen = true
 		got, _ := m.handleProjectModalKey("esc")
 		if got.(Model).projectModalOpen {
-			t.Error("esc debería cerrar el modal")
+			t.Error("esc should close the modal")
 		}
 	})
 
-	t.Run("nombre vacío no guarda", func(t *testing.T) {
+	t.Run("empty name does not save", func(t *testing.T) {
 		m := newTestModel(t)
 		m.projectModalOpen = true
 		m.projectNameInput = "   "
 
 		got, cmd := m.handleProjectModalKey("enter")
 		if cmd == nil {
-			t.Error("debería emitir un toast de error")
+			t.Error("it should emit an error toast")
 		}
 		if !got.(Model).projectModalOpen {
-			t.Error("el modal no debería cerrarse sin nombre")
+			t.Error("the modal should not close without a name")
 		}
 	})
 
-	t.Run("nombre válido cierra y persiste", func(t *testing.T) {
+	t.Run("valid name closes and persists", func(t *testing.T) {
 		m := newTestModel(t)
 		m.projectModalOpen = true
 		m.projectModalField = 0
-		m.projectNameInput = "nuevo"
+		m.projectNameInput = "new"
 		m.projectWorkflowInput = "backlog,todo,done"
 		m.projectListOrderInput = ""
 
 		got, cmd := m.handleProjectModalKey("enter")
 		if cmd == nil {
-			t.Fatal("debería devolver la cmd de guardado")
+			t.Fatal("it should return the save cmd")
 		}
 		if got.(Model).projectModalOpen {
-			t.Error("el modal debería cerrarse al guardar")
+			t.Error("the modal should close on save")
 		}
 
 		msg, ok := mustMsg(t, cmd).(projectSavedMsg)
@@ -631,36 +631,36 @@ func TestHandleProjectModalKeyEnter(t *testing.T) {
 			t.Fatalf("msg = %T, want projectSavedMsg", msg)
 		}
 		if msg.err != nil {
-			t.Fatalf("guardar falló: %v", msg.err)
+			t.Fatalf("save failed: %v", msg.err)
 		}
-		if _, err := m.database.GetProject("nuevo"); err != nil {
-			t.Errorf("el proyecto no se creó: %v", err)
+		if _, err := m.database.GetProject("new"); err != nil {
+			t.Errorf("the project was not created: %v", err)
 		}
 	})
 }
 
-// El modal abierto para editar prellena los campos con el proyecto elegido; el
-// de crear los deja con los defaults y vacíos.
+// The modal opened to edit prefills the fields with the chosen project; the
+// one to create leaves them with the defaults and empty.
 func TestOpenProjectModalCreateAndEdit(t *testing.T) {
-	t.Run("crear", func(t *testing.T) {
+	t.Run("create", func(t *testing.T) {
 		m := newTestModel(t)
-		m.projectNameInput = "basura"
-		m.projectEditingName = "basura"
+		m.projectNameInput = "trash"
+		m.projectEditingName = "trash"
 
 		m.openProjectModal(false)
 
 		if !m.projectModalOpen || m.projectModalEdit {
-			t.Errorf("modal = %v edit=%v, want abierto y en modo crear", m.projectModalOpen, m.projectModalEdit)
+			t.Errorf("modal = %v edit=%v, want open and in create mode", m.projectModalOpen, m.projectModalEdit)
 		}
 		if m.projectNameInput != "" || m.projectEditingName != "" {
-			t.Errorf("crear debería limpiar los campos: %q/%q", m.projectNameInput, m.projectEditingName)
+			t.Errorf("create should clear the fields: %q/%q", m.projectNameInput, m.projectEditingName)
 		}
 		if m.projectWorkflowInput != "backlog,todo,doing,delivered,reviewing,done,cancelled" {
-			t.Errorf("workflow por defecto = %q", m.projectWorkflowInput)
+			t.Errorf("default workflow = %q", m.projectWorkflowInput)
 		}
 	})
 
-	t.Run("editar", func(t *testing.T) {
+	t.Run("edit", func(t *testing.T) {
 		m := newTestModel(t)
 		p, err := m.database.GetProject("web")
 		if err != nil {
@@ -670,29 +670,29 @@ func TestOpenProjectModalCreateAndEdit(t *testing.T) {
 		m.openProjectModalForEdit(p)
 
 		if !m.projectModalOpen || !m.projectModalEdit {
-			t.Errorf("modal = %v edit=%v, want abierto y en modo editar", m.projectModalOpen, m.projectModalEdit)
+			t.Errorf("modal = %v edit=%v, want open and in edit mode", m.projectModalOpen, m.projectModalEdit)
 		}
 		if m.projectNameInput != "web" || m.projectEditingName != "web" {
-			t.Errorf("nombre = %q, original = %q", m.projectNameInput, m.projectEditingName)
+			t.Errorf("name = %q, original = %q", m.projectNameInput, m.projectEditingName)
 		}
 		if !strings.Contains(m.projectWorkflowInput, "todo") {
-			t.Errorf("workflow precargado = %q", m.projectWorkflowInput)
+			t.Errorf("prefilled workflow = %q", m.projectWorkflowInput)
 		}
 	})
 }
 
-// El índice del proyecto resaltado se recorta al rango válido: es lo que evita
-// que un filtro deje el cursor apuntando a la nada.
+// The highlighted project's index is truncated to the valid range: that is
+// what keeps a filter from leaving the cursor pointing at nothing.
 func TestClampDashProjectIdx(t *testing.T) {
 	tests := []struct {
 		name  string
 		setup func(m *Model)
 		want  int
 	}{
-		{"dentro de rango", func(m *Model) { m.dashProjectIdx = 1 }, 1},
-		{"muy alto", func(m *Model) { m.dashProjectIdx = 99 }, 1},
-		{"negativo", func(m *Model) { m.dashProjectIdx = -5 }, 0},
-		{"sin proyectos", func(m *Model) { m.projects = nil; m.dashProjectIdx = 3 }, 0},
+		{"within range", func(m *Model) { m.dashProjectIdx = 1 }, 1},
+		{"too high", func(m *Model) { m.dashProjectIdx = 99 }, 1},
+		{"negative", func(m *Model) { m.dashProjectIdx = -5 }, 0},
+		{"no projects", func(m *Model) { m.projects = nil; m.dashProjectIdx = 3 }, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -706,7 +706,7 @@ func TestClampDashProjectIdx(t *testing.T) {
 	}
 }
 
-// ---- toast: aparece, se recorta al ancho y cambia de estilo según el tipo. ----
+// ---- toast: it appears, is truncated to the width and changes style by type. ----
 
 func TestRenderToast(t *testing.T) {
 	tests := []struct {
@@ -717,10 +717,10 @@ func TestRenderToast(t *testing.T) {
 		wantEmpty bool
 		wantText  string
 	}{
-		{"sin toast", "", "info", 80, true, ""},
-		{"normal", "guardado", "info", 80, false, "guardado"},
-		{"largo se recorta", "0123456789012345678901234567890123456789", "info", 20, false, "…"},
-		{"ancho mínimo no recorta", "ab", "info", 4, false, "ab"},
+		{"no toast", "", "info", 80, true, ""},
+		{"normal", "saved", "info", 80, false, "saved"},
+		{"long is truncated", "0123456789012345678901234567890123456789", "info", 20, false, "…"},
+		{"minimum width does not truncate", "ab", "info", 4, false, "ab"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -737,10 +737,10 @@ func TestRenderToast(t *testing.T) {
 				return
 			}
 			if got == "" {
-				t.Fatalf("renderToast() vacío, want %q", tt.wantText)
+				t.Fatalf("renderToast() empty, want %q", tt.wantText)
 			}
 			if tt.wantText == "…" && !strings.Contains(got, "…") {
-				t.Errorf("renderToast() = %q, quiere la elipsis de recorte", got)
+				t.Errorf("renderToast() = %q, wants the truncation ellipsis", got)
 			}
 			if tt.wantText != "…" && !strings.Contains(got, tt.wantText) {
 				t.Errorf("renderToast() = %q, want %q", got, tt.wantText)
@@ -749,8 +749,8 @@ func TestRenderToast(t *testing.T) {
 	}
 }
 
-// Un toast de error se pinta con el estilo de error, no con el de estado: si se
-// intercambian, el usuario ve un fallo con color de éxito.
+// An error toast is painted with the error style, not the status one: if
+// they are swapped, the user sees a failure in success color.
 func TestRenderToastErrorUsesErrorStyle(t *testing.T) {
 	m := newTestModel(t)
 	m.width = 80
@@ -759,30 +759,30 @@ func TestRenderToastErrorUsesErrorStyle(t *testing.T) {
 
 	styled := m.renderToast()
 	if !strings.Contains(styled, "\x1b[") {
-		t.Fatalf("sin estilos ANSI: %q", styled)
+		t.Fatalf("no ANSI styles: %q", styled)
 	}
 	if styleError.Render(" boom") != styled {
-		t.Errorf("un toast de error debería usar styleError: %q", styled)
+		t.Errorf("an error toast should use styleError: %q", styled)
 	}
 
 	m.toastKind = "info"
 	if styled := m.renderToast(); styleError.Render(" boom") == styled {
-		t.Error("un toast informativo no debería usar el estilo de error")
+		t.Error("an info toast should not use the error style")
 	}
 }
 
-// ---- formulario de off-day: el cursor "_" marca el campo activo. ----
+// ---- off-day form: the "_" cursor marks the active field. ----
 
 func TestRenderOffdayFormMarksTheActiveField(t *testing.T) {
-	// El cursor "_" va detrás del campo activo: si se pone en otro sitio, el
-	// usuario escribe en el campo equivocado sin darse cuenta.
+	// The "_" cursor goes behind the active field: if it is put somewhere
+	// else, the user types in the wrong field without noticing.
 	tests := []struct {
 		field  int
 		marker string
 	}{
 		{0, "2026-07-28_"},
 		{1, "2026-08-01_"},
-		{2, "nota_"},
+		{2, "note_"},
 	}
 	for _, tt := range tests {
 		t.Run(strconv.Itoa(tt.field), func(t *testing.T) {
@@ -792,18 +792,18 @@ func TestRenderOffdayFormMarksTheActiveField(t *testing.T) {
 			m.offdayFormField = tt.field
 			m.offdayStartInput = "2026-07-28"
 			m.offdayEndInput = "2026-08-01"
-			m.offdayNoteInput = "nota"
+			m.offdayNoteInput = "note"
 
 			out := ansi.Strip(m.renderOffdayForm(""))
 			if !strings.Contains(out, tt.marker) {
-				t.Errorf("campo %d: falta el cursor %q:\n%s", tt.field, tt.marker, out)
+				t.Errorf("field %d: missing the cursor %q:\n%s", tt.field, tt.marker, out)
 			}
 		})
 	}
 }
 
-// El formulario siempre enseña sus cuatro campos con etiqueta y la pista de
-// formato: si un campo desaparece del render, nadie se entera salvo aquí.
+// The form always shows its four fields with a label and the format hint:
+// if a field disappears from the render, nobody notices except here.
 func TestRenderOffdayFormShowsEveryField(t *testing.T) {
 	m := newTestModel(t)
 	m.assigneeIdx = 0
@@ -813,13 +813,13 @@ func TestRenderOffdayFormShowsEveryField(t *testing.T) {
 	out := ansi.Strip(m.renderOffdayForm(""))
 	for _, want := range []string{"Person:", "Start:", "End:", "Note:", "YYYY-MM-DD"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("falta %q:\n%s", want, out)
+			t.Errorf("missing %q:\n%s", want, out)
 		}
 	}
 }
 
-// El modal se dibuja incluso sin contenido detrás: es un caso real al abrirlo
-// desde un estado vacío, y si el overlay no tolera un fondo corto revienta.
+// The modal is drawn even with no content behind: it is a real case when
+// opening from an empty state, and if the overlay does not tolerate a short background it blows up.
 func TestRenderOffdayFormOverEmptyBackground(t *testing.T) {
 	m := newTestModel(t)
 	m.assigneeIdx = 0
@@ -828,11 +828,11 @@ func TestRenderOffdayFormOverEmptyBackground(t *testing.T) {
 
 	out := ansi.Strip(m.renderOffdayForm(""))
 	if !strings.Contains(out, "New off-day") {
-		t.Errorf("sin fondo tampoco debe faltar el modal:\n%s", out)
+		t.Errorf("the modal must not be missing even without a background:\n%s", out)
 	}
 }
 
-// ---- PreviewBar y el editor de descripción: ajustes de tamaño. ----
+// ---- PreviewBar and the description editor: size adjustments. ----
 
 func TestPreviewBarSetWidth(t *testing.T) {
 	var p PreviewBar
@@ -846,82 +846,82 @@ func TestPreviewBarSetWidth(t *testing.T) {
 	}
 }
 
-// El editor de descripción seDimensiona al ancho de la caja del detalle, no al
-// de la terminal. Se prueba por el camino real (abrir el editor y luego
-// redimensionar) porque el textarea sólo existe mientras el editor está
-// abierto: llamar a resizeDescEditor() sobre un modelo recién creado no es un
-// estado alcanzable.
+// The description editor sizes itself to the width of the detail box, not
+// to the terminal's. It is tested through the real path (opening the editor
+// and then resizing) because the textarea only exists while the editor is
+// open: calling resizeDescEditor() on a freshly created model is not a
+// reachable state.
 func TestResizeDescEditorFollowsTerminal(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "e")
 	if !m.descEditOpen {
-		t.Fatal("no se pudo abrir el editor inline")
+		t.Fatal("could not open the inline editor")
 	}
 
 	m.width = 100
 	m, _ = send(m, tea.WindowSizeMsg{Width: 100, Height: 40})
 	wide := m.descEditTextarea.Width()
 	if want := m.descEditorWidth(); wide != want {
-		t.Errorf("ancho del textarea = %d, want %d", wide, want)
+		t.Errorf("textarea width = %d, want %d", wide, want)
 	}
 
 	m, _ = send(m, tea.WindowSizeMsg{Width: 40, Height: 40})
 	narrow := m.descEditTextarea.Width()
 	if want := m.descEditorWidth(); narrow != want {
-		t.Errorf("tras estrechar: ancho = %d, want %d", narrow, want)
+		t.Errorf("after narrowing: width = %d, want %d", narrow, want)
 	}
 	if narrow >= wide {
-		t.Errorf("estrechar la terminal no estrechó el editor: %d -> %d", wide, narrow)
+		t.Errorf("narrowing the terminal did not narrow the editor: %d -> %d", wide, narrow)
 	}
 
-	// Un terminal estrechísimo nunca deja el ancho en un valor inválido.
+	// A very narrow terminal never leaves the width at an invalid value.
 	m, _ = send(m, tea.WindowSizeMsg{Width: 2, Height: 10})
 	if got := m.descEditorWidth(); got < 1 {
 		t.Errorf("descEditorWidth() = %d, want >= 1", got)
 	}
 
-	// Con el editor cerrado, un resize no debe tocar nada.
+	// With the editor closed, a resize must not touch anything.
 	m.descEditOpen = false
 	before := m.descEditTextarea.Width()
 	m, _ = send(m, tea.WindowSizeMsg{Width: 120, Height: 40})
 	if got := m.descEditTextarea.Width(); got != before {
-		t.Errorf("con el editor cerrado el ancho cambió: %d -> %d", before, got)
+		t.Errorf("with the editor closed the width changed: %d -> %d", before, got)
 	}
 }
 
-// El contador de secuencia existe para que un tick viejo no borre un toast más
-// nuevo: cada setToast incrementa y guarda el valor, y el tick sólo limpia si su
-// número sigue siendo el actual.
+// The sequence counter exists so that an old tick does not erase a newer
+// toast: each setToast increments and stores the value, and the tick only
+// clears if its number is still the current one.
 func TestToastSeqIgnoresStaleTick(t *testing.T) {
 	m := newTestModel(t)
-	primero := m.setToast("primero", "info")
-	seqPrimerTick := m.toastSeq
+	firstToast := m.setToast("first", "info")
+	firstToastSeq := m.toastSeq
 
-	segundo := m.setToast("segundo", "error")
-	if m.toastSeq == seqPrimerTick {
-		t.Fatalf("el contador no avanzó: %d", m.toastSeq)
+	secondToast := m.setToast("second", "error")
+	if m.toastSeq == firstToastSeq {
+		t.Fatalf("the counter did not advance: %d", m.toastSeq)
 	}
 
-	// Llega el tick del primer toast, que ya no es el actual: el toast sigue.
-	if msg := primero(); msg != nil {
+	// The first toast's tick arrives, which is no longer the current one: the toast stays.
+	if msg := firstToast(); msg != nil {
 		if exp, ok := msg.(toastExpiredMsg); ok && exp.seq == m.toastSeq {
-			t.Errorf("el tick viejo lleva la secuencia actual %d", exp.seq)
+			t.Errorf("the stale tick carries the current sequence %d", exp.seq)
 		}
 	}
 
 	next, _ := m.Update(toastExpiredMsg{seq: m.toastSeq})
 	if next.(Model).toast != "" {
-		t.Errorf("el tick de la secuencia actual no limpió el toast: %q", next.(Model).toast)
+		t.Errorf("the tick of the current sequence did not clear the toast: %q", next.(Model).toast)
 	}
 
-	// Y el segundo tick tampoco lo que ya está limpio.
-	if cmd := segundo(); cmd == nil {
-		t.Error("el segundo toast no devolvió comando")
+	// And the second tick either, on what is already clean.
+	if cmd := secondToast(); cmd == nil {
+		t.Error("the second toast did not return a command")
 	}
 }
 
-// El toast se recorta al ancho menos el margen, y el margen es lo que impide que
-// el texto toque los bordes. Sin recorte no hay nada que recortar.
+// The toast is truncated to the width minus the margin, and the margin is
+// what keeps the text from touching the borders. With no truncation there is nothing to truncate.
 func TestToastTruncationWidth(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -929,18 +929,18 @@ func TestToastTruncationWidth(t *testing.T) {
 		width    int
 		wantTrim bool
 	}{
-		{"corta", "hola", 40, false},
-		{"justo al ancho", strings.Repeat("x", 38), 40, false},
-		{"una de más", strings.Repeat("x", 39), 40, true},
-		{"muy larga", strings.Repeat("x", 100), 40, true},
-		// Con menos de cinco columnas no se recorta, aunque el texto no quepa:
-		// el margen de dos columnas se comería el texto entero. Por eso el umbral
-		// es "> 4" y no "> 2".
-		{"ancho de cinco, cabe", "abc", 5, false},
-		{"ancho de cinco, no cabe", "abcd", 5, true},
-		{"ancho de cuatro", "abcd", 4, false},
-		{"ancho de tres", "abcd", 3, false},
-		{"ancho de dos", "abcd", 2, false},
+		{"short", "hello", 40, false},
+		{"exactly the width", strings.Repeat("x", 38), 40, false},
+		{"one too many", strings.Repeat("x", 39), 40, true},
+		{"way too long", strings.Repeat("x", 100), 40, true},
+		// With fewer than five columns nothing is truncated, even if the text
+		// does not fit: the two-column margin would eat the whole text. That
+		// is why the threshold is "> 4" and not "> 2".
+		{"width of five, fits", "abc", 5, false},
+		{"width of five, does not fit", "abcd", 5, true},
+		{"width of four", "abcd", 4, false},
+		{"width of three", "abcd", 3, false},
+		{"width of two", "abcd", 2, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -950,30 +950,30 @@ func TestToastTruncationWidth(t *testing.T) {
 			m.width = tt.width
 
 			out := ansi.Strip(m.renderToast())
-			// El toast se dibuja con un espacio de margen delante, así que la
-			// comparación es contra el texto con ese espacio.
+			// The toast is drawn with a margin space in front, so the
+			// comparison is against the text with that space.
 			if got := out != " "+tt.toast; got != tt.wantTrim {
-				t.Errorf("recortado=%v, want %v (salida %q)", got, tt.wantTrim, out)
+				t.Errorf("truncated=%v, want %v (output %q)", got, tt.wantTrim, out)
 			}
 		})
 	}
 }
 
-// El estilo del toast depende del kind, y "error" no es lo mismo que "info".
+// The toast's style depends on the kind, and "error" is not the same as "info".
 func TestToastErrorStyle(t *testing.T) {
 	m := newTestModel(t)
-	m.toast = "falló"
+	m.toast = "failed"
 	m.width = 40
 
 	m.toastKind = "error"
-	conError := m.renderToast()
+	withError := m.renderToast()
 	m.toastKind = "info"
-	conInfo := m.renderToast()
+	withInfo := m.renderToast()
 
-	if conError == conInfo {
-		t.Error("un toast de error se ve igual que uno de información")
+	if withError == withInfo {
+		t.Error("an error toast looks the same as an info one")
 	}
-	if !strings.Contains(ansi.Strip(conError), "falló") {
-		t.Errorf("el toast de error no sale:\n%q", conError)
+	if !strings.Contains(ansi.Strip(withError), "failed") {
+		t.Errorf("the error toast does not show:\n%q", withError)
 	}
 }
