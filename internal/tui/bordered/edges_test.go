@@ -283,7 +283,7 @@ func TestParseAnsiSegmentsKeepsFirstCharacter(t *testing.T) {
 
 	got := parseAnsiSegments(input)
 	if len(got) != 3 {
-		t.Fatalf("segmentos = %d, want 3: %+v", len(got), got)
+		t.Fatalf("segments = %d, want 3: %+v", len(got), got)
 	}
 	if got[0].text != "á" {
 		t.Errorf("the first segment is %q, want %q: the first character was split", got[0].text, "á")

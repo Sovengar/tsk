@@ -148,7 +148,7 @@ func TestEffectiveWorkflowFallsBackToTheDefault(t *testing.T) {
 		if p := m.selectedDashProject(); p != nil {
 			t.Errorf("with an out-of-range index there is a selected project: %q", p.Name)
 		}
-		// The list of visibles does not depend on the index: what is left
+		// The list of visible items does not depend on the index: what is left
 		// without a project is the selection, not the workflow.
 		if got := m.commonWorkflow(); len(got) == 0 {
 			t.Error("an out-of-range index emptied the workflow")

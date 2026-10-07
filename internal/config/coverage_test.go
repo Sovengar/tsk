@@ -66,7 +66,7 @@ func TestPathResolution(t *testing.T) {
 // not tested was exactly the case that justifies it.
 func TestLoadNeverFails(t *testing.T) {
 	t.Run("no file", func(t *testing.T) {
-		t.Setenv("TSK_CONFIG", filepath.Join(t.TempDir(), "no-existe.toml"))
+		t.Setenv("TSK_CONFIG", filepath.Join(t.TempDir(), "does-not-exist.toml"))
 
 		cfg := Load()
 		if cfg.ListPageSize != DefaultPageSize {

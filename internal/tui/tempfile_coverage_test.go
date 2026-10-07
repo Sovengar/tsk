@@ -194,7 +194,7 @@ func TestBothEditorsReturnTheTaskIDWhenTheTempFails(t *testing.T) {
 // The temp file creation failure is the other path, and it is the only one that
 // was tested before: TMPDIR points at a directory that does not exist.
 func TestBothEditorsReturnTheIDWhenTheTempCannotBeCreated(t *testing.T) {
-	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "no-existe"))
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "does-not-exist"))
 
 	for _, tc := range []struct {
 		name   string

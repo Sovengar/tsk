@@ -113,7 +113,7 @@ func TestEditorFinishedFlow(t *testing.T) {
 // os.CreateTemp honors it, so pointing it at a non-existent directory makes
 // the creation fail without having to inject anything in production.
 func TestEditTaskCmdReportsTempFileFailure(t *testing.T) {
-	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "no-existe"))
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "does-not-exist"))
 
 	task := model.Task{ID: 42, Title: "t"}
 	msg := editTaskCmd(task, "true")()

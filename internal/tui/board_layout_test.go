@@ -243,7 +243,7 @@ func TestKanbanHeaderFollowsScrolledWindow(t *testing.T) {
 		t.Errorf("with the cursor down the window cannot still be on the first card:\n%s", out)
 	}
 	// And the shift is visible in the cards: the first one is gone and the last
-	// one is there. The header does not tell, because the number of visibles is
+	// one is there. The header does not tell, because the number of visible items is
 	// the same shifted or not.
 	if !strings.Contains(out, "task 19") {
 		t.Errorf("with the cursor down the last card is not visible:\n%s", out)

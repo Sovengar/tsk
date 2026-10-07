@@ -410,8 +410,8 @@ func TestListWindowForHeightProperties(t *testing.T) {
 					// the page it is not a position -- the list's general clamp
 					// already left it inside --, and what has to stay inside the
 					// window is its equivalent on this page.
-					acotado := pageStart + clampTo(cursor-pageStart, pageEnd-pageStart)
-					if acotado < start || acotado >= end {
+					clamped := pageStart + clampTo(cursor-pageStart, pageEnd-pageStart)
+					if clamped < start || clamped >= end {
 						t.Fatalf("page=[%d,%d) cursor=%d height=%d -> [%d,%d): the cursor ended up outside",
 							pageStart, pageEnd, cursor, maxHeight, start, end)
 					}
