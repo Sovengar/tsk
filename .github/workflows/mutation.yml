@@ -165,16 +165,16 @@ jobs:
             exit 0
           fi
 
-          # `|| true`: grep sale con 1 cuando no encuentra nada, y una allowlist
-          # sin entradas -- que es lo que queda cuando no hay ningún superviviente
-          # aceptado -- es exactamente ese caso. Con el `set -e` que Actions pone
-          # por defecto en `run:`, eso tumbaba el gate entero con un allowlist
-          # limpio: verde de verdad, STEP FALLIDO. Es un fallo que sólo aparece
-          # cuando todo va bien, que es la forma más difícil de ver.
+          # `|| true`: grep exits with 1 when it finds nothing, and an allowlist
+          # with no entries -- which is what remains when there is no accepted
+          # survivor -- is exactly that case. With the `set -e` that Actions sets
+          # by default in `run:`, that took down the whole gate with a clean
+          # allowlist: truly green, STEP FAILED. It is a failure that only shows
+          # up when everything goes well, which is the hardest kind to see.
           grep -vE '^[[:space:]]*(#|$)' "$ALLOWLIST" | sed 's/[[:space:]]*$//' | sort -u > /tmp/allow.txt || true
-          # El pipeline con pipefail devuelve el primer fallo que vea, así que el
-          # `|| true` tiene que cubrirlo. Sin allowlist el fichero sale vacío, que
-          # es lo que comm espera: cualquier superviviente cuenta como nuevo.
+          # The pipeline with pipefail returns the first failure it sees, so the
+          # `|| true` has to cover it. Without an allowlist the file comes out
+          # empty, which is what comm expects: any survivor counts as new.
           comm -23 /tmp/lived.txt /tmp/allow.txt > /tmp/new_lived.txt || true
           new=$(wc -l < /tmp/new_lived.txt)
 

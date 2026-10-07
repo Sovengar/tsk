@@ -3,5 +3,5 @@
 ## [Unreleased]
 
 ### Added
-- `model.IsOverdue(due, now)`: helper puro para detectar tareas vencidas. Un
-  vencimiento cero (sin fecha) o futuro nunca figura vencido.
+- `model.IsOverdue(due, now)`: pure helper to detect overdue tasks. A zero
+  due date (no date) or a future one never appears overdue.

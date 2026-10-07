@@ -76,6 +76,6 @@ mutate-diff:
 clean:
 	rm -rf bin/
 
-# Imprime la ruta del helper de vencimientos (informativo).
+# Prints the path of the overdue helper (informational).
 overdue:
 	@echo "internal/model/overdue.go"

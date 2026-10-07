@@ -2,158 +2,159 @@
 
 [![CI](https://github.com/Sovengar/tsk/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Sovengar/tsk/actions/workflows/ci.yml)
 
-Gestor de tareas en TUI + CLI pensado para programadores que alternan entre
-**1-3 proyectos**. Dashboard, lista y Kanban en la terminal, con workflow
-configurable por proyecto y un Gantt que proyecta la cola de cada persona.
-Todos los comandos hablan **JSON**, así que los agentes de IA pueden crear,
-arrancar y cerrar tareas por shell (`tsk add`, `tsk start`, `tsk done`, …).
+TUI + CLI task manager designed for developers juggling **1-3 projects**.
+Dashboard, list and Kanban in the terminal, with per-project configurable
+workflow and a Gantt that projects each person's queue.
+All commands speak **JSON**, so AI agents can create, start and close tasks
+by shell (`tsk add`, `tsk start`, `tsk done`, …).
 
-## Características
+## Features
 
-- **Cuatro vistas** con conmutación por tecla: Dashboard, List, Kanban y Gantt.
-- **Workflow por proyecto**: la secuencia de estados (p. ej. `backlog → todo →
-  doing → review → done`) se define al registrar el proyecto y debe incluir
-  `done`; el orden de presentación de la lista es configurable e independiente.
-- **Kanban por estado**: una columna por estado del workflow del proyecto.
-- **Gantt de capacidad**: proyecta la cola de cada persona en días laborables,
-  respeta los *off-days* y muestra las tareas sin responsable. `--project` y
-  `--assignee` filtran la vista, no recalculan fechas: la capacidad es una sola
-  y se reparte entre proyectos.
-- **Prioridad, asignado, estimación y tags** por tarea, con filtrado por
-  proyecto, estado, persona y tag.
-- **Vencimientos**: `IsOverdue` compara el vencimiento con un instante
-  dado; sin vencimiento (zero) una tarea nunca figura vencida.
-- **Comentarios** por tarea y **off-days** por persona (rango de fechas + nota).
-- **Archivado reversible de proyectos** (oculta él, sus tareas y comentarios sin
-  borrarlos).
-- **CLI JSON-first** para integración con agentes, con `completion` para
-  bash/zsh/fish y `migrate` para las migraciones de la base de datos.
-- **SQLite embebido** (pure Go, sin CGO) y **config TOML** opcional; sin fichero
-  de config funciona con defaults.
+- **Four views** with key switching: Dashboard, List, Kanban and Gantt.
+- **Per-project workflow**: the state sequence (e.g. `backlog → todo →
+  doing → review → done`) is defined when registering the project and must include
+  `done`; the list presentation order is configurable and independent.
+- **Kanban by state**: one column per state of the project workflow.
+- **Capacity Gantt**: projects each person's queue on business days,
+  respects *off-days* and shows unassigned tasks. `--project` and
+  `--assignee` filter the view, they do not recalculate dates: capacity is one
+  and is distributed across projects.
+- **Priority, assignee, estimate and tags** per task, with filtering by
+  project, status, person and tag.
+- **Due dates**: `IsOverdue` compares the due date with a given
+  instant; without a due date (zero) a task never appears overdue.
+- **Comments** per task and **off-days** per person (date range + note).
+- **Reversible project archiving** (hides it, its tasks and comments without
+  deleting them).
+- **JSON-first CLI** for agent integration, with `completion` for
+  bash/zsh/fish and `migrate` for database migrations.
+- **Embedded SQLite** (pure Go, no CGO) and optional **TOML** config; without a
+  config file it works with defaults.
 
-## Instalación
+## Installation
 
-Requiere **Go 1.26+**.
+Requires **Go 1.26+**.
 
 ```bash
-make build      # compila a bin/tsk (artefacto local del repo)
-make install    # instala en ~/.local/bin/tsk ($(PREFIX) por defecto)
+make build      # compiles to bin/tsk (local repo artifact)
+make install    # installs to ~/.local/bin/tsk ($(PREFIX) by default)
 ```
 
-O directamente:
+Or directly:
 
 ```bash
 go build -o ~/.local/bin/tsk ./cmd/tsk
 ```
 
-El binario se llama **`tsk`** (`taskd` es solo el nombre del módulo Go).
+The binary is called **`tsk`** (also the Go module name).
 
-## Uso
+## Usage
 
 ```bash
-tsk            # lanza la TUI (sin argumentos)
-tsk --help     # lista de comandos
+tsk            # launches the TUI (no arguments)
+tsk --help     # command list
 ```
 
 ### CLI
 
-Ejemplo de ciclo completo:
+Full cycle example:
 
 ```bash
-# Registrar un proyecto con su workflow
+# Register a project with its workflow
 tsk project add web --workflow backlog,todo,doing,review,done --list-order todo,doing,review,done
 
-# Crear una tarea
-tsk add "Arreglar redirect del login" --project web \
+# Create a task
+tsk add "Fix login redirect" --project web \
   --priority 3 --assignee @ana --estimate 0.5 --tag bug,auth
 
-tsk list --project web --status todo   # filtrar
-tsk start 1                            # mover a "doing"
-tsk review 1                           # mover a "review"
-tsk done 1                             # cerrar
-tsk gantt --assignee @ana --weeks 4    # proyectar la cola de @ana
+tsk list --project web --status todo   # filter
+tsk start 1                            # move to "doing"
+tsk review 1                           # move to "review"
+tsk done 1                             # close
+tsk gantt --assignee @ana --weeks 4    # project @ana's queue
 ```
 
-Comandos disponibles:
+Available commands:
 
-| Comando | Qué hace |
+| Command | Description |
 |---|---|
-| `tsk project add\|list\|show\|update\|remove\|archive\|unarchive` | Gestión de proyectos y su workflow |
-| `tsk add <title> --project X [--priority N] [--assignee @name] [--estimate N] [--tag T]` | Crear tarea |
-| `tsk list [--project X] [--status S] [--assignee A] [--tag T]` | Listar tareas |
-| `tsk show <id>` | Detalle de una tarea (con comentarios) |
-| `tsk update <id> [--title] [--description] [--priority] [--assignee] [--estimate] [--tag] [--untag] [--tags]` | Editar metadatos |
-| `tsk move <id> <status>` | Mover a un estado concreto |
-| `tsk start\|review\|done\|cancel <id>` | Atajos de workflow |
-| `tsk comment add\|list\|remove` | Comentarios de tarea |
-| `tsk offday add\|list\|remove` | Días no laborables por persona |
-| `tsk gantt [--project] [--assignee] [--from] [--weeks] [--json]` | Proyección por persona |
-| `tsk stats [--project X]` | Estadísticas por estado y persona |
-| `tsk migrate` | Aplicar migraciones pendientes |
-| `tsk completion bash\|zsh\|fish` | Autocompletado del shell |
+| `tsk project add\|list\|show\|update\|remove\|archive\|unarchive` | Project and workflow management |
+| `tsk add <title> --project X [--priority N] [--assignee @name] [--estimate N] [--tag T]` | Create task |
+| `tsk list [--project X] [--status S] [--assignee A] [--tag T]` | List tasks |
+| `tsk show <id>` | Task detail (with comments) |
+| `tsk update <id> [--title] [--description] [--priority] [--assignee] [--estimate] [--tag] [--untag] [--tags]` | Edit metadata |
+| `tsk move <id> <status>` | Move to a specific state |
+| `tsk start\|review\|done\|cancel <id>` | Workflow shortcuts |
+| `tsk comment add\|list\|remove` | Task comments |
+| `tsk offday add\|list\|remove` | Non-working days per person |
+| `tsk gantt [--project] [--assignee] [--from] [--weeks] [--json]` | Per-person projection |
+| `tsk stats [--project X]` | Statistics by status and person |
+| `tsk migrate` | Apply pending migrations |
+| `tsk completion bash\|zsh\|fish` | Shell autocompletion |
 
-Los comandos de acción (`add`, `update`, `move`, `start`, `done`, `cancel`,
-`show`, `comment`, …) devuelven **JSON a stdout**. Los de listado
+Action commands (`add`, `update`, `move`, `start`, `done`, `cancel`,
+`show`, `comment`, …) return **JSON to stdout**. Listing commands
 (`list`, `project list`, `project show`, `offday list`, `gantt`, `stats`)
-aceptan `--json`; sin él imprimen una tabla alineada.
+accept `--json`; without it they print an aligned table.
 
 ### TUI
 
-| Tecla | Acción |
+| Key | Action |
 |---|---|
-| `1`/`2`/`3`/`4` | Cambiar a List / Kanban / Gantt / Dashboard |
-| `hjkl`, flechas | Navegar |
-| `Tab` | Ciclar entre proyectos |
-| `Enter` | Abrir el detalle de la tarea bajo el cursor |
-| `i` | Insertar (proyecto en el Dashboard, tarea en List/Kanban) |
-| `s` | Iniciar tarea (List) / cambiar estado (Kanban) |
-| `d` / `x` | Marcar como `done` / cancelar |
-| `e` / `E` | Editar / abrir en el editor externo |
-| `/` | Filtros |
-| `Ctrl+p` | Prioridad |
-| `n`/`p`, `N`/`P` | Paginación (List) |
-| `m` | Asignados y off-days (Dashboard) |
-| `?` | Ayuda |
-| `q` | Salir |
+| `1`/`2`/`3`/`4` | Switch to List / Kanban / Gantt / Dashboard |
+| `hjkl`, arrows | Navigate |
+| `Tab` | Cycle between projects |
+| `Enter` | Open the detail of the task under the cursor |
+| `i` | Insert (project in Dashboard, task in List/Kanban) |
+| `s` | Start task (List) / change state (Kanban) |
+| `d` / `x` | Mark as `done` / cancel |
+| `e` / `E` | Edit / open in external editor |
+| `/` | Filters |
+| `Ctrl+p` | Priority |
+| `n`/`p`, `N`/`P` | Pagination (List) |
+| `m` | Assignees and off-days (Dashboard) |
+| `?` | Help |
+| `q` | Quit |
 
-## Configuración
+## Configuration
 
-`~/.config/tsk/config.toml` (respeta `$XDG_CONFIG_HOME`; override con
-`$TSK_CONFIG`). Todos los campos son opcionales:
+`~/.config/tsk/config.toml` (respects `$XDG_CONFIG_HOME`; override with
+`$TSK_CONFIG`). All fields are optional:
 
 ```toml
 [database]
-path = ""                 # default: ~/.local/share/tsk/tsk.db (respeta $XDG_DATA_HOME)
+path = ""                 # default: ~/.local/share/tsk/tsk.db (respects $XDG_DATA_HOME)
 
 [editor]
-command = "nvim"          # editor externo (tecla E)
+command = "nvim"          # external editor (E key)
 
-list_page_size        = 10   # tareas por página en la vista List
-default_estimate_days = 1.0  # estimación de tareas sin estimate (Gantt)
-gantt_weeks           = 6    # horizonte por defecto del Gantt
+[list]
+page_size        = 10     # tasks per page in List view
+default_estimate_days = 1.0  # estimate for tasks without estimate (Gantt)
+gantt_weeks      = 6      # default Gantt horizon
 ```
 
-Un config malformado no rompe nada: se aplican los defaults.
+A malformed config does not break anything: defaults are applied.
 
-## Desarrollo
+## Development
 
-`make check` es el equivalente local del gate de CI (jobs Build/Lint/Test):
+`make check` is the local equivalent of the CI gate (Build/Lint/Test jobs):
 
 ```bash
-make check   # golangci-lint + go vet + go test -race + go build ./... (nunca instala)
+make check   # golangci-lint + go vet + go test -race + go build ./... (never installs)
 make test    # go vet + go test -race -count=1 ./...
-make lint    # golangci-lint v2.13.2 (pineado, vía go run)
-make build   # compila a bin/tsk (artefacto local del repo)
-make install # instala en ~/.local/bin/tsk ($(PREFIX) por defecto)
+make lint    # golangci-lint v2.13.2 (pinned, via go run)
+make build   # compiles to bin/tsk (local repo artifact)
+make install # installs to ~/.local/bin/tsk ($(PREFIX) by default)
 ```
 
-Arquitectura: `cmd/tsk` (entry point), `internal/cli` (subcomandos y salida
-JSON), `internal/config` (TOML + paths XDG), `internal/db` (SQLite, WAL,
-migraciones, CRUD), `internal/model` (Project, Task, workflow, Gantt) e
-`internal/tui` (dashboard Bubbletea v2).
+Architecture: `cmd/tsk` (entry point), `internal/cli` (subcommands and JSON
+output), `internal/config` (TOML + XDG paths), `internal/db` (SQLite, WAL,
+migrations, CRUD), `internal/model` (Project, Task, workflow, Gantt) and
+`internal/tui` (Bubbletea v2 dashboard).
 
-## Para agentes de IA
+## For AI agents
 
-`AGENTS.md` en la raíz documenta stack, comandos, arquitectura, convenciones y
-el flujo de trabajo (incluido el despliegue del binario tras cada cambio de
-código). Léelo antes de tocar el repo.
+`AGENTS.md` in the root documents stack, commands, architecture, conventions and
+the workflow (including binary deployment after each code
+change). Read it before touching the repo.

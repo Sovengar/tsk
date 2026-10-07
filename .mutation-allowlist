@@ -9,43 +9,43 @@
 # Format:  <MUTATOR> <file>:<line>
 #
 # ---------------------------------------------------------------------------
-# VACÍO A PROPÓSITO. 0 entradas.
+# INTENTIONALLY EMPTY. 0 entries.
 # ---------------------------------------------------------------------------
 #
-# Estuvo en 40 entradas y ahora no tiene ninguna. Los 40 no se borraron: se
-# mataron. Cada uno era una de estas cuatro formas, y las cuatro se arreglaron
-#cambiando el código, no la lista:
+# It once held 40 entries and now holds none. The 40 were not deleted: they were
+# killed. Each was one of these four shapes, and all four were fixed by
+# changing the code, not the list:
 #
-# 1. "EL RECORTE ES UNA IDENTIDAD EN EL BORDE".
-#    `if len(x) > n { x = x[:n] }`. Cuando len(x) == n el slice es el mismo, así
-#    que el `>` y el `>=` dan lo mismo y ningún test los separa. Ahora es
-#    `x[:min(len(x), n)]`, que no tiene borde que mutar. En detail.go, tag_modal.go,
-#    fuzzy.go, kanban.go y layout.go.
+# 1. "THE CLAMP IS AN IDENTITY AT THE EDGE".
+#    `if len(x) > n { x = x[:n] }`. When len(x) == n the slice is the same, so
+#    `>` and `>=` give the same result and no test separates them. It is now
+#    `x[:min(len(x), n)]`, which has no edge to mutate. In detail.go, tag_modal.go,
+#    fuzzy.go, kanban.go and layout.go.
 #
-# 2. "EL BORDE NO EXISTE POR ARITMÉTICA".
-#    Un float nunca cae exactamente en epsilon, así que `capacity <= epsilon` y
-#    `remaining > epsilon` no tenían ningún input que los separara. El gantt hace
-#    ahora la aritmética en MINUTOS enteros, donde `libre == 0` se alcanza con
-#    cualquier estimate redondo. Y donde el problema era comparar contra 0 --
-#    `x <= 0` y `x < 1` son la MISMA condición sobre enteros, así que su mutante
-#    era inmatable -- ahora se compara contra 1, que tiene un borde real.
+# 2. "THE EDGE DOES NOT EXIST BECAUSE OF ARITHMETIC".
+#    A float never falls exactly on epsilon, so `capacity <= epsilon` and
+#    `remaining > epsilon` had no input that separated them. The gantt now does
+#    its arithmetic in whole MINUTES, where `free == 0` is reached with any round
+#    estimate. And where the problem was comparing against 0 --
+#    `x <= 0` and `x < 1` are the SAME condition over integers, so its mutant
+#    was unkillable -- it now compares against 1, which has a real edge.
 #
-# 3. "LA COMPARACIÓN ESTÁ DENTRO DE UN RECORRIDO".
-#    El `max(min(...))` dentro de un bucle cuyo rango sólo producía valores
-#    seguros. Al sacar la aritmética a una función pura (stepGanttCursor), el
-#    cursor pasa a ser un parámetro y un test puede darle negativos y mayores que
-#    la lista. Lo mismo con estimateNoNegativo y con esImprimible.
+# 3. "THE COMPARISON IS INSIDE A LOOP".
+#    The `max(min(...))` inside a loop whose range only produced safe values.
+#    By extracting the arithmetic into a pure function (stepGanttCursor), the
+#    cursor becomes a parameter and a test can feed it negatives and values past
+#    the list. Same with estimateNoNegativo and esImprimible.
 #
-# 4. "LA COMPARACIÓN NO DABA NÚMERO, SINO UNA DECISIÓN".
-#    Un `if` que se puede eliminar porque lo que hace la función de debajo ya lo
-#    cubre. El caso fue `if end-start <= visible { return }` en listWindowForHeight:
-#    visibleRange con size >= total devuelve la página entera, así que la guarda
-#    sobraba. Y los dos comparadores de sort de fuzzy.go, que ahora son un cmp.
+# 4. "THE COMPARISON DID NOT PRODUCE A NUMBER, BUT A DECISION".
+#    An `if` that can be removed because what the function below does already
+#    covers it. The case was `if end-start <= visible { return }` in listWindowForHeight:
+#    visibleRange with size >= total returns the whole page, so the guard was
+#    redundant. And the two sort comparators in fuzzy.go, now a cmp.
 #
-# El fichero se conserva, y no se puede borrar, porque el workflow de mutación lo
-# usa para calibrarse: sin él el job se salta en vez de dar verde mediendo nada.
-# Vacío significa que CUALQUIER superviviente es un fallo, que es lo correcto
-# cuando de verdad no hay ninguno.
+# The file is kept, and cannot be deleted, because the mutation workflow uses it
+# to calibrate: without it the job is skipped instead of reporting green while
+# measuring nothing. Empty means ANY survivor is a failure, which is correct
+# when there truly are none.
 #
 # Add an entry ONLY when the mutant is provably equivalent (no test can ever kill
 # it, because the mutation does not change observable behaviour) or the gap is a
