@@ -10,26 +10,15 @@ by shell (`tsk add`, `tsk start`, `tsk done`, …).
 
 ## Features
 
-- **Four views** with key switching: Dashboard, List, Kanban and Gantt.
-- **Per-project workflow**: the state sequence (e.g. `backlog → todo →
-  doing → review → done`) is defined when registering the project and must include
-  `done`; the list presentation order is configurable and independent.
-- **Kanban by state**: one column per state of the project workflow.
-- **Capacity Gantt**: projects each person's queue on business days,
-  respects *off-days* and shows unassigned tasks. `--project` and
-  `--assignee` filter the view, they do not recalculate dates: capacity is one
-  and is distributed across projects.
-- **Priority, assignee, estimate and tags** per task, with filtering by
-  project, status, person and tag.
-- **Due dates**: `IsOverdue` compares the due date with a given
-  instant; without a due date (zero) a task never appears overdue.
-- **Comments** per task and **off-days** per person (date range + note).
-- **Reversible project archiving** (hides it, its tasks and comments without
-  deleting them).
-- **JSON-first CLI** for agent integration, with `completion` for
-  bash/zsh/fish and `migrate` for database migrations.
-- **Embedded SQLite** (pure Go, no CGO) and optional **TOML** config; without a
-  config file it works with defaults.
+The inventory of features — what each one does and how it is triggered (key,
+flag, subcommand or config key) — lives in [`docs/FEATURES.md`](docs/FEATURES.md).
+This README keeps the usage details: the CLI reference and the configuration.
+
+In short: four views (Dashboard, List, Kanban, Gantt) over a per-project
+configurable workflow, a capacity Gantt that projects each person's queue
+respecting off-days, priority/assignee/estimate/tags/comments per task,
+reversible project archiving, a JSON-first CLI for agent integration, and an
+embedded SQLite database (pure Go, no CGO) with an optional TOML config.
 
 ## Installation
 
@@ -99,22 +88,9 @@ accept `--json`; without it they print an aligned table.
 
 ### TUI
 
-| Key | Action |
-|---|---|
-| `1`/`2`/`3`/`4` | Switch to List / Kanban / Gantt / Dashboard |
-| `hjkl`, arrows | Navigate |
-| `Tab` | Cycle between projects |
-| `Enter` | Open the detail of the task under the cursor |
-| `i` | Insert (project in Dashboard, task in List/Kanban) |
-| `s` | Start task (List) / change state (Kanban) |
-| `d` / `x` | Mark as `done` / cancel |
-| `e` / `E` | Edit / open in external editor |
-| `/` | Filters |
-| `Ctrl+p` | Priority |
-| `n`/`p`, `N`/`P` | Pagination (List) |
-| `m` | Assignees and off-days (Dashboard) |
-| `?` | Help |
-| `q` | Quit |
+The keys are always visible in the keybinds bar at the bottom of each view, and
+`?` opens the help for the current view and the open modal. The inventory of
+what each key does is in [`docs/FEATURES.md`](docs/FEATURES.md).
 
 ## Configuration
 
@@ -138,7 +114,8 @@ A malformed config does not break anything: defaults are applied.
 
 ## Development
 
-`make check` is the local equivalent of the CI gate (Build/Lint/Test jobs):
+`make check` is the local equivalent of the `Lint`/`Test` gates (`Mutation` is
+`make mutate-diff`, the coverage gate is `make coverage-check`):
 
 ```bash
 make check   # golangci-lint + go vet + go test -race + go build ./... (never installs)

@@ -44,19 +44,72 @@ Without this step, any verification the user does on the TUI uses the old
 version. Run it ALWAYS after finishing a code task, after verification
 (`make test`).
 
+## New feature → docs/FEATURES.md
+
+Any **new feature** — and any user-visible change to an existing one — must be
+documented in `docs/FEATURES.md` **in the same change** (create the file if it does
+not exist yet): add or update its entry with what it does and how it is
+triggered (key, flag, CLI subcommand or config key). A feature that is not in
+`docs/FEATURES.md` does not exist for the next reader. Keep it a concise inventory,
+not a tutorial: the details live in `README.md`.
+
 ## CI and `main` protection
 
-The `.github/workflows/ci.yml` workflow runs on every PR, every push to `main`
-and manually (`workflow_dispatch`). It has three jobs, all on `ubuntu-24.04`:
+Two workflows, three required checks: `Lint`, `Test` and `Mutation`. Neither
+workflow uses `paths` filters (a skipped workflow leaves its required checks
+stuck pending and blocks every PR that skips it).
 
-- **Build** — `go build ./...` + `go vet ./...`
-- **Lint** — `make lint` (golangci-lint v2.13.2 pinned in the `Makefile`)
-- **Test** — `go test -race -count=1 -coverprofile=coverage.out ./...` + coverage summary
+### `CI` (`.github/workflows/ci.yml`) — every PR, and pushes to `main`
 
-`main` is protected by the **`protect-main`** ruleset: requires a PR with those
-three checks green, and blocks force-push and branch deletion. The admin role
-bypass is deliberate (owner escape hatch): an admin can merge a red PR or
-force-push, so the gate is absolute only for non-admins.
+The gate. `Mutation` is a job of this file: two jobs, `Lint` ∥ `Test`, plus the
+mutation job on PRs. All on `ubuntu-24.04`.
+
+- **`Lint`** — `make lint` (golangci-lint **v2.13.2** pinned in the `Makefile`).
+- **`Test`** — `go test -race -count=1 -covermode=atomic -coverprofile=coverage.out
+  ./...` (the whole suite, no `-short`), then **`Coverage gate`** →
+  `scripts/diff-coverage.sh`: the PR's **diff at 100%** and the **total against
+  `scripts/coverage-floor`** (100.00, can only go up). The base is the explicit
+  merge-base, hence `fetch-depth: 0`.
+
+### `CI fast` (`.github/workflows/ci-fast.yml`) — every commit on a branch
+
+Build + unit tests, no lint, no mutation. **Not required**: a red never blocks a
+merge and a green never authorises one. Its 10m ceiling is for a cold runner, not
+for the ~2m30s the suite takes warm.
+
+### `Mutation` — a job of `ci.yml`, non-draft PRs only
+
+Runs on non-draft PRs. The job always reports — no `needs:`, no
+`continue-on-error`, the only `if:` is the event gate — which is what makes it a
+required check.
+
+- **Where the decision lives**: `scripts/mutate.sh` measures AND decides in one
+  step (`scripts/mutate.sh --diff --ci --summary …`); the workflow only brings
+  paths, refs and budget. *"Could not measure"* is a red, never a green, and a
+  red says how to fix it in the step summary.
+- **Budget** (mandatory under `--ci`, asserted at startup):
+  `2*CAP < STALL < CEILING`, `CEILING + SETUP_RESERVE < JOB_CEILING` →
+  `180s · 4 workers · 8m · 13m · +600s · 25m`.
+- **Local loop**: `make mutate` (whole module) and `make mutate-diff` (the diff
+  against `MUTATE_BASE`), same wiring as CI. `make coverage-check` is the local
+  equivalent of the coverage gate. The coefficient is derived from
+  `ceil(cap / coverage pass)`, so there is no pinned `MUTATE_TIMEOUT` to tune.
+- **Scope**: `MUTATE_EXCLUDE` in the `Makefile` (`cmd/`), read by
+  `scripts/mutate.sh` so local and CI gate the same set.
+- **Files that make the gate possible** (all committed):
+  `.mutation-allowlist` (survivors accepted **by line**; missing = red with the
+  command to seed it), `.mutation-timeouts` (`<file> <ceiling>` for mutants that
+  expired and were never tested), `scripts/coverage-floor` (the total, ratchet),
+  `scripts/watchdog.sh` + `scripts/watchdog_test.sh` (vendored frozen copy) and
+  `scripts/mutate_test.sh` (the gate's red paths, ~1s, run as the `Shell suites`
+  CI step).
+
+`main` is protected by the **`protect-main`** ruleset: requires a PR with
+`Lint`, `Test` and `Mutation` green, and blocks force-push and branch deletion.
+`Build` is not a check anymore: it moved to the advisory `CI fast`, so a required
+`Build` context would deadlock every PR. The admin role bypass is deliberate
+(owner escape hatch): an admin can merge a red PR or force-push, so the gate is
+absolute only for non-admins.
 
 To (re)apply the protection (idempotent, requires `gh` admin + `jq`):
 

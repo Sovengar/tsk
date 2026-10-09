@@ -4,16 +4,9 @@ BINDIR  := $(PREFIX)/bin
 PKG     := ./cmd/tsk
 MUTATE_BASE ?= main
 
-# Timeout coefficient for gremlins (x the measured baseline test duration).
-# CI runners are slower and noisier than a local box, and the db suite alone
-# takes ~10s here. The first calibration used 3 and timed out 201 mutants on a
-# loaded machine; every timeout is a mutant with an unknown result that the
-# gate then cannot see, so this is deliberately generous. Raise it rather than
-# loosening the gate.
-MUTATE_TIMEOUT ?= 8
-
 # Mutation gate scope. Only packages with real test coverage are gated. cmd/ is the
 # entry point and has no logic of its own, so it stays out; everything else is in.
+# scripts/mutate.sh reads this variable, so `make mutate` and CI gate the same set.
 #
 # internal/tui was excluded until 2026-10-02: it had 472 surviving mutants, a third
 # of the code duplicated across five files with its own copy of the index
@@ -24,7 +17,7 @@ MUTATE_TIMEOUT ?= 8
 # went away -- rather than tests alone.
 MUTATE_EXCLUDE ?= cmd/
 
-.PHONY: all test lint check build install uninstall clean overdue mutate mutate-diff
+.PHONY: all test lint check build install uninstall clean overdue mutate mutate-diff coverage coverage-check
 
 all: test build
 
@@ -60,17 +53,24 @@ install: build
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BINARY)
 
-mutate:
-	go tool gremlins unleash --workers 4 --timeout-coefficient $(MUTATE_TIMEOUT) --exclude-files $(MUTATE_EXCLUDE) --output report.json
+# Mutation. scripts/mutate.sh owns the warm-up, the coefficient, the supervisor and the
+# verdict: local and CI measure through the same path. The per-mutant deadline derives
+# from ceil(cap / coverage pass) instead of a pinned MUTATE_TIMEOUT, so a slow machine
+# raises the deadline instead of timing mutants out mid-measurement.
+mutate: ## Whole-module mutation run, with the verdict (same wiring as CI)
+	@scripts/mutate.sh --run
 
-# gremlins silently falls back to the whole module when the diff is empty (base == HEAD),
-# so fail fast instead of running a full-module run that looks diff-scoped.
-mutate-diff:
-	@if git diff --name-only $(MUTATE_BASE)...HEAD | grep -q '\.go$$'; then \
-		go tool gremlins unleash --diff $(MUTATE_BASE) --workers 4 --timeout-coefficient $(MUTATE_TIMEOUT) --exclude-files $(MUTATE_EXCLUDE) --output report.json; \
-	else \
-		echo "no .go changes vs $(MUTATE_BASE) - nothing to mutate"; \
-	fi
+mutate-diff: ## Mutation run over the diff vs MUTATE_BASE, with the verdict
+	@scripts/mutate.sh --diff
+
+COVER_PROFILE ?= coverage.out
+
+coverage: ## Coverage profile of the whole suite
+	@go test -count=1 -covermode=atomic -coverprofile=$(COVER_PROFILE) ./... > /dev/null
+	@echo "profile: $(COVER_PROFILE)"
+
+coverage-check: coverage ## Gate: this change's DIFF at 100%, and the total against scripts/coverage-floor
+	@scripts/diff-coverage.sh "$(COVER_PROFILE)" "$(MUTATE_BASE)"
 
 # Remove the repo-local artifact; the installed binary is `uninstall`'s job.
 clean:

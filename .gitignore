@@ -50,3 +50,8 @@ report.json
 /internal/db/tsk*
 /internal/db/sqlite:*
 /internal/db/::memory:*
+
+# Mutation gate artefacts written by scripts/mutate.sh (the report itself is ignored above)
+.mutation-run.log
+.mutation-scope.txt
+.mutation-budget.txt
