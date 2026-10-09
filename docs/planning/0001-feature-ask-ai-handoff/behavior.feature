@@ -2,9 +2,9 @@ Feature: Ask AI — hand a task off to an external AI harness
 
   Pressing "a" on a focused task opens a picker of the AI harnesses available on
   this machine (best-known harnesses actually installed, plus any declared in the
-  config file) and hands the task's description over to the selected harness
-  through a configurable, non-blocking handoff command. A CLI subcommand offers
-  the same flow for scripts and agents.
+  config file) and hands the task over to the selected harness through a
+  configurable, non-blocking handoff command. A CLI subcommand offers the same
+  flow for scripts and agents.
 
   # ---------------------------------------------------------------------------
   # Opening the picker
@@ -56,21 +56,15 @@ Feature: Ask AI — hand a task off to an external AI harness
   Scenario: Hand a task off to the selected harness
     Given a handoff command is configured
     And at least one harness is available
-    And a task "#7 Add dark mode" with description "implement the toggle" in project "tsk" is focused
+    And a task "#7 Add dark mode" in project "tsk" is focused
     When the user selects a harness in the picker
     Then the picker closes and the handoff command is launched detached, without blocking the TUI
     And the template placeholder "{{harness}}" is replaced by the selected harness
     And the template placeholder "{{cwd}}" is replaced by the handoff working directory
     And the template placeholder "{{prompt_file}}" is replaced by the path of a file containing:
       """
-      Task #7: Add dark mode (tsk)
-      I need to implement this: implement the toggle
+      I need to implement this task: Task #7: Add dark mode (tsk). You can check the task with the tsk CLI. After finishing, update its state with the same tsk CLI.
       """
-
-  Scenario: Empty description falls back to the task title
-    Given a task with description empty and title "Fix crash on empty list" is focused
-    When the handoff prompt is composed
-    Then the payload line reads "I need to implement this: Fix crash on empty list"
 
   Scenario: The handoff runs in tsk's launch directory by default
     Given "handoff.cwd" is not set in the config

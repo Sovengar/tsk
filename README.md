@@ -108,7 +108,25 @@ command = "nvim"          # external editor (E key)
 page_size        = 10     # tasks per page in List view
 default_estimate_days = 1.0  # estimate for tasks without estimate (Gantt)
 gantt_weeks      = 6      # default Gantt horizon
+
+# Ask AI: hand a task to an external harness with `a` (TUI) or `tsk ask` (CLI).
+[[harness]]
+name   = "opencode"       # display name and default binary
+binary = "opencode"       # optional; listed even when PATH detection misses it
+
+[handoff]
+command = "herdr pane split --current --direction down --cwd {{cwd}} && herdr agent start {{harness}} --kind {{harness}} --pane $(herdr pane current) && herdr agent prompt {{harness}} \"$(cat {{prompt_file}})\""
+cwd     = ""              # default: the directory where tsk was launched
 ```
+
+The handoff is generic: `command` is a `/bin/sh` template with `{{harness}}`,
+`{{cwd}}` and `{{prompt_file}}` (required) placeholders; swap it for tmux or a
+plain detached command with no code change. The task text never reaches the
+command line — it is written to a private temp file. The prompt does not embed
+the description: it identifies the task and points the harness at the `tsk` CLI,
+so the harness reads the task itself (`tsk show <id>`) and updates its state when
+done. Omit `[handoff]` to disable Ask AI (the action then refuses, naming the key
+to set).
 
 A malformed config does not break anything: defaults are applied.
 

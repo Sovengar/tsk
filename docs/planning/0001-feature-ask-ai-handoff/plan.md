@@ -1,7 +1,7 @@
 # Plan: Ask AI — hand a task off to an external AI harness
 
 - Slug: `ask-ai-handoff` · Type: feature · Branch: `feat/ask-ai-handoff`
-- Behavior source: `behavior.feature` (18 scenarios) — the exact user-visible strings, prompt shape and config-driven flows live there.
+- Behavior source: `behavior.feature` (17 scenarios) — the exact user-visible strings, prompt shape and config-driven flows live there.
 - `adr_required: true` — reason: this change freezes a new permanent public config surface (`[[harness]]`, `[handoff]`) and commits to a launch mechanism with a real security/genericity tradeoff (shell template + prompt-file carriage + detached session) that is hard to reverse. Proposed ADR title: **`ask-ai-handoff-contract`** (to be authored as part of this change).
 
 ## Intended outcome
@@ -15,7 +15,7 @@ Pressing `a` on a focused task opens a picker of the AI harnesses available on t
   - `[[harness]]` entries: `name` (required; display name and default binary) + optional `binary`. Additive to detection; declared entries are listed even when not on PATH (the fix path when detection misses something); a declared entry with the same display name replaces the detected one. Malformed/nameless entries are dropped (never fatal).
   - `[handoff]`: `command` (shell template; empty = handoff disabled) + optional `cwd` (default: the directory where `tsk` was launched).
   - Template placeholders: `{{harness}}`, `{{cwd}}`, `{{prompt_file}}` (required — refuse otherwise). Substituted values are shell-quoted by tsk so templates use them bare (e.g. `--cwd {{cwd}}`).
-- **Prompt carriage**: the prompt text never enters the command line — it is written to a 0600 temp file that `{{prompt_file}}` points at. The file is not deleted by tsk (the harness may read it after tsk exits; the OS temp reaper owns it). Content is pinned in `behavior.feature`: `Task #<id>: <title> (<project>)` + `I need to implement this: <description>` (title fallback when the description is empty).
+- **Prompt carriage**: the prompt text never enters the command line — it is written to a 0600 temp file that `{{prompt_file}}` points at. The file is not deleted by tsk (the harness may read it after tsk exits; the OS temp reaper owns it). Content is pinned in `behavior.feature`: `I need to implement this task: Task #<id>: <title> (<project>). You can check the task with the tsk CLI. After finishing, update its state with the same tsk CLI.` (single line; the description is not embedded — the harness reads the task via the `tsk` CLI).
 - **Handoff execution**: `/bin/sh -c <expanded template>` with working directory `handoff.cwd` (or launch dir), inherited environment, std streams to `/dev/null`, started in its own session (`Setsid`) and reaped in the background. Only spawn-time failures are surfaced (TUI error toast / CLI JSON error); after a successful start it is fire-and-forget.
 - **TUI**: a new picker modal following the existing overlay pattern (open flag + priority key dispatch + centered modal render + overlay kind in the bottom bar). `a` is added to the List/Kanban keybind hints and handled in List/Kanban/Detail; refusal and launch errors use the existing transient toast; zero harnesses shows exactly `No harnesses found`; no focus means no-op. Never `tea.ExecProcess` — that would freeze the dashboard.
 - **CLI**: `tsk ask <task-id> [--harness NAME]` — JSON output by default; auto-selects only when exactly one harness is available; every failure (unknown task, unknown/ambiguous harness, unconfigured handoff, zero harnesses, spawn error) exits non-zero with a JSON error listing what is available.
@@ -53,21 +53,20 @@ Pressing `a` on a focused task opens a picker of the AI harnesses available on t
 Phase: execution
 | Scenario (behavior.feature) | Status | Commit |
 | --- | --- | --- |
-| Open the Ask AI picker on a focused task | ✅ | |
-| Only installed known harnesses are listed | ✅ | |
-| A config-declared harness is listed even when detection does not know it | ✅ | |
-| A config entry overrides a detected harness with the same name | ✅ | |
-| No harnesses available | ✅ | |
-| No task is focused | ✅ | |
-| Hand a task off to the selected harness | ✅ | |
-| Empty description falls back to the task title | ✅ | |
-| The handoff runs in tsk's launch directory by default | ✅ | |
-| The handoff working directory can be overridden | ✅ | |
-| Cancel the picker | ✅ | |
-| No handoff command configured | ✅ | |
-| Handoff command missing the prompt placeholder | ✅ | |
-| Hand a task off from the CLI | ✅ | 214973e |
-| CLI auto-picks the only available harness | ✅ | 214973e |
-| CLI refuses to guess between several harnesses | ✅ | 214973e |
-| CLI reports unknown task or unknown harness | ✅ | 214973e |
-| CLI refuses when no handoff is configured | ✅ | 214973e |
+| Open the Ask AI picker on a focused task | ✅ | e508355 |
+| Only installed known harnesses are listed | ✅ | e508355 |
+| A config-declared harness is listed even when detection does not know it | ✅ | e508355 |
+| A config entry overrides a detected harness with the same name | ✅ | e508355 |
+| No harnesses available | ✅ | e508355 |
+| No task is focused | ✅ | e508355 |
+| Hand a task off to the selected harness | ✅ | e508355 |
+| The handoff runs in tsk's launch directory by default | ✅ | e508355 |
+| The handoff working directory can be overridden | ✅ | e508355 |
+| Cancel the picker | ✅ | e508355 |
+| No handoff command configured | ✅ | e508355 |
+| Handoff command missing the prompt placeholder | ✅ | e508355 |
+| Hand a task off from the CLI | ✅ | 3690506 |
+| CLI auto-picks the only available harness | ✅ | 3690506 |
+| CLI refuses to guess between several harnesses | ✅ | 3690506 |
+| CLI reports unknown task or unknown harness | ✅ | 3690506 |
+| CLI refuses when no handoff is configured | ✅ | 3690506 |

@@ -23,7 +23,7 @@ flowchart TD
     SEL -->|"TUI: Enter — or CLI: chosen / single auto-pick"| COMPOSE
     SEL -->|"CLI: several, no --harness"| AMBIG["error lists available names<br/>exit 1"]
 
-    COMPOSE["Compose prompt &rarr; 0600 temp file:<br/>Task #id: title (project)<br/>I need to implement this: description (fallback: title)"]
+    COMPOSE["Compose prompt &rarr; 0600 temp file:<br/>I need to implement this task: Task #id: title (project).<br/>Check the task, then update its state, with the tsk CLI."]
     COMPOSE --> EXEC["Expand template — {{harness}}, {{cwd}}, {{prompt_file}}<br/>substituted shell-quoted, run via /bin/sh -c<br/>Setsid &middot; /dev/null &middot; cwd = handoff.cwd or launch dir"]
     EXEC -->|"spawn error"| ERR["TUI: error toast<br/>CLI: JSON error, exit 1"]
     EXEC -->|"started"| DONE["Fire-and-forget:<br/>TUI stays responsive &middot; CLI prints JSON + exit 0 immediately"]

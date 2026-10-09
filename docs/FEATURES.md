@@ -15,6 +15,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 | Estimate | Task duration in days (feeds the Gantt) | `--estimate` |
 | Tags | Labels on tasks | `--tag`; `t` (detail) |
 | Comments | Per-task discussion | `c` (detail); `tsk comment` |
+| Ask AI handoff | Hand a task to an external AI harness (detected + config) | `a` (List/Kanban/Detail); `tsk ask` |
 | Off-days | Non-working days per person | `m` (Dashboard); `tsk offday` |
 | Project archiving | Reversible soft delete | `d`/`r` (Dashboard); `tsk project archive` |
 | JSON-first CLI | All commands output JSON | `tsk <cmd>` |
@@ -35,6 +36,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **View switching** — `1`/`2`/`3`/`4` switch between List, Kanban, Gantt, Dashboard.
 - **Navigation** — `hjkl` or arrows move the cursor; `Tab` cycles projects.
 - **Task actions** — `s` start, `d` done, `x` cancel, `Ctrl+p` cycle priority.
+- **Ask AI** — `a` on a focused task opens the harness picker and hands the task to the selected harness: the prompt points the harness at the `tsk` CLI to read the task and update its state (List, Kanban, Detail).
 - **Insert** — `i` creates a project (Dashboard) or task (List/Kanban).
 - **Edit** — `e` opens inline description editor; `E` opens external editor.
 - **Filters** — `/` opens the filter modal; `Esc` clears active filter.
@@ -53,6 +55,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **Assignee modal** — people roster with task counts; `Enter` opens detail with active tasks and off-days.
 - **Off-day form** — start, end, note; `Tab` cycles fields.
 - **Tag modal** — toggle tags on the opened task; `Tab` completes, `Enter` toggles.
+- **Ask AI picker** — the harnesses available on this machine (PATH-detected + config-declared); `↑↓` move, `Enter` hands the task off detached, `Esc` closes. With none available it shows `No harnesses found`.
 - **Confirmation modal** — yes/no for archive/restore project, delete off-day; `y`/`n`.
 - **Description editor** — inline textarea embedded in detail; `Ctrl+S` saves, `Esc` cancels.
 - **Help modal** — keybindings for current view and all modals.
@@ -62,6 +65,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **Project management** — `tsk project add|list|show|update|remove|archive|unarchive`.
 - **Task CRUD** — `tsk add`, `tsk list`, `tsk show`, `tsk update`, `tsk move`.
 - **Workflow shortcuts** — `tsk start`, `tsk review`, `tsk done`, `tsk cancel`.
+- **Ask AI** — `tsk ask <task-id> [--harness NAME]` hands a task to a harness and exits without waiting.
 - **Comments** — `tsk comment add|list|remove`.
 - **Off-days** — `tsk offday add|list|remove`.
 - **Gantt** — `tsk gantt [--project] [--assignee] [--from] [--weeks]`.
@@ -83,7 +87,10 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **`[list] page_size`** — tasks per page in List view; default 10.
 - **`[list] default_estimate_days`** — estimate for tasks without one in the Gantt; default 1.0.
 - **`[list] gantt_weeks`** — default Gantt horizon; default 6.
-- Malformed config falls back to defaults with a warning.
+- **`[[harness]] name` / `binary`** — additive harnesses: listed in the Ask AI picker even when detection misses them; `binary` defaults to `name`. A declared entry replaces a detected one with the same name.
+- **`[handoff] command`** — shell template that launches a harness, with `{{harness}}`, `{{cwd}}` and `{{prompt_file}}` (required) placeholders; values are shell-quoted by tsk. Empty = Ask AI disabled.
+- **`[handoff] cwd`** — working directory for the handoff; default: where `tsk` was launched.
+- Malformed config falls back to defaults with a warning. A single malformed `[[harness]]` entry is dropped without discarding the rest of the file.
 
 ## Storage and migrations
 
