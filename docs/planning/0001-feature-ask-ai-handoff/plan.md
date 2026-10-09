@@ -50,7 +50,7 @@ Pressing `a` on a focused task opens a picker of the AI harnesses available on t
 6. Full gates (`make check`, mutation) and `make install`.
 
 ## Progress
-Phase: planning
+Phase: execution
 | Scenario (behavior.feature) | Status | Commit |
 | --- | --- | --- |
 | Open the Ask AI picker on a focused task | ⬜ | |
