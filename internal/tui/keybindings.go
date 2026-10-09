@@ -72,6 +72,7 @@ func keybindsForView(v viewKind) []keybind {
 			{"/", "filters"},
 			{"Ctrl+p", "priority"},
 			{"n/p  N/P", "page nav"},
+			{"a", "ask AI"},
 		}
 	case viewKanban:
 		viewKeys = []keybind{
@@ -84,6 +85,7 @@ func keybindsForView(v viewKind) []keybind {
 			{"e/E", "edit/editor"},
 			{"Ctrl+p", "priority"},
 			{"/", "filters"},
+			{"a", "ask AI"},
 		}
 	case viewGantt:
 		viewKeys = []keybind{

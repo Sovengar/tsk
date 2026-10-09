@@ -13,6 +13,7 @@ func detailKeybinds() []keybind {
 		{"j/k", "select comment"},
 		{"c", "new comment"},
 		{"t", "tags"},
+		{"a", "ask AI"},
 		{"d", "delete/done"},
 		{"e/E", "edit/editor"},
 		{"s", "start"},

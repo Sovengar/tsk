@@ -64,10 +64,12 @@ func TestListActionKeysActWithValidCursor(t *testing.T) {
 // The toast takes one line, so adding it instead of subtracting it changes how
 // many task rows fit in the box.
 //
-// At a height of 18 the difference falls right on the edge: with toast 2 task
+// At a height of 19 the difference falls right on the edge: with toast 2 task
 // rows are painted, without toast 3. The numbers are literals, not derived: if
 // someone changes the layout's height split the test has to be updated by hand,
-// which is exactly what is wanted.
+// which is exactly what is wanted. (The height moved from 18 to 19 when the
+// List gained the "a / ask AI" hint: 15 actions no longer fit in two rows of
+// keybindsPerRow, so the bar grew a row and the edge shifted.)
 func TestViewBudgetCountsToastLine(t *testing.T) {
 	for _, tt := range []struct {
 		toast string
@@ -79,7 +81,7 @@ func TestViewBudgetCountsToastLine(t *testing.T) {
 		t.Run("toast="+tt.toast, func(t *testing.T) {
 			m := newTestModel(t)
 			m.currentView = viewList
-			m.height = 18
+			m.height = 19
 			m.toast = tt.toast
 			m.toastKind = "info"
 

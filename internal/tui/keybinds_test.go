@@ -28,6 +28,7 @@ func TestKeybindsBarRenderOverlay(t *testing.T) {
 		{overlayAssignee, []string{"open", "add off-day", "close"}, nil},
 		{overlayAssigneeDetail, []string{"add off-day", "delete off-day", "back"}, []string{"toggle tag"}},
 		{overlayOffdayForm, []string{"save", "next field", "cancel"}, []string{"toggle tag"}},
+		{overlayAskAI, []string{"move", "handoff", "close"}, []string{"toggle tag"}},
 		{overlayNone, nil, []string{"confirm", "toggle tag"}},
 	}
 	for _, tt := range tests {
@@ -58,7 +59,7 @@ func TestEveryOverlayHasKeybinds(t *testing.T) {
 	all := []overlayKind{
 		overlayDetail, overlayTag, overlayNewTask, overlayFilter,
 		overlayProject, overlayConfirm, overlayDescEdit, overlayAssignee,
-		overlayAssigneeDetail, overlayOffdayForm,
+		overlayAssigneeDetail, overlayOffdayForm, overlayAskAI,
 	}
 	for _, o := range all {
 		if o == overlayNone {
@@ -132,6 +133,8 @@ func overlayName(o overlayKind) string {
 		return "assignee-detail"
 	case overlayOffdayForm:
 		return "offday-form"
+	case overlayAskAI:
+		return "ask-ai"
 	}
 	return "?"
 }
