@@ -96,17 +96,16 @@ func TestDetectSortedAlphabetically(t *testing.T) {
 
 func TestComposePrompt(t *testing.T) {
 	task := model.Task{ID: 7, Title: "Add dark mode", ProjectName: "tsk", Description: "implement the toggle"}
-	want := "Task #7: Add dark mode (tsk)\nI need to implement this: implement the toggle"
+	want := "I need to implement this task: Task #7: Add dark mode (tsk). You can check the task with the tsk CLI. After finishing, update its state with the same tsk CLI."
 	if got := ComposePrompt(task); got != want {
 		t.Errorf("ComposePrompt = %q, want %q", got, want)
 	}
 }
 
-func TestComposePromptEmptyDescriptionFallsBackToTitle(t *testing.T) {
-	task := model.Task{ID: 1, Title: "Fix crash on empty list", ProjectName: "tsk", Description: ""}
-	want := "Task #1: Fix crash on empty list (tsk)\nI need to implement this: Fix crash on empty list"
-	if got := ComposePrompt(task); got != want {
-		t.Errorf("ComposePrompt = %q, want %q", got, want)
+func TestComposePromptDoesNotEmbedDescription(t *testing.T) {
+	task := model.Task{ID: 1, Title: "Fix crash on empty list", ProjectName: "tsk", Description: "secret detail"}
+	if got := ComposePrompt(task); strings.Contains(got, "secret detail") {
+		t.Errorf("ComposePrompt = %q, want the description omitted", got)
 	}
 }
 
@@ -266,7 +265,7 @@ func TestExecuteWritesPromptFileAndSpawns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prompt file %q: %v", path, err)
 	}
-	want := "Task #7: Add dark mode (tsk)\nI need to implement this: implement the toggle"
+	want := "I need to implement this task: Task #7: Add dark mode (tsk). You can check the task with the tsk CLI. After finishing, update its state with the same tsk CLI."
 	if string(data) != want {
 		t.Errorf("prompt content = %q, want %q", data, want)
 	}

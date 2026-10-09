@@ -116,16 +116,12 @@ func merge(detected, declared []Harness) []Harness {
 	return out
 }
 
-// ComposePrompt is the prompt handed to the harness. Its core payload is the
-// task description framed as "I need to implement this:"; when the description
-// is empty the title is used so the payload is never blank.
+// ComposePrompt is the prompt handed to the harness. It identifies the task and
+// points the harness at the tsk CLI to read the task and update its state; the
+// description is not embedded so the harness always reads the current task.
 func ComposePrompt(t model.Task) string {
-	payload := t.Description
-	if payload == "" {
-		payload = t.Title
-	}
-	return fmt.Sprintf("Task #%d: %s (%s)\nI need to implement this: %s",
-		t.ID, t.Title, t.ProjectName, payload)
+	return fmt.Sprintf("I need to implement this task: Task #%d: %s (%s). You can check the task with the tsk CLI. After finishing, update its state with the same tsk CLI.",
+		t.ID, t.Title, t.ProjectName)
 }
 
 // ValidateCommand reports whether the handoff command can be used: it must be
