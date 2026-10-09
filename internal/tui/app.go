@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"tsk/internal/config"
 	"tsk/internal/db"
+	"tsk/internal/harness"
 	"tsk/internal/model"
 )
 
@@ -108,6 +109,12 @@ type Model struct {
 	filterSearch    string // fuzzy search of the active field
 	filterOptionIdx int    // option cursor of the active field
 
+	// Ask AI picker (opened with "a" on a focused task)
+	askAIOpen  bool
+	askAIIndex int
+	askAIList  []harness.Harness
+	askAITask  *model.Task
+
 	// New task modal
 	newTaskOpen            bool
 	newTaskFieldIdx        int // 0=priority, 1=title, 2=description, 3=assignee, 4=tags
@@ -165,6 +172,12 @@ type offdaysLoadedMsg struct {
 
 // taskCreateFailedMsg results from a failed task creation from the modal.
 type taskCreateFailedMsg struct{ err error }
+
+// askLaunchedMsg confirms a handoff was started (fire-and-forget).
+type askLaunchedMsg struct{ name string }
+
+// askFailedMsg carries a handoff spawn failure.
+type askFailedMsg struct{ err error }
 
 // offdaySavedMsg results from an off-day create or delete. err != nil indicates failure.
 type offdaySavedMsg struct {
@@ -538,6 +551,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case askLaunchedMsg:
+		return m, m.setToast("Handoff launched to "+msg.name, "info")
+
+	case askFailedMsg:
+		return m, m.setToast(msg.err.Error(), "error")
+
 	case commentsLoadedMsg:
 		if m.detailOpen && m.detailTask != nil && m.detailTask.ID == msg.taskID {
 			m.detailComments = msg.comments
@@ -627,6 +646,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Tag modal (overlays the detail)
 	if m.tagOpen {
 		return m.handleTagModalKey(key)
+	}
+
+	// Ask AI picker (overlays the detail)
+	if m.askAIOpen {
+		return m.handleAskAIKey(key)
 	}
 
 	// Detail modal keys
@@ -749,6 +773,9 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "i":
 		// New task
 		return m, m.newTask()
+	case "a":
+		// Ask AI: hand the focused task off to a harness.
+		return m, m.openAskAI(m.selectedTask())
 	case "enter":
 		if inRange(m.cursor, len(tasks)) {
 			t := tasks[m.cursor]
@@ -875,6 +902,9 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 	case "i":
 		// New task
 		return m, m.newTask()
+	case "a":
+		// Ask AI: hand the focused task off to a harness.
+		return m, m.openAskAI(m.selectedTask())
 	case "enter":
 		if inRange(m.kanbanRow, len(colTasks)) {
 			t := colTasks[m.kanbanRow]
@@ -945,6 +975,9 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 			m.tagInput = ""
 			m.tagSuggestIdx = -1
 		}
+	case "a":
+		// Ask AI: hand the opened task off to a harness.
+		return m, m.openAskAI(m.detailTask)
 	case "e":
 		// Edit the description inline; the detail stays open behind.
 		if m.detailTask != nil {
@@ -1070,6 +1103,8 @@ func (m Model) overlayKind() overlayKind {
 		return overlayDescEdit
 	case m.tagOpen:
 		return overlayTag
+	case m.askAIOpen:
+		return overlayAskAI
 	case m.detailOpen:
 		return overlayDetail
 	case m.filterOpen:
@@ -1126,6 +1161,10 @@ func (m Model) View() tea.View {
 
 	if m.tagOpen {
 		content = m.renderTagModal(content)
+	}
+
+	if m.askAIOpen {
+		content = m.renderAskAIModal(content)
 	}
 
 	if m.filterOpen {

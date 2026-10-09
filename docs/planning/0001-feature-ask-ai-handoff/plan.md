@@ -53,21 +53,21 @@ Pressing `a` on a focused task opens a picker of the AI harnesses available on t
 Phase: execution
 | Scenario (behavior.feature) | Status | Commit |
 | --- | --- | --- |
-| Open the Ask AI picker on a focused task | ⬜ | |
-| Only installed known harnesses are listed | ⬜ | |
-| A config-declared harness is listed even when detection does not know it | ⬜ | |
-| A config entry overrides a detected harness with the same name | ⬜ | |
-| No harnesses available | ⬜ | |
-| No task is focused | ⬜ | |
-| Hand a task off to the selected harness | ⬜ | |
-| Empty description falls back to the task title | ⬜ | |
-| The handoff runs in tsk's launch directory by default | ⬜ | |
-| The handoff working directory can be overridden | ⬜ | |
-| Cancel the picker | ⬜ | |
-| No handoff command configured | ⬜ | |
-| Handoff command missing the prompt placeholder | ⬜ | |
-| Hand a task off from the CLI | ✅ | |
-| CLI auto-picks the only available harness | ✅ | |
-| CLI refuses to guess between several harnesses | ✅ | |
-| CLI reports unknown task or unknown harness | ✅ | |
-| CLI refuses when no handoff is configured | ✅ | |
+| Open the Ask AI picker on a focused task | ✅ | |
+| Only installed known harnesses are listed | ✅ | |
+| A config-declared harness is listed even when detection does not know it | ✅ | |
+| A config entry overrides a detected harness with the same name | ✅ | |
+| No harnesses available | ✅ | |
+| No task is focused | ✅ | |
+| Hand a task off to the selected harness | ✅ | |
+| Empty description falls back to the task title | ✅ | |
+| The handoff runs in tsk's launch directory by default | ✅ | |
+| The handoff working directory can be overridden | ✅ | |
+| Cancel the picker | ✅ | |
+| No handoff command configured | ✅ | |
+| Handoff command missing the prompt placeholder | ✅ | |
+| Hand a task off from the CLI | ✅ | 214973e |
+| CLI auto-picks the only available harness | ✅ | 214973e |
+| CLI refuses to guess between several harnesses | ✅ | 214973e |
+| CLI reports unknown task or unknown harness | ✅ | 214973e |
+| CLI refuses when no handoff is configured | ✅ | 214973e |
