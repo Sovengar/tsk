@@ -4,6 +4,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"tsk/internal/config"
 	"tsk/internal/db"
+	"tsk/internal/harness"
 	"tsk/internal/model"
 )
 
@@ -76,6 +78,8 @@ func Run(args []string) bool {
 		cmdCancel(args[1])
 	case "stats":
 		cmdStats(args[1:])
+	case "ask":
+		cmdAsk(args[1:])
 	case "migrate":
 		cmdMigrate()
 	case "completion":
@@ -635,6 +639,92 @@ func cmdShow(idStr string) {
 	}
 
 	outputJSON(map[string]any{"task": t, "comments": comments})
+}
+
+// cmdAsk hands a task off to an AI harness: tsk ask <task-id> [--harness NAME].
+// It never waits for the harness; it prints a JSON result as soon as the
+// process is started.
+func cmdAsk(args []string) {
+	if len(args) == 0 {
+		outputError("usage: tsk ask <task-id> [--harness NAME]")
+	}
+
+	idStr := args[0]
+	var harnessName string
+	s := newFlagScanner(args, 1)
+	for {
+		flag, ok := s.next()
+		if !ok {
+			break
+		}
+		switch flag {
+		case "--harness":
+			if v, ok := s.next(); ok {
+				harnessName = v
+			}
+		}
+	}
+
+	cfg := config.Load()
+	if err := harness.ValidateCommand(cfg.Handoff.Command); err != nil {
+		outputError(err.Error())
+	}
+
+	database := openDB()
+	defer closeDB(database)
+
+	id := parseID(idStr)
+	task, err := database.GetTask(id)
+	if err != nil {
+		outputError(err.Error())
+	}
+
+	selected, err := selectHarness(harness.Detect(cfg), harnessName)
+	if err != nil {
+		outputError(err.Error())
+	}
+
+	if err := harness.Execute(cfg, *task, selected); err != nil {
+		outputError(err.Error())
+	}
+
+	outputJSON(map[string]any{
+		"ok":       true,
+		"task_id":  id,
+		"harness":  selected,
+		"launched": true,
+	})
+}
+
+// selectHarness resolves the harness to use: the requested one, the only
+// available one, or an error listing the options (never guesses between
+// several, so an agent always knows which one ran).
+func selectHarness(available []harness.Harness, want string) (string, error) {
+	if want != "" {
+		for _, h := range available {
+			if h.Name == want {
+				return h.Name, nil
+			}
+		}
+		return "", fmt.Errorf("unknown harness: %s (available: %s)", want, harnessNames(available))
+	}
+	if len(available) == 1 {
+		return available[0].Name, nil
+	}
+	if len(available) == 0 {
+		//nolint:staticcheck // the message is pinned by behavior.feature
+		return "", errors.New(harness.NoHarnessesMessage)
+	}
+	return "", fmt.Errorf("several harnesses available, pass --harness: %s", harnessNames(available))
+}
+
+// harnessNames joins the display names for the error messages.
+func harnessNames(list []harness.Harness) string {
+	names := make([]string, 0, len(list))
+	for _, h := range list {
+		names = append(names, h.Name)
+	}
+	return strings.Join(names, ", ")
 }
 
 // cmdComment manages the comment subcommands: add, list, remove.
@@ -1248,10 +1338,10 @@ _tsk_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="project add list show update move start review done cancel comment offday gantt stats migrate completion help"
+    commands="project add list show update move start review done cancel comment offday gantt stats ask migrate completion help"
 
     if [[ ${cur} == -* ]] ; then
-        COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --estimate --from --weeks --note --workflow --list-order --force --archived --name" -- ${cur}) )
+        COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --estimate --from --weeks --note --workflow --list-order --force --archived --name --harness" -- ${cur}) )
         return 0
     fi
 
@@ -1283,7 +1373,7 @@ const zshCompletion = `#compdef tsk
 
 _tsk() {
     _arguments \
-        '1:command:(project add list show update move start review done cancel comment offday gantt stats migrate completion help)' \
+        '1:command:(project add list show update move start review done cancel comment offday gantt stats ask migrate completion help)' \
         '*::arg:->args'
 }
 
@@ -1315,6 +1405,7 @@ complete -c tsk -n '__fish_seen_subcommand_from offday' -a list -d 'List off-day
 complete -c tsk -n '__fish_seen_subcommand_from offday' -a remove -d 'Delete off-day'
 complete -c tsk -n '__fish_use_subcommand' -a gantt -d 'Project the schedule'
 complete -c tsk -n '__fish_use_subcommand' -a stats -d 'Show statistics'
+complete -c tsk -n '__fish_use_subcommand' -a ask -d 'Hand off a task to an AI harness'
 complete -c tsk -n '__fish_use_subcommand' -a migrate -d 'Run migrations'
 complete -c tsk -n '__fish_use_subcommand' -a completion -d 'Generate shell completions'
 complete -c tsk -n '__fish_use_subcommand' -a help -d 'Show help'
@@ -1328,6 +1419,7 @@ complete -c tsk -l from -d 'Gantt start date (YYYY-MM-DD)'
 complete -c tsk -l weeks -d 'Gantt horizon in weeks'
 complete -c tsk -l note -d 'Off-day note'
 complete -c tsk -l archived -d 'List archived projects'
+complete -c tsk -l harness -d 'AI harness to hand a task to'
 `
 
 func cmdHelp() {
@@ -1357,8 +1449,9 @@ func cmdHelp() {
 		"tsk offday list [--assignee A] [--json]":              "list off-days",
 		"tsk offday remove <id>":                               "delete an off-day",
 		"tsk gantt [--project X] [--assignee A] [--from DATE] [--weeks N] [--json]": "project the schedule per person (--project/--assignee filter the view, not the dates)",
-		"tsk stats [--project X]": "show statistics",
-		"tsk migrate":             "run pending migrations",
+		"tsk stats [--project X]":            "show statistics",
+		"tsk ask <task-id> [--harness NAME]": "hand a task off to an AI harness",
+		"tsk migrate":                        "run pending migrations",
 	}
 
 	// Group by category

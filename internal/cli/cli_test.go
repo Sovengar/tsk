@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"tsk/internal/db"
+	"tsk/internal/harness"
 	"tsk/internal/model"
 )
 
@@ -287,4 +290,205 @@ func runErr(t *testing.T, args ...string) (stderrText string, code int) {
 		Run(args)
 	}()
 	return out.String(), code
+}
+
+// withAskEnv points TSK_CONFIG at a fresh config with the given handoff command
+// (empty string = no [handoff] section) plus extra harness TOML, and empties
+// PATH so built-in detection finds nothing and the declared harnesses are the
+// only variable. Returns the database path.
+func withAskEnv(t *testing.T, handoffCommand, extraHarnessTOML string) string {
+	t.Helper()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "tsk.db")
+	cfgPath := filepath.Join(dir, "config.toml")
+	body := "[database]\npath = \"" + dbPath + "\"\n"
+	if handoffCommand != "" {
+		body += "\n[handoff]\ncommand = '" + handoffCommand + "'\n"
+	}
+	body += extraHarnessTOML
+	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TSK_CONFIG", cfgPath)
+	// No binary is on PATH: detection contributes nothing.
+	t.Setenv("PATH", t.TempDir())
+	return dbPath
+}
+
+const harnessOpencode = "\n[[harness]]\nname = \"opencode\"\n"
+
+// seedTask creates one project and task and returns the task id.
+func seedTask(t *testing.T, dbPath string) int64 {
+	t.Helper()
+	database, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = database.Close() }()
+	if _, err := database.CreateProject("api", nil); err != nil {
+		t.Fatal(err)
+	}
+	task, err := database.CreateTask("api", "Add dark mode", "implement the toggle", "", 0, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return task.ID
+}
+
+func TestCmdAskLaunches(t *testing.T) {
+	dbPath := withAskEnv(t, "true {{prompt_file}}", harnessOpencode)
+	id := seedTask(t, dbPath)
+
+	out, code := run(t, "ask", strconv.FormatInt(id, 10), "--harness", "opencode")
+	if code != 0 {
+		t.Fatalf("tsk ask exited with %d: %s", code, out)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("stdout is not JSON: %v (%q)", err, out)
+	}
+	if got["ok"] != true || got["launched"] != true {
+		t.Errorf("payload = %v, want ok and launched true", got)
+	}
+	if got["harness"] != "opencode" {
+		t.Errorf("harness = %v, want opencode", got["harness"])
+	}
+}
+
+func TestCmdAskAutoPicksOnlyHarness(t *testing.T) {
+	dbPath := withAskEnv(t, "true {{prompt_file}}", harnessOpencode)
+	id := seedTask(t, dbPath)
+
+	out, code := run(t, "ask", strconv.FormatInt(id, 10))
+	if code != 0 {
+		t.Fatalf("tsk ask exited with %d: %s", code, out)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got["harness"] != "opencode" {
+		t.Errorf("harness = %v, want the only available opencode", got["harness"])
+	}
+}
+
+func TestCmdAskRefusesToGuess(t *testing.T) {
+	extra := "\n[[harness]]\nname = \"opencode\"\n\n[[harness]]\nname = \"claude\"\n"
+	dbPath := withAskEnv(t, "true {{prompt_file}}", extra)
+	id := seedTask(t, dbPath)
+
+	errOut, code := runErr(t, "ask", strconv.FormatInt(id, 10))
+	if code == 0 {
+		t.Fatal("tsk ask without --harness and several harnesses should fail")
+	}
+	for _, want := range []string{"opencode", "claude"} {
+		if !strings.Contains(errOut, want) {
+			t.Errorf("error without %q: %s", want, errOut)
+		}
+	}
+}
+
+func TestCmdAskUnknownTask(t *testing.T) {
+	withAskEnv(t, "true {{prompt_file}}", harnessOpencode)
+	if _, code := runErr(t, "ask", "999", "--harness", "opencode"); code == 0 {
+		t.Fatal("tsk ask with an unknown task should fail")
+	}
+}
+
+func TestCmdAskUnknownHarness(t *testing.T) {
+	dbPath := withAskEnv(t, "true {{prompt_file}}", harnessOpencode)
+	id := seedTask(t, dbPath)
+	errOut, code := runErr(t, "ask", strconv.FormatInt(id, 10), "--harness", "nope")
+	if code == 0 {
+		t.Fatal("tsk ask with an unknown harness should fail")
+	}
+	if !strings.Contains(errOut, "nope") {
+		t.Errorf("error without the requested name: %s", errOut)
+	}
+}
+
+func TestCmdAskNoHandoffConfigured(t *testing.T) {
+	dbPath := withAskEnv(t, "", harnessOpencode)
+	id := seedTask(t, dbPath)
+	errOut, code := runErr(t, "ask", strconv.FormatInt(id, 10), "--harness", "opencode")
+	if code == 0 {
+		t.Fatal("tsk ask without handoff.command should fail")
+	}
+	if !strings.Contains(errOut, "handoff.command") {
+		t.Errorf("error must name handoff.command: %s", errOut)
+	}
+}
+
+func TestCmdAskMissingPlaceholder(t *testing.T) {
+	dbPath := withAskEnv(t, "true", harnessOpencode)
+	id := seedTask(t, dbPath)
+	errOut, code := runErr(t, "ask", strconv.FormatInt(id, 10), "--harness", "opencode")
+	if code == 0 {
+		t.Fatal("tsk ask with a command lacking {{prompt_file}} should fail")
+	}
+	if !strings.Contains(errOut, "{{prompt_file}}") {
+		t.Errorf("error must name {{prompt_file}}: %s", errOut)
+	}
+}
+
+func TestCmdAskNoHarnessesFound(t *testing.T) {
+	dbPath := withAskEnv(t, "true {{prompt_file}}", "")
+	id := seedTask(t, dbPath)
+	errOut, code := runErr(t, "ask", strconv.FormatInt(id, 10))
+	if code == 0 {
+		t.Fatal("tsk ask with no harnesses should fail")
+	}
+	if !strings.Contains(errOut, "No harnesses found") {
+		t.Errorf("error = %s, want No harnesses found", errOut)
+	}
+}
+
+func TestCmdAskUsage(t *testing.T) {
+	withAskEnv(t, "true {{prompt_file}}", harnessOpencode)
+	if _, code := runErr(t, "ask"); code == 0 {
+		t.Fatal("tsk ask without a task id should fail with usage")
+	}
+}
+
+// A spawn that cannot start (nonexistent working directory) is surfaced as a
+// JSON error instead of being swallowed.
+func TestCmdAskSpawnError(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "tsk.db")
+	cfgPath := filepath.Join(dir, "config.toml")
+	body := "[database]\npath = \"" + dbPath + "\"\n\n[handoff]\ncommand = 'true {{prompt_file}}'\ncwd = \"/no/such/tsk-dir-xyz\"\n" + harnessOpencode
+	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TSK_CONFIG", cfgPath)
+	t.Setenv("PATH", t.TempDir())
+	id := seedTask(t, dbPath)
+
+	errOut, code := runErr(t, "ask", strconv.FormatInt(id, 10), "--harness", "opencode")
+	if code == 0 {
+		t.Fatal("tsk ask with an unusable cwd should fail")
+	}
+	if !strings.Contains(errOut, "no such file") && !strings.Contains(errOut, "chdir") {
+		t.Errorf("error = %s, want the spawn failure", errOut)
+	}
+}
+
+func TestSelectHarness(t *testing.T) {
+	list := []harness.Harness{{Name: "opencode"}, {Name: "claude"}}
+
+	if got, err := selectHarness(list, "claude"); err != nil || got != "claude" {
+		t.Errorf("selectHarness(claude) = %q, %v", got, err)
+	}
+	if _, err := selectHarness(list, "nope"); err == nil || !strings.Contains(err.Error(), "opencode") {
+		t.Errorf("unknown harness error = %v, want it to list available names", err)
+	}
+	if got, err := selectHarness([]harness.Harness{{Name: "only"}}, ""); err != nil || got != "only" {
+		t.Errorf("selectHarness with a single harness = %q, %v", got, err)
+	}
+	if _, err := selectHarness(list, ""); err == nil {
+		t.Error("selectHarness with several harnesses and no pick should fail")
+	}
+	if _, err := selectHarness(nil, ""); err == nil || !strings.Contains(err.Error(), "No harnesses found") {
+		t.Errorf("selectHarness with none = %v, want No harnesses found", err)
+	}
 }

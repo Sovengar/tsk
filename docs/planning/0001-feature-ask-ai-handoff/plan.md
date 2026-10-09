@@ -66,8 +66,8 @@ Phase: execution
 | Cancel the picker | ⬜ | |
 | No handoff command configured | ⬜ | |
 | Handoff command missing the prompt placeholder | ⬜ | |
-| Hand a task off from the CLI | ⬜ | |
-| CLI auto-picks the only available harness | ⬜ | |
-| CLI refuses to guess between several harnesses | ⬜ | |
-| CLI reports unknown task or unknown harness | ⬜ | |
-| CLI refuses when no handoff is configured | ⬜ | |
+| Hand a task off from the CLI | ✅ | |
+| CLI auto-picks the only available harness | ✅ | |
+| CLI refuses to guess between several harnesses | ✅ | |
+| CLI reports unknown task or unknown harness | ✅ | |
+| CLI refuses when no handoff is configured | ✅ | |
