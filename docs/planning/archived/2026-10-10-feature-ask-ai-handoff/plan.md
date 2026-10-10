@@ -50,7 +50,8 @@ Pressing `a` on a focused task opens a picker of the AI harnesses available on t
 6. Full gates (`make check`, mutation) and `make install`.
 
 ## Progress
-Phase: review
+Phase: close
+Close: started 2026-10-10
 
 Re-review: 2026-10-10 — verdict **pass** (fix round 48d3cd7 + 6d86d7d re-checked: all 5 MEDIUMs resolved — `{{harness_binary}}` placeholder threads the full Harness and is asserted in expansion/spawn/selection tests, `Execute` removes the prompt file on launch failure with a dedicated test, README/FEATURES use the flat config keys, the warning claim is corrected, plan/issue prompt text matches the shipped contract; cheap LOWs fixed too). Verification passing (Lint/Test/CI fast green, Mutation skipped). **Change opened for integration.**
 
