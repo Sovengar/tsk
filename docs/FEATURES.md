@@ -58,11 +58,11 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **Ask AI picker** — the harnesses available on this machine (PATH-detected + config-declared); `↑↓` move, `Enter` hands the task off detached, `Esc` closes. With none available it shows `No harnesses found`.
 - **Confirmation modal** — yes/no for archive/restore project, delete off-day; `y`/`n`.
 - **Description editor** — inline textarea embedded in detail; `Ctrl+S` saves, `Esc` cancels.
-- **Help modal** — keybindings for current view and all modals.
+- **Help modal** — keybindings for the current view plus the Task detail, New task and Filters modals.
 
 ## CLI commands
 
-- **Project management** — `tsk project add|list|show|update|remove|archive|unarchive`.
+- **Project management** — `tsk project add|list|show|update|remove|archive|unarchive` (`--archived` lists archived ones).
 - **Task CRUD** — `tsk add`, `tsk list`, `tsk show`, `tsk update`, `tsk move`.
 - **Workflow shortcuts** — `tsk start`, `tsk review`, `tsk done`, `tsk cancel`.
 - **Ask AI** — `tsk ask <task-id> [--harness NAME]` hands a task to a harness and exits without waiting.
@@ -96,6 +96,6 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 
 - Embedded SQLite via `modernc.org/sqlite` (pure Go, no CGO).
 - WAL mode with 5s busy timeout.
-- 8 schema migrations (001-008) tracking: initial schema, comments, archiving, list order, estimate, off-days, tags.
+- 8 schema migrations (001-008) tracking: initial schema, comments, archiving, list order, estimate, off-days, tags, and two legacy-column drops (`tasks.position`, `projects.path`).
 - 3 reserved migration slots (009-011) for removed data migrations.
 - Atomic writes (tmp + rename) for persistence.
