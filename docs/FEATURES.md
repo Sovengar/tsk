@@ -55,7 +55,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **Assignee modal** — people roster with task counts; `Enter` opens detail with active tasks and off-days.
 - **Off-day form** — start, end, note; `Tab` cycles fields.
 - **Tag modal** — toggle tags on the opened task; `Tab` completes, `Enter` toggles.
-- **Ask AI picker** — the harnesses available on this machine (PATH-detected + config-declared); `↑↓` move, `Enter` hands the task off detached, `Esc` closes. With none available it shows `No harnesses found`.
+- **Ask AI picker** — the harnesses available on this machine (built-in detection: `aider`, `claude`, `codex`, `gemini`, `opencode`, `pi`, each listed when its binary is on PATH; plus config-declared); `↑↓` move, `Enter` hands the task off detached, `Esc` closes. With none available it shows `No harnesses found`.
 - **Confirmation modal** — yes/no for archive/restore project, delete off-day; `y`/`n`.
 - **Description editor** — inline textarea embedded in detail; `Ctrl+S` saves, `Esc` cancels.
 - **Help modal** — keybindings for the current view plus the Task detail, New task and Filters modals.
