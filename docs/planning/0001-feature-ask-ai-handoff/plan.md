@@ -52,6 +52,8 @@ Pressing `a` on a focused task opens a picker of the AI harnesses available on t
 ## Progress
 Phase: review
 
+Re-review: 2026-10-10 — verdict **pass** (fix round 48d3cd7 + 6d86d7d re-checked: all 5 MEDIUMs resolved — `{{harness_binary}}` placeholder threads the full Harness and is asserted in expansion/spawn/selection tests, `Execute` removes the prompt file on launch failure with a dedicated test, README/FEATURES use the flat config keys, the warning claim is corrected, plan/issue prompt text matches the shipped contract; cheap LOWs fixed too). Verification passing (Lint/Test/CI fast green, Mutation skipped). **Change opened for integration.**
+
 Review: 2026-10-10 — verdict **fix** (5-way parallel review: behavior + code/security/performance/docs lenses over `main...HEAD`); 0 CRITICAL, 0 HIGH, 5 MEDIUM, 14 LOW. Change left unopened. MEDIUMs: `Harness.Binary` never reaches the launch (`internal/harness/harness.go:94`), prompt temp file orphaned on launch failure (`harness.go:186`), README config sample still nests flat keys under `[list]` (`README.md:107-110`), FEATURES.md claims a config warning the code never emits (`docs/FEATURES.md:93`), planning docs still describe an embedded-description prompt (`plan.md:9`, `issue.md:33-36,72-73`).
 
 Phase: execution

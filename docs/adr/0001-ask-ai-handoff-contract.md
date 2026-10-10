@@ -101,7 +101,8 @@ binary = "opencode"
 command = "pane=$(herdr pane split --current --direction down --cwd {{cwd}} | jq -r '.result.pane.pane_id') && herdr agent start {{harness}}-$$ --kind {{harness}} --pane \"$pane\" -- --prompt \"$(cat {{prompt_file}})\""
 ```
 
-Verified against `herdr 0.9.2-preview`: the pane id must be captured from the
+The example needs `jq` on `PATH` (it parses the `pane split` JSON). Verified
+against `herdr 0.9.2-preview`: the pane id must be captured from the
 `pane split` result (`| jq -r '.result.pane.pane_id'`) — `herdr pane current`
 returns a JSON object, not a bare id, so passing it to `--pane` fails while the
 split has already happened. The prompt rides on `agent start … -- --prompt
