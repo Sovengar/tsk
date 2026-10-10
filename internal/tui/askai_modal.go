@@ -50,25 +50,36 @@ func (m Model) handleAskAIKey(key string) (tea.Model, tea.Cmd) {
 		if !inRange(m.askAIIndex, len(m.askAIList)) || m.askAITask == nil {
 			return m, nil
 		}
-		name := m.askAIList[m.askAIIndex].Name
+		selected := m.askAIList[m.askAIIndex]
 		task := *m.askAITask
 		m.askAIOpen = false
 		m.askAITask = nil
-		return m, m.askLaunchCmd(name, task)
+		return m, m.askLaunchCmd(selected, task)
 	}
 	return m, nil
 }
 
 // askLaunchCmd hands the task off in a command: the TUI never blocks on the
-// harness, it only reports asynchronous launch success or failure.
-func (m *Model) askLaunchCmd(name string, task model.Task) tea.Cmd {
+// harness, it only reports asynchronous launch success or failure. The prompt
+// carries the task project's workflow so the harness knows its valid statuses.
+func (m *Model) askLaunchCmd(h harness.Harness, task model.Task) tea.Cmd {
 	cfg := m.config
+	statuses := m.workflowForProject(task.ProjectName)
 	return func() tea.Msg {
-		if err := executeHandoff(cfg, task, name); err != nil {
+		if err := executeHandoff(cfg, task, statuses, h); err != nil {
 			return askFailedMsg{err: err}
 		}
-		return askLaunchedMsg{name: name}
+		return askLaunchedMsg{name: h.Name}
 	}
+}
+
+// workflowForProject returns the workflow of the named project, or the merged
+// workflow when it is not loaded (so the prompt still lists a usable set).
+func (m *Model) workflowForProject(name string) []string {
+	if p := m.projectByName(name); p != nil {
+		return p.Workflow
+	}
+	return m.mergedWorkflow()
 }
 
 // renderAskAIModal draws the picker over content: the available harnesses with

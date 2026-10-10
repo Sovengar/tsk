@@ -39,9 +39,9 @@ generated_by: codebase-researcher
 ## Contracts
 - **Config never fails** — `internal/config/config.go:73-96`: missing file → defaults; malformed → `Defaults()`. New `[[harness]]` decode must drop bad entries, never fail the load (see TOML finding).
 - **CLI JSON-by-default + `outputError`** — `internal/cli/cli.go:100-110`: success = `outputJSON` (indented, stdout); failure = `model.ErrorResult{Error: msg}` on stderr + `exit(1)`. Tests inject `stdout/stderr/exit` (94-98).
-- **Pinned strings** (behavior.feature): `No handoff configured: set handoff.command in config.toml` (L98); overlay shows exactly `No harnesses found` (L44); missing-placeholder message must name `{{prompt_file}}` (L105, exact wording free); prompt body is exactly `I need to implement this task: Task #<id>: <title> (<project>). You can check the task with the tsk CLI. After finishing, update its state with the same tsk CLI.` (single line; the description is not embedded — the harness reads the task via the tsk CLI).
-- **Placeholder semantics**: `{{harness}}` → selected harness **display Name** (the herdr `--kind` needs the name; pin in tests); `{{cwd}}` → `handoff.cwd` or tsk's launch dir; `{{prompt_file}}` → 0600 temp file path. Substituted values are **shell-quoted by tsk** so templates use them bare.
-- **Prompt-file lifetime**: tsk never deletes the file (harness may read it after tsk exits).
+- **Pinned strings** (behavior.feature): `No handoff configured: set handoff.command in config.toml` (L98); overlay shows exactly `No harnesses found` (L44); missing-placeholder message must name `{{prompt_file}}` (L105, exact wording free); prompt body is exactly `I need to implement this task: Task #<id>: <title> (<project>). Check it with `tsk show <id>`. Update its state as you go with `tsk move <id> <status>`; valid statuses: <statuses>.` (single line; the description is not embedded — the harness reads the task via the tsk CLI; `<statuses>` is the task project's workflow, dropped when empty).
+- **Placeholder semantics**: `{{harness}}` → selected harness **display Name** (the herdr `--kind` needs the name; pin in tests); `{{harness_binary}}` → the harness executable (so a config `binary` override is usable); `{{cwd}}` → `handoff.cwd` or tsk's launch dir; `{{prompt_file}}` → 0600 temp file path. Substituted values are **shell-quoted by tsk** so templates use them bare.
+- **Prompt-file lifetime**: after a successful launch tsk never deletes the file (the harness may read it after tsk exits); when the launch itself fails (spawn error / bad cwd) `Execute` removes it, since nothing will read it.
 - **`internal/` only, snake_case files, PascalCase types, English only** (AGENTS.md).
 - **Detached spawn**: `/bin/sh -c <expanded>`, `Setsid`, nil streams (= `/dev/null`), `Start()` + background `Wait()` for reaping. Only spawn-time failures surface. **Never `tea.ExecProcess`** (comment.go:53, editor.go:48 are the blocking pattern — do not imitate for the handoff).
 - **New feature must land in `docs/FEATURES.md` in the same change** (AGENTS.md).
@@ -76,8 +76,8 @@ generated_by: codebase-researcher
 - **`{{harness}}` value**: use the harness display **Name**, not the Binary — the picker lists names and wrapper tools (herdr `--kind`) key on names. Pin in tests.
 - **Gantt**: `a` intentionally not bound there (plan scopes List/Kanban/Detail); `selectedTask()` supports Gantt but no handler is required.
 
-## Example handoff command (herdr, TO-VERIFY-BY-USER)
-herdr 0.9.2-preview is installed. Verified CLI surface: `herdr pane split --current --direction down --cwd <PATH>` (options: `--direction right|down`, `--ratio`, `--cwd`), `herdr agent start <NAME> --kind <KIND> --pane <ID>` (kinds include `pi, claude, codex, opencode, …`; "the pane must be at its interactive shell prompt"), `herdr agent prompt <TARGET> <TEXT>`, `herdr pane current|list|run|send-text`. Plausible config for this user:
+## Example handoff command (herdr, VERIFIED against herdr 0.9.2-preview)
+herdr 0.9.2-preview is installed. Verified CLI surface: `herdr pane split --current --direction down --cwd <PATH>` (options: `--direction right|down`, `--ratio`, `--cwd`), `herdr agent start <NAME> --kind <KIND> --pane <ID>` (kinds include `pi, claude, codex, opencode, …`; "the pane must be at its interactive shell prompt"), `herdr agent prompt <TARGET> <TEXT>`, `herdr pane current|list|run|send-text`. Working config for this user:
 
 ```toml
 [[harness]]
@@ -85,10 +85,10 @@ name = "opencode"
 binary = "opencode"
 
 [handoff]
-command = "herdr pane split --current --direction down --cwd {{cwd}} && herdr agent start {{harness}} --kind {{harness}} --pane $(herdr pane current) && herdr agent prompt {{harness}} \"$(cat {{prompt_file}})\""
+command = "pane=$(herdr pane split --current --direction down --cwd {{cwd}} | jq -r '.result.pane.pane_id') && herdr agent start {{harness}}-$$ --kind {{harness}} --pane \"$pane\" -- --prompt \"$(cat {{prompt_file}})\""
 ```
 
-Unverified: whether `herdr pane current` prints a bare pane ID, and whether the split pane lands at an interactive shell prompt ready for `agent start`. Failure mode must be a surfaced spawn/exit error (toast / JSON error), never a hang. herdr is never referenced in tsk code — only in the user's config. Built-in registry names should overlap herdr's kind list (`opencode`, `pi`, `claude`, `codex`, …) since both are just name→binary pairs.
+Verified live against herdr 0.9.2-preview: (a) the pane id must come from the `pane split` result (`| jq -r '.result.pane.pane_id'`) because `herdr pane current` returns a JSON object, not a bare id, so `--pane $(herdr pane current)` fed a blob to `agent start` and it failed after the split had already run; (b) `herdr agent start <NAME> --kind <KIND> --pane <ID> -- --prompt "<text>"` **prefills** the prompt in the harness input without submitting, so the user can change the agent before running — this replaces the old `&& herdr agent prompt "$pane" "$(cat {{prompt_file}})"` auto-submit step (a separate `agent prompt` targets by name ambiguously, since several live agents report `opencode`); (c) agent names must be unique → `{{harness}}-$$`. The split pane must land at an interactive shell prompt ready for `agent start`. Failure mode must be a surfaced spawn/exit error (toast / JSON error), never a hang. herdr is never referenced in tsk code — only in the user's config. Built-in registry names should overlap herdr's kind list (`opencode`, `pi`, `claude`, `codex`, …) since both are just name→binary pairs.
 
 ## Risks / Assumptions
 - **Coverage + mutation gates are the main risk**: 100% diff coverage (`scripts/diff-coverage.sh`, floor 100.00) and zero survivors (`.mutation-allowlist` is empty; `MUTATE_EXCLUDE=cmd/` so `internal/harness` **is** mutated). Keep the real spawn path tiny and injected; push everything into pure functions with explicit tests per branch.

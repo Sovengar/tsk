@@ -96,35 +96,48 @@ func TestDetectSortedAlphabetically(t *testing.T) {
 
 func TestComposePrompt(t *testing.T) {
 	task := model.Task{ID: 7, Title: "Add dark mode", ProjectName: "tsk", Description: "implement the toggle"}
-	want := "I need to implement this task: Task #7: Add dark mode (tsk). You can check the task with the tsk CLI. After finishing, update its state with the same tsk CLI."
-	if got := ComposePrompt(task); got != want {
+	want := "I need to implement this task: Task #7: Add dark mode (tsk). Check it with `tsk show 7`. " +
+		"Update its state as you go with `tsk move 7 <status>`; valid statuses: backlog, todo, doing, delivered, reviewing, done, cancelled."
+	if got := ComposePrompt(task, model.DefaultWorkflow); got != want {
 		t.Errorf("ComposePrompt = %q, want %q", got, want)
+	}
+}
+
+func TestComposePromptEmptyWorkflowDropsStatusClause(t *testing.T) {
+	task := model.Task{ID: 3, Title: "Tidy", ProjectName: "tsk"}
+	want := "I need to implement this task: Task #3: Tidy (tsk). Check it with `tsk show 3`."
+	got := ComposePrompt(task, nil)
+	if got != want {
+		t.Errorf("ComposePrompt = %q, want %q", got, want)
+	}
+	if strings.Contains(got, "valid statuses") {
+		t.Errorf("ComposePrompt = %q, want no dangling status clause", got)
 	}
 }
 
 func TestComposePromptDoesNotEmbedDescription(t *testing.T) {
 	task := model.Task{ID: 1, Title: "Fix crash on empty list", ProjectName: "tsk", Description: "secret detail"}
-	if got := ComposePrompt(task); strings.Contains(got, "secret detail") {
+	if got := ComposePrompt(task, model.DefaultWorkflow); strings.Contains(got, "secret detail") {
 		t.Errorf("ComposePrompt = %q, want the description omitted", got)
 	}
 }
 
 func TestExpandTemplateSubstitutesAndQuotes(t *testing.T) {
 	got, err := ExpandTemplate(
-		"run --kind {{harness}} --cwd {{cwd}} --prompt {{prompt_file}}",
-		"my tool", "/a b", "/tmp/p'q",
+		"run --kind {{harness}} --bin {{harness_binary}} --cwd {{cwd}} --prompt {{prompt_file}}",
+		Harness{Name: "my tool", Binary: "/o'pt/oc"}, "/a b", "/tmp/p'q",
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `run --kind 'my tool' --cwd '/a b' --prompt '/tmp/p'\''q'`
+	want := `run --kind 'my tool' --bin '/o'\''pt/oc' --cwd '/a b' --prompt '/tmp/p'\''q'`
 	if got != want {
 		t.Errorf("ExpandTemplate = %q, want %q", got, want)
 	}
 }
 
 func TestExpandTemplateMissingPromptPlaceholder(t *testing.T) {
-	_, err := ExpandTemplate("run {{harness}}", "opencode", "/tmp", "/tmp/p")
+	_, err := ExpandTemplate("run {{harness}}", Harness{Name: "opencode", Binary: "opencode"}, "/tmp", "/tmp/p")
 	if !errors.Is(err, ErrMissingPromptPlaceholder) {
 		t.Fatalf("err = %v, want ErrMissingPromptPlaceholder", err)
 	}
@@ -206,7 +219,8 @@ type spawnCall struct {
 
 func TestLaunchExpandsAndSpawnsDetached(t *testing.T) {
 	call := captureSpawn(t)
-	err := Launch("run {{harness}} -- {{prompt_file}}", "opencode", "/work", "/tmp/p")
+	h := Harness{Name: "opencode", Binary: "/opt/oc"}
+	err := Launch("run {{harness}} --bin {{harness_binary}} -- {{prompt_file}}", h, "/work", "/tmp/p")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +230,7 @@ func TestLaunchExpandsAndSpawnsDetached(t *testing.T) {
 	if len(call.args) != 2 || call.args[0] != "-c" {
 		t.Fatalf("spawn args = %v, want [-c <expanded>]", call.args)
 	}
-	want := `run 'opencode' -- '/tmp/p'`
+	want := `run 'opencode' --bin '/opt/oc' -- '/tmp/p'`
 	if call.args[1] != want {
 		t.Errorf("expanded = %q, want %q", call.args[1], want)
 	}
@@ -227,7 +241,7 @@ func TestLaunchExpandsAndSpawnsDetached(t *testing.T) {
 
 func TestLaunchTemplateErrorDoesNotSpawn(t *testing.T) {
 	call := captureSpawn(t)
-	err := Launch("run {{harness}}", "opencode", "/work", "/tmp/p")
+	err := Launch("run {{harness}}", Harness{Name: "opencode"}, "/work", "/tmp/p")
 	if !errors.Is(err, ErrMissingPromptPlaceholder) {
 		t.Fatalf("err = %v, want ErrMissingPromptPlaceholder", err)
 	}
@@ -239,7 +253,7 @@ func TestLaunchTemplateErrorDoesNotSpawn(t *testing.T) {
 func TestLaunchPropagatesSpawnError(t *testing.T) {
 	call := captureSpawn(t)
 	call.err = errors.New("spawn boom")
-	if err := Launch("run {{prompt_file}}", "h", "/w", "/p"); err == nil {
+	if err := Launch("run {{prompt_file}}", Harness{Name: "h"}, "/w", "/p"); err == nil {
 		t.Fatal("Launch = nil, want the spawn error")
 	}
 }
@@ -250,7 +264,7 @@ func TestExecuteWritesPromptFileAndSpawns(t *testing.T) {
 	cfg.Handoff.Command = "{{prompt_file}}"
 	task := model.Task{ID: 7, Title: "Add dark mode", ProjectName: "tsk", Description: "implement the toggle"}
 
-	if err := Execute(cfg, task, "opencode"); err != nil {
+	if err := Execute(cfg, task, model.DefaultWorkflow, Harness{Name: "opencode", Binary: "opencode"}); err != nil {
 		t.Fatal(err)
 	}
 	if call.name != "/bin/sh" {
@@ -265,7 +279,8 @@ func TestExecuteWritesPromptFileAndSpawns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prompt file %q: %v", path, err)
 	}
-	want := "I need to implement this task: Task #7: Add dark mode (tsk). You can check the task with the tsk CLI. After finishing, update its state with the same tsk CLI."
+	want := "I need to implement this task: Task #7: Add dark mode (tsk). Check it with `tsk show 7`. " +
+		"Update its state as you go with `tsk move 7 <status>`; valid statuses: backlog, todo, doing, delivered, reviewing, done, cancelled."
 	if string(data) != want {
 		t.Errorf("prompt content = %q, want %q", data, want)
 	}
@@ -274,7 +289,7 @@ func TestExecuteWritesPromptFileAndSpawns(t *testing.T) {
 
 func TestExecuteRefusesWithoutCommand(t *testing.T) {
 	call := captureSpawn(t)
-	err := Execute(config.Defaults(), model.Task{ID: 1}, "opencode")
+	err := Execute(config.Defaults(), model.Task{ID: 1}, model.DefaultWorkflow, Harness{Name: "opencode"})
 	if !errors.Is(err, ErrNoHandoff) {
 		t.Fatalf("err = %v, want ErrNoHandoff", err)
 	}
@@ -293,11 +308,29 @@ func TestExecutePropagatesPromptFileError(t *testing.T) {
 
 	cfg := config.Defaults()
 	cfg.Handoff.Command = "{{prompt_file}}"
-	if err := Execute(cfg, model.Task{ID: 1}, "opencode"); err == nil {
+	if err := Execute(cfg, model.Task{ID: 1}, model.DefaultWorkflow, Harness{Name: "opencode"}); err == nil {
 		t.Fatal("Execute = nil, want the temp file error")
 	}
 	if call.name != "" {
 		t.Error("spawn was called, want none")
+	}
+}
+
+func TestExecuteRemovesPromptFileOnLaunchError(t *testing.T) {
+	call := captureSpawn(t)
+	call.err = errors.New("spawn boom")
+
+	cfg := config.Defaults()
+	cfg.Handoff.Command = "{{prompt_file}}"
+	if err := Execute(cfg, model.Task{ID: 1}, model.DefaultWorkflow, Harness{Name: "opencode"}); err == nil {
+		t.Fatal("Execute = nil, want the launch error")
+	}
+	if call.name != "/bin/sh" {
+		t.Fatalf("no spawn happened: %+v", call)
+	}
+	path := strings.Trim(call.args[1], "'")
+	if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+		t.Errorf("prompt file %q must be removed when the launch fails (stat err = %v)", path, statErr)
 	}
 }
 

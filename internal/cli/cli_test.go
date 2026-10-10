@@ -335,6 +335,31 @@ func seedTask(t *testing.T, dbPath string) int64 {
 	return task.ID
 }
 
+func TestAskStatusesReturnsProjectWorkflow(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "tsk.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = database.Close() }()
+	if _, err := database.CreateProject("web", []string{"todo", "doing", "done"}); err != nil {
+		t.Fatal(err)
+	}
+	task, err := database.CreateTask("web", "T", "", "", 0, "todo")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := askStatuses(database, task)
+	want := []string{"todo", "doing", "done"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("askStatuses = %v, want %v", got, want)
+	}
+
+	if got := askStatuses(database, &model.Task{ProjectName: "missing"}); strings.Join(got, ",") != strings.Join(model.DefaultWorkflow, ",") {
+		t.Errorf("askStatuses(unknown project) = %v, want the default workflow", got)
+	}
+}
+
 func TestCmdAskLaunches(t *testing.T) {
 	dbPath := withAskEnv(t, "true {{prompt_file}}", harnessOpencode)
 	id := seedTask(t, dbPath)
@@ -474,15 +499,20 @@ func TestCmdAskSpawnError(t *testing.T) {
 }
 
 func TestSelectHarness(t *testing.T) {
-	list := []harness.Harness{{Name: "opencode"}, {Name: "claude"}}
+	list := []harness.Harness{{Name: "opencode", Binary: "/opt/oc"}, {Name: "claude"}}
 
-	if got, err := selectHarness(list, "claude"); err != nil || got != "claude" {
-		t.Errorf("selectHarness(claude) = %q, %v", got, err)
+	got, err := selectHarness(list, "opencode")
+	if err != nil || got.Name != "opencode" || got.Binary != "/opt/oc" {
+		t.Errorf("selectHarness(opencode) = %+v, %v; want the full entry incl. binary", got, err)
 	}
 	if _, err := selectHarness(list, "nope"); err == nil || !strings.Contains(err.Error(), "opencode") {
 		t.Errorf("unknown harness error = %v, want it to list available names", err)
 	}
-	if got, err := selectHarness([]harness.Harness{{Name: "only"}}, ""); err != nil || got != "only" {
+	// A requested name with nothing detected must not print a dangling "(available: )".
+	if _, err := selectHarness(nil, "nope"); err == nil || !strings.Contains(err.Error(), "No harnesses found") {
+		t.Errorf("selectHarness(unknown, none available) = %v, want No harnesses found", err)
+	}
+	if got, err := selectHarness([]harness.Harness{{Name: "only"}}, ""); err != nil || got.Name != "only" {
 		t.Errorf("selectHarness with a single harness = %q, %v", got, err)
 	}
 	if _, err := selectHarness(list, ""); err == nil {

@@ -30,10 +30,11 @@ CLI equivalent makes the same flow scriptable for other agents.
 - **Installed-harness detection**: built-in name→binary mapping probed with PATH
   lookup (`exec.LookPath`); the overlay lists detection results plus config
   additions (deduped).
-- **Prompt with the task description**: the harness receives a prompt whose core
-  payload is `I need to implement this: <task description>`; additional task
-  context (id/title) may be included where it helps the harness. Exact
-  composition is pinned in `behavior.feature`.
+- **Prompt pointing at the task**: the harness receives a prompt that names the
+  concrete `tsk` CLI commands to read the task (`tsk show <id>`) and update it
+  (`tsk move <id> <status>`) plus the task project's valid statuses; the
+  description is not embedded. Exact composition is pinned in
+  `behavior.feature`.
 - **Non-blocking handoff**: launching the harness must NOT block the TUI or the
   CLI. The handoff is fired and `tsk` returns to normal interaction immediately;
   the harness runs independently (its own pane/window/process). No
@@ -69,8 +70,8 @@ CLI equivalent makes the same flow scriptable for other agents.
 3. Selecting a harness hands the task off via the configured handoff command;
    the TUI stays responsive (no blocking) and the CLI returns without waiting
    for the harness.
-4. The prompt contains the task description framed as
-   `I need to implement this: <description>`.
+4. The prompt names `tsk show <id>` and `tsk move <id> <status>` plus the task
+   project's valid statuses (the description is not embedded).
 5. Zero harnesses available → overlay shows exactly `No harnesses found`.
 6. No handoff command configured → the action refuses with a clear message
    naming the config key to set; never a silent no-op.
@@ -78,7 +79,7 @@ CLI equivalent makes the same flow scriptable for other agents.
 8. Handoff is generic: swapping the config command (herdr, tmux, plain detached
    exec) works with no code change; herdr is not referenced in code.
 9. Config is additive and never fatal: malformed/absent new config falls back to
-   defaults with a warning, per the project's "config never fails" pattern.
+   defaults (silently), per the project's "config never fails" pattern.
 10. The CLI subcommand offers the same handoff; output is JSON by default.
 11. `docs/FEATURES.md` documents the feature, its `a` trigger and the CLI
     subcommand.
@@ -89,9 +90,9 @@ CLI equivalent makes the same flow scriptable for other agents.
 1. **Config harness list semantics** — additive to PATH detection; entries may
    declare `name` + binary/command for harnesses detection missed.
 2. **Detection** — built-in name→binary table probed with PATH lookup.
-3. **Prompt payload** — core is `I need to implement this: <description>`;
-   task id/title context is allowed; exact composition pinned in
-   `behavior.feature`.
+3. **Prompt payload** — identifies the task and the concrete `tsk show`/`tsk
+   move` commands plus the task project's valid statuses; the description is
+   not embedded; exact composition pinned in `behavior.feature`.
 4. **No handoff configured** — refuse with a clear message naming the config
    key to set (never a silent no-op).
 5. **Zero-harness empty state** — overlay message exactly `No harnesses found`;

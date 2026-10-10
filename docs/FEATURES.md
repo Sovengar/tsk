@@ -36,7 +36,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **View switching** — `1`/`2`/`3`/`4` switch between List, Kanban, Gantt, Dashboard.
 - **Navigation** — `hjkl` or arrows move the cursor; `Tab` cycles projects.
 - **Task actions** — `s` start, `d` done, `x` cancel, `Ctrl+p` cycle priority.
-- **Ask AI** — `a` on a focused task opens the harness picker and hands the task to the selected harness: the prompt points the harness at the `tsk` CLI to read the task and update its state (List, Kanban, Detail).
+- **Ask AI** — `a` on a focused task opens the harness picker and hands the task to the selected harness: the prompt tells the harness to read the task (`tsk show <id>`) and update it as it goes (`tsk move <id> <status>`), listing the project's valid statuses (List, Kanban, Detail).
 - **Insert** — `i` creates a project (Dashboard) or task (List/Kanban).
 - **Edit** — `e` opens inline description editor; `E` opens external editor.
 - **Filters** — `/` opens the filter modal; `Esc` clears active filter.
@@ -84,13 +84,13 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **Path** — `~/.config/tsk/config.toml`; respects `$XDG_CONFIG_HOME`, override with `$TSK_CONFIG`.
 - **`[database] path`** — SQLite file location; default `~/.local/share/tsk/tsk.db` (respects `$XDG_DATA_HOME`).
 - **`[editor] command`** — external editor for `E` key; default `nvim`.
-- **`[list] page_size`** — tasks per page in List view; default 10.
-- **`[list] default_estimate_days`** — estimate for tasks without one in the Gantt; default 1.0.
-- **`[list] gantt_weeks`** — default Gantt horizon; default 6.
-- **`[[harness]] name` / `binary`** — additive harnesses: listed in the Ask AI picker even when detection misses them; `binary` defaults to `name`. A declared entry replaces a detected one with the same name.
-- **`[handoff] command`** — shell template that launches a harness, with `{{harness}}`, `{{cwd}}` and `{{prompt_file}}` (required) placeholders; values are shell-quoted by tsk. Empty = Ask AI disabled.
+- **`list_page_size`** — tasks per page in List view; default 10.
+- **`default_estimate_days`** — estimate for tasks without one in the Gantt; default 1.0.
+- **`gantt_weeks`** — default Gantt horizon; default 6.
+- **`[[harness]] name` / `binary`** — additive harnesses: listed in the Ask AI picker even when detection misses them; `binary` defaults to `name` and is exposed to the command as `{{harness_binary}}`. A declared entry replaces a detected one with the same name.
+- **`[handoff] command`** — shell template that launches a harness, with `{{harness}}` (display name), `{{harness_binary}}`, `{{cwd}}` and `{{prompt_file}}` (required) placeholders; values are shell-quoted by tsk. Empty = Ask AI disabled.
 - **`[handoff] cwd`** — working directory for the handoff; default: where `tsk` was launched.
-- Malformed config falls back to defaults with a warning. A single malformed `[[harness]]` entry is dropped without discarding the rest of the file.
+- Malformed config falls back to defaults silently (the "config never fails" pattern). A single malformed `[[harness]]` entry is dropped without discarding the rest of the file.
 
 ## Storage and migrations
 
