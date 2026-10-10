@@ -6,10 +6,10 @@ package harness
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -24,8 +24,8 @@ type Harness struct {
 	Binary string
 }
 
-// NoHandoffMessage is the pinned refusal shown when handoff.command is unset.
-const NoHandoffMessage = "No handoff configured: set handoff.command in config.toml"
+// NoHandoffMessage is the pinned refusal shown when ai.ask.handoff.command is unset.
+const NoHandoffMessage = "No handoff configured: set ai.ask.handoff.command in config.toml"
 
 // NoHarnessesMessage is the pinned empty state of the picker, shared by the TUI
 // overlay and the CLI.
@@ -38,7 +38,7 @@ var ErrNoHandoff = errors.New(NoHandoffMessage)
 
 // ErrMissingPromptPlaceholder is returned when the handoff command does not
 // carry the required {{prompt_file}} placeholder.
-var ErrMissingPromptPlaceholder = errors.New("handoff.command must contain {{prompt_file}}")
+var ErrMissingPromptPlaceholder = errors.New("ai.ask.handoff.command must contain {{prompt_file}}")
 
 // Template placeholders understood by the handoff command. {{harness}} is the
 // display Name (wrappers key on it, e.g. herdr --kind); {{harness_binary}} is
@@ -49,6 +49,24 @@ const (
 	placeholderCwd           = "{{cwd}}"
 	placeholderPrompt        = "{{prompt_file}}"
 )
+
+// Template placeholders understood by the handoff prompt. Unlike the command
+// template, the substituted values reach a file, not a shell, so they are
+// inserted bare.
+const (
+	placeholderID       = "{{id}}"
+	placeholderTitle    = "{{title}}"
+	placeholderProject  = "{{project}}"
+	placeholderStatuses = "{{statuses}}"
+)
+
+// DefaultPrompt is the built-in handoff prompt, used when [ai.ask.handoff] prompt is
+// empty. It identifies the task and gives the concrete tsk CLI commands to read
+// it and update its state; the description is not embedded so the harness
+// always reads the current task.
+const DefaultPrompt = "Run this task: Task #{{id}}: {{title}} ({{project}}). " +
+	"Check it with `tsk show {{id}}`. " +
+	"Update its state as you go with `tsk move {{id}} <status>`; valid statuses: {{statuses}}."
 
 // builtinRegistry maps best-known harness display names to their executable.
 // Members of this list are listed only when the binary is on PATH.
@@ -119,19 +137,51 @@ func merge(detected, declared []Harness) []Harness {
 	return out
 }
 
-// ComposePrompt is the prompt handed to the harness. It identifies the task and
+// ComposePrompt is the prompt handed to the harness. prompt is the [ai.ask.handoff]
+// prompt template; empty selects DefaultPrompt. It identifies the task and
 // gives the concrete tsk CLI commands to read it and update its state; the
 // description is not embedded so the harness always reads the current task. The
 // statuses are the task project's workflow. An empty workflow drops the state
 // clause, so the prompt never ends with a dangling "valid statuses:".
-func ComposePrompt(t model.Task, statuses []string) string {
-	prompt := fmt.Sprintf("I need to implement this task: Task #%d: %s (%s). Check it with `tsk show %d`.",
-		t.ID, t.Title, t.ProjectName, t.ID)
+func ComposePrompt(t model.Task, statuses []string, prompt string) string {
+	if prompt == "" {
+		prompt = DefaultPrompt
+	}
 	if len(statuses) == 0 {
+		prompt = dropStatusesClause(prompt)
+	} else {
+		prompt = strings.ReplaceAll(prompt, placeholderStatuses, strings.Join(statuses, ", "))
+	}
+	return strings.NewReplacer(
+		placeholderID, strconv.FormatInt(t.ID, 10),
+		placeholderTitle, t.Title,
+		placeholderProject, t.ProjectName,
+	).Replace(prompt)
+}
+
+// dropStatusesClause removes the sentence carrying the {{statuses}}
+// placeholder, so an empty workflow leaves no dangling "valid statuses:".
+// Sentences are split on ". " (period+space), the template's own separator;
+// dropping the last sentence would lose the prompt's final period, so it is
+// restored when the prompt had one.
+func dropStatusesClause(prompt string) string {
+	if !strings.Contains(prompt, placeholderStatuses) {
 		return prompt
 	}
-	return fmt.Sprintf("%s Update its state as you go with `tsk move %d <status>`; valid statuses: %s.",
-		prompt, t.ID, strings.Join(statuses, ", "))
+	endsPeriod := strings.HasSuffix(prompt, ".")
+	sentences := strings.Split(prompt, ". ")
+	kept := make([]string, 0, len(sentences))
+	for _, s := range sentences {
+		if strings.Contains(s, placeholderStatuses) {
+			continue
+		}
+		kept = append(kept, s)
+	}
+	out := strings.Join(kept, ". ")
+	if endsPeriod && !strings.HasSuffix(out, ".") {
+		out += "."
+	}
+	return out
 }
 
 // ValidateCommand reports whether the handoff command can be used: it must be
@@ -170,7 +220,7 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// HandoffDir resolves the handoff working directory: handoff.cwd when set,
+// HandoffDir resolves the handoff working directory: ai.ask.handoff.cwd when set,
 // otherwise the directory where tsk was launched.
 func HandoffDir(cfg config.Config) string {
 	if cfg.Handoff.CWD != "" {
@@ -195,7 +245,7 @@ func Execute(cfg config.Config, task model.Task, statuses []string, h Harness) e
 	if err := ValidateCommand(cfg.Handoff.Command); err != nil {
 		return err
 	}
-	promptPath, err := PromptFile(ComposePrompt(task, statuses))
+	promptPath, err := PromptFile(ComposePrompt(task, statuses, cfg.Handoff.Prompt))
 	if err != nil {
 		return err
 	}

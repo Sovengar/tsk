@@ -32,8 +32,10 @@ type Config struct {
 	// key and its typed decode is the one that can fail on a single bad entry.
 	Harnesses []HarnessConfig `toml:"harness"`
 	// Handoff configures how a task is handed to a harness. An empty Command
-	// disables the handoff.
-	Handoff HandoffConfig `toml:"handoff"`
+	// disables the handoff. The dotted toml tag matches a quoted literal
+	// section (["ai.ask.handoff"]); the natural nested spelling
+	// ([ai.ask.handoff]) is salvaged from the raw tree in Load.
+	Handoff HandoffConfig `toml:"ai.ask.handoff"`
 }
 
 // HarnessConfig declares one AI harness. Name is the display name and the
@@ -46,10 +48,13 @@ type HarnessConfig struct {
 // HandoffConfig is the shell template used to launch a harness. Command is a
 // shell command template with {{harness}} (display name), {{harness_binary}}
 // (executable), {{cwd}} and {{prompt_file}} placeholders; CWD overrides the
-// working directory (default: tsk's launch dir).
+// working directory (default: tsk's launch dir). Prompt is the prompt template
+// handed to the harness, with {{id}}, {{title}}, {{project}} and {{statuses}}
+// placeholders; empty selects the built-in default.
 type HandoffConfig struct {
 	Command string `toml:"command"`
 	CWD     string `toml:"cwd"`
+	Prompt  string `toml:"prompt"`
 }
 
 // scalarConfig is the view of the config file used for the scalar decode. It
@@ -64,7 +69,7 @@ type scalarConfig struct {
 	ListPageSize        int            `toml:"list_page_size"`
 	DefaultEstimateDays float64        `toml:"default_estimate_days"`
 	GanttWeeks          int            `toml:"gantt_weeks"`
-	Handoff             HandoffConfig  `toml:"handoff"`
+	Handoff             HandoffConfig  `toml:"ai.ask.handoff"`
 }
 
 // DatabaseConfig configures the database.
@@ -133,9 +138,14 @@ func Load() Config {
 	cfg.GanttWeeks = scalars.GanttWeeks
 	cfg.Handoff = scalars.Handoff
 
-	// The harness list is decoded apart, entry by entry, so a single bad entry
-	// is dropped instead of wiping the whole config.
-	cfg.Harnesses = decodeHarnesses(data)
+	// The harness list and the handoff section are salvaged from the raw tree:
+	// a single malformed harness entry, or the nested [ai.ask.handoff]
+	// spelling, must not wipe the typed decode above.
+	var raw map[string]any
+	if _, err := toml.Decode(string(data), &raw); err == nil {
+		cfg.Harnesses = decodeHarnesses(raw)
+		cfg.Handoff = handoffFromRaw(raw, scalars.Handoff)
+	}
 
 	if cfg.ListPageSize <= 0 {
 		cfg.ListPageSize = DefaultPageSize
@@ -149,16 +159,43 @@ func Load() Config {
 	return cfg
 }
 
+// handoffFromRaw salvages the [ai.ask.handoff] section from the raw tree.
+// BurntSushi maps the dotted toml tag to a literal key, which only exists
+// when the section is quoted (["ai.ask.handoff"]); the natural nested
+// spelling lands at raw["ai"]["ask"]["handoff"] and would otherwise be lost.
+// A partial section (no ai, no ask, no handoff table) keeps the tag-decoded
+// value; a key with a wrong type is skipped (config never fails).
+func handoffFromRaw(raw map[string]any, current HandoffConfig) HandoffConfig {
+	section, ok := raw["ai"].(map[string]any)
+	if !ok {
+		return current
+	}
+	section, ok = section["ask"].(map[string]any)
+	if !ok {
+		return current
+	}
+	handoff, ok := section["handoff"].(map[string]any)
+	if !ok {
+		return current
+	}
+	if v, ok := handoff["command"].(string); ok {
+		current.Command = v
+	}
+	if v, ok := handoff["cwd"].(string); ok {
+		current.CWD = v
+	}
+	if v, ok := handoff["prompt"].(string); ok {
+		current.Prompt = v
+	}
+	return current
+}
+
 // decodeHarnesses salvages the [[harness]] entries from the file's raw tree.
 // An entry is dropped when it is not a table, when its name is not a string or
 // when it is empty; the rest survive. The raw decode is used instead of the
 // typed one because the raw decode succeeds even when an entry has a wrong type
 // (the typed slice decode returns an error and would discard everything).
-func decodeHarnesses(data []byte) []HarnessConfig {
-	var raw map[string]any
-	if _, err := toml.Decode(string(data), &raw); err != nil {
-		return nil
-	}
+func decodeHarnesses(raw map[string]any) []HarnessConfig {
 	entries, ok := raw["harness"].([]map[string]any)
 	if !ok {
 		return nil

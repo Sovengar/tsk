@@ -26,9 +26,10 @@ freezes both.
 name = "opencode"     # display name and default binary
 binary = "opencode"   # optional; the executable to look up
 
-[handoff]
+[ai.ask.handoff]
 command = "… {{harness}} … {{harness_binary}} … {{cwd}} … {{prompt_file}} …"
 cwd = "/optional/override"  # default: the directory where tsk was launched
+prompt = "Run this task: Task #{{id}}: {{title}} ({{project}}). …"  # optional
 ```
 
 - `[[harness]]` entries are **additive** to PATH detection: they are listed even
@@ -37,8 +38,13 @@ cwd = "/optional/override"  # default: the directory where tsk was launched
   detected one.
 - Detection is a built-in name→binary registry probed with `exec.LookPath`, on
   demand and uncached.
-- `handoff.command` empty means the handoff is disabled; the action refuses
-  with the pinned message `No handoff configured: set handoff.command in config.toml`.
+- `ai.ask.handoff.command` empty means the handoff is disabled; the action
+  refuses with the pinned message `No handoff configured: set
+  ai.ask.handoff.command in config.toml`.
+- `ai.ask.handoff.prompt` empty selects the built-in default prompt; a
+  non-empty value is a template with `{{id}}`, `{{title}}`, `{{project}}` and
+  `{{statuses}}` placeholders, following the same `{{…}}` convention as
+  `command`.
 - Config is **never fatal**: the `[[harness]]` list is decoded entry by entry
   from the raw TOML tree, so a single malformed entry is dropped instead of
   discarding the whole file (BurntSushi's typed slice decode returns an error on
@@ -97,7 +103,7 @@ cwd = "/optional/override"  # default: the directory where tsk was launched
 name = "opencode"
 binary = "opencode"
 
-[handoff]
+[ai.ask.handoff]
 command = "pane=$(herdr pane split --current --direction down --cwd {{cwd}} | jq -r '.result.pane.pane_id') && herdr agent start {{harness}}-$$ --kind {{harness}} --pane \"$pane\" -- --prompt \"$(cat {{prompt_file}})\""
 ```
 

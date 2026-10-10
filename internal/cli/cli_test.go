@@ -293,7 +293,7 @@ func runErr(t *testing.T, args ...string) (stderrText string, code int) {
 }
 
 // withAskEnv points TSK_CONFIG at a fresh config with the given handoff command
-// (empty string = no [handoff] section) plus extra harness TOML, and empties
+// (empty string = no [ai.ask.handoff] section) plus extra harness TOML, and empties
 // PATH so built-in detection finds nothing and the declared harnesses are the
 // only variable. Returns the database path.
 func withAskEnv(t *testing.T, handoffCommand, extraHarnessTOML string) string {
@@ -303,7 +303,7 @@ func withAskEnv(t *testing.T, handoffCommand, extraHarnessTOML string) string {
 	cfgPath := filepath.Join(dir, "config.toml")
 	body := "[database]\npath = \"" + dbPath + "\"\n"
 	if handoffCommand != "" {
-		body += "\n[handoff]\ncommand = '" + handoffCommand + "'\n"
+		body += "\n[ai.ask.handoff]\ncommand = '" + handoffCommand + "'\n"
 	}
 	body += extraHarnessTOML
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
@@ -437,10 +437,10 @@ func TestCmdAskNoHandoffConfigured(t *testing.T) {
 	id := seedTask(t, dbPath)
 	errOut, code := runErr(t, "ask", strconv.FormatInt(id, 10), "--harness", "opencode")
 	if code == 0 {
-		t.Fatal("tsk ask without handoff.command should fail")
+		t.Fatal("tsk ask without ai.ask.handoff.command should fail")
 	}
-	if !strings.Contains(errOut, "handoff.command") {
-		t.Errorf("error must name handoff.command: %s", errOut)
+	if !strings.Contains(errOut, "ai.ask.handoff.command") {
+		t.Errorf("error must name ai.ask.handoff.command: %s", errOut)
 	}
 }
 
@@ -481,7 +481,7 @@ func TestCmdAskSpawnError(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "tsk.db")
 	cfgPath := filepath.Join(dir, "config.toml")
-	body := "[database]\npath = \"" + dbPath + "\"\n\n[handoff]\ncommand = 'true {{prompt_file}}'\ncwd = \"/no/such/tsk-dir-xyz\"\n" + harnessOpencode
+	body := "[database]\npath = \"" + dbPath + "\"\n\n[ai.ask.handoff]\ncommand = 'true {{prompt_file}}'\ncwd = \"/no/such/tsk-dir-xyz\"\n" + harnessOpencode
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/BurntSushi/toml"
 )
 
 func TestDefaultsPageSize(t *testing.T) {
@@ -118,7 +120,7 @@ func TestLoadMalformedHarnessDoesNotWipeConfig(t *testing.T) {
 list_page_size = 25
 gantt_weeks = 9
 
-[handoff]
+[ai.ask.handoff]
 command = "launch {{prompt_file}}"
 
 [[harness]]
@@ -149,15 +151,43 @@ binary = "nameless"
 
 func TestLoadHandoff(t *testing.T) {
 	cfg := loadFrom(t, `
-[handoff]
+[ai.ask.handoff]
 command = "herdr agent start {{harness}}"
 cwd = "/tmp/work"
+prompt = "Run this task: Task #{{id}}: {{title}} ({{project}}). Statuses: {{statuses}}."
 `)
 	if cfg.Handoff.Command != "herdr agent start {{harness}}" {
 		t.Errorf("Handoff.Command = %q", cfg.Handoff.Command)
 	}
 	if cfg.Handoff.CWD != "/tmp/work" {
 		t.Errorf("Handoff.CWD = %q, want /tmp/work", cfg.Handoff.CWD)
+	}
+	if cfg.Handoff.Prompt != "Run this task: Task #{{id}}: {{title}} ({{project}}). Statuses: {{statuses}}." {
+		t.Errorf("Handoff.Prompt = %q", cfg.Handoff.Prompt)
+	}
+}
+
+// A partial ai/ask section (no ask table, or no handoff table under it) must
+// not wipe the tag-decoded value: the nested spelling is only used when it is
+// complete.
+func TestLoadHandoffPartialSectionsIgnored(t *testing.T) {
+	for _, doc := range []string{"[ai]\nother = 1\n", "[ai.ask]\nother = 2\n"} {
+		cfg := loadFrom(t, doc)
+		if cfg.Handoff.Command != "" || cfg.Handoff.CWD != "" || cfg.Handoff.Prompt != "" {
+			t.Errorf("Handoff = %+v, want zero value for %q", cfg.Handoff, doc)
+		}
+	}
+}
+
+// The dotted toml tag matches a quoted literal section too, so both spellings
+// of the handoff section work.
+func TestLoadHandoffQuotedLiteralSection(t *testing.T) {
+	cfg := loadFrom(t, `
+["ai.ask.handoff"]
+command = "launch {{prompt_file}}"
+`)
+	if cfg.Handoff.Command != "launch {{prompt_file}}" {
+		t.Errorf("Handoff.Command = %q", cfg.Handoff.Command)
 	}
 }
 
@@ -179,16 +209,17 @@ func TestLoadMalformedFileFallsBack(t *testing.T) {
 	}
 }
 
-// decodeHarnesses is total: a non-array harness table and malformed bytes are
-// both dropped instead of blowing up.
+// decodeHarnesses is total: a non-array harness table is dropped instead of
+// blowing up.
 func TestDecodeHarnessesDefensive(t *testing.T) {
-	if got := decodeHarnesses([]byte("harness = 5\n")); got != nil {
+	if got := decodeHarnesses(map[string]any{"harness": 5}); got != nil {
 		t.Errorf("non-array harness = %+v, want nil", got)
 	}
-	if got := decodeHarnesses([]byte("= = =\n")); got != nil {
-		t.Errorf("malformed data = %+v, want nil", got)
+	var raw map[string]any
+	if _, err := toml.Decode("[[harness]]\nname = \"ok\"\n", &raw); err != nil {
+		t.Fatal(err)
 	}
-	if got := decodeHarnesses([]byte("[[harness]]\nname = \"ok\"\n")); len(got) != 1 || got[0].Name != "ok" {
+	if got := decodeHarnesses(raw); len(got) != 1 || got[0].Name != "ok" {
 		t.Errorf("valid entry = %+v, want one entry named ok", got)
 	}
 }

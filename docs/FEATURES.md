@@ -88,8 +88,9 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **`default_estimate_days`** — estimate for tasks without one in the Gantt; default 1.0.
 - **`gantt_weeks`** — default Gantt horizon; default 6.
 - **`[[harness]] name` / `binary`** — additive harnesses: listed in the Ask AI picker even when detection misses them; `binary` defaults to `name` and is exposed to the command as `{{harness_binary}}`. A declared entry replaces a detected one with the same name.
-- **`[handoff] command`** — shell template that launches a harness, with `{{harness}}` (display name), `{{harness_binary}}`, `{{cwd}}` and `{{prompt_file}}` (required) placeholders; values are shell-quoted by tsk. Empty = Ask AI disabled.
-- **`[handoff] cwd`** — working directory for the handoff; default: where `tsk` was launched.
+- **`[ai.ask.handoff] command`** — shell template that launches a harness, with `{{harness}}` (display name), `{{harness_binary}}`, `{{cwd}}` and `{{prompt_file}}` (required) placeholders; values are shell-quoted by tsk. Empty = Ask AI disabled.
+- **`[ai.ask.handoff] cwd`** — working directory for the handoff; default: where `tsk` was launched.
+- **`[ai.ask.handoff] prompt`** — prompt template handed to the harness, with `{{id}}`, `{{title}}`, `{{project}}` and `{{statuses}}` (the task project's workflow; an empty workflow drops the state clause). Empty = built-in default ("Run this task: …').
 - Malformed config falls back to defaults silently (the "config never fails" pattern). A single malformed `[[harness]]` entry is dropped without discarding the rest of the file.
 
 ## Storage and migrations

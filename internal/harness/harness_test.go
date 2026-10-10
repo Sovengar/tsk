@@ -96,17 +96,17 @@ func TestDetectSortedAlphabetically(t *testing.T) {
 
 func TestComposePrompt(t *testing.T) {
 	task := model.Task{ID: 7, Title: "Add dark mode", ProjectName: "tsk", Description: "implement the toggle"}
-	want := "I need to implement this task: Task #7: Add dark mode (tsk). Check it with `tsk show 7`. " +
+	want := "Run this task: Task #7: Add dark mode (tsk). Check it with `tsk show 7`. " +
 		"Update its state as you go with `tsk move 7 <status>`; valid statuses: backlog, todo, doing, delivered, reviewing, done, cancelled."
-	if got := ComposePrompt(task, model.DefaultWorkflow); got != want {
+	if got := ComposePrompt(task, model.DefaultWorkflow, ""); got != want {
 		t.Errorf("ComposePrompt = %q, want %q", got, want)
 	}
 }
 
 func TestComposePromptEmptyWorkflowDropsStatusClause(t *testing.T) {
 	task := model.Task{ID: 3, Title: "Tidy", ProjectName: "tsk"}
-	want := "I need to implement this task: Task #3: Tidy (tsk). Check it with `tsk show 3`."
-	got := ComposePrompt(task, nil)
+	want := "Run this task: Task #3: Tidy (tsk). Check it with `tsk show 3`."
+	got := ComposePrompt(task, nil, "")
 	if got != want {
 		t.Errorf("ComposePrompt = %q, want %q", got, want)
 	}
@@ -115,9 +115,36 @@ func TestComposePromptEmptyWorkflowDropsStatusClause(t *testing.T) {
 	}
 }
 
+func TestComposePromptCustomTemplate(t *testing.T) {
+	task := model.Task{ID: 7, Title: "Add dark mode", ProjectName: "tsk"}
+	got := ComposePrompt(task, []string{"todo", "doing"}, "Do task {{id}}: {{title}} ({{project}}). Valid statuses: {{statuses}}.")
+	want := "Do task 7: Add dark mode (tsk). Valid statuses: todo, doing."
+	if got != want {
+		t.Errorf("ComposePrompt = %q, want %q", got, want)
+	}
+}
+
+func TestComposePromptCustomTemplateEmptyWorkflowDropsStatusesSentence(t *testing.T) {
+	task := model.Task{ID: 3, Title: "Tidy", ProjectName: "tsk"}
+	got := ComposePrompt(task, nil, "Read `tsk show {{id}}`. Then update via `tsk move {{id}} <status>`; valid statuses: {{statuses}}.")
+	want := "Read `tsk show 3`."
+	if got != want {
+		t.Errorf("ComposePrompt = %q, want %q", got, want)
+	}
+}
+
+func TestComposePromptCustomTemplateWithoutStatusesPlaceholder(t *testing.T) {
+	task := model.Task{ID: 3, Title: "Tidy", ProjectName: "tsk"}
+	got := ComposePrompt(task, nil, "Just do {{id}}: {{title}}.")
+	want := "Just do 3: Tidy."
+	if got != want {
+		t.Errorf("ComposePrompt = %q, want %q", got, want)
+	}
+}
+
 func TestComposePromptDoesNotEmbedDescription(t *testing.T) {
 	task := model.Task{ID: 1, Title: "Fix crash on empty list", ProjectName: "tsk", Description: "secret detail"}
-	if got := ComposePrompt(task, model.DefaultWorkflow); strings.Contains(got, "secret detail") {
+	if got := ComposePrompt(task, model.DefaultWorkflow, ""); strings.Contains(got, "secret detail") {
 		t.Errorf("ComposePrompt = %q, want the description omitted", got)
 	}
 }
@@ -141,8 +168,8 @@ func TestExpandTemplateMissingPromptPlaceholder(t *testing.T) {
 	if !errors.Is(err, ErrMissingPromptPlaceholder) {
 		t.Fatalf("err = %v, want ErrMissingPromptPlaceholder", err)
 	}
-	if !strings.Contains(err.Error(), "{{prompt_file}}") {
-		t.Errorf("err = %q, want it to name {{prompt_file}}", err)
+	if !strings.Contains(err.Error(), "ai.ask.handoff.command") || !strings.Contains(err.Error(), "{{prompt_file}}") {
+		t.Errorf("err = %q, want it to name ai.ask.handoff.command and {{prompt_file}}", err)
 	}
 }
 
@@ -159,7 +186,7 @@ func TestValidateCommand(t *testing.T) {
 }
 
 func TestNoHandoffMessage(t *testing.T) {
-	if NoHandoffMessage != "No handoff configured: set handoff.command in config.toml" {
+	if NoHandoffMessage != "No handoff configured: set ai.ask.handoff.command in config.toml" {
 		t.Errorf("NoHandoffMessage = %q", NoHandoffMessage)
 	}
 	if ErrNoHandoff.Error() != NoHandoffMessage {
@@ -279,12 +306,34 @@ func TestExecuteWritesPromptFileAndSpawns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prompt file %q: %v", path, err)
 	}
-	want := "I need to implement this task: Task #7: Add dark mode (tsk). Check it with `tsk show 7`. " +
+	want := "Run this task: Task #7: Add dark mode (tsk). Check it with `tsk show 7`. " +
 		"Update its state as you go with `tsk move 7 <status>`; valid statuses: backlog, todo, doing, delivered, reviewing, done, cancelled."
 	if string(data) != want {
 		t.Errorf("prompt content = %q, want %q", data, want)
 	}
 	_ = os.Remove(path)
+}
+
+func TestExecuteUsesConfiguredPromptTemplate(t *testing.T) {
+	call := captureSpawn(t)
+	cfg := config.Defaults()
+	cfg.Handoff.Command = "{{prompt_file}}"
+	cfg.Handoff.Prompt = "Pick up {{id}}: {{title}} ({{project}}). Statuses: {{statuses}}."
+	task := model.Task{ID: 9, Title: "Write tests", ProjectName: "tsk"}
+
+	if err := Execute(cfg, task, []string{"todo", "doing"}, Harness{Name: "opencode", Binary: "opencode"}); err != nil {
+		t.Fatal(err)
+	}
+	path := strings.Trim(call.args[1], "'")
+	defer func() { _ = os.Remove(path) }()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("prompt file %q: %v", path, err)
+	}
+	want := "Pick up 9: Write tests (tsk). Statuses: todo, doing."
+	if string(data) != want {
+		t.Errorf("prompt content = %q, want %q", data, want)
+	}
 }
 
 func TestExecuteRefusesWithoutCommand(t *testing.T) {
