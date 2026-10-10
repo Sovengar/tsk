@@ -53,14 +53,10 @@ install: build
 uninstall:
 	rm -f $(DESTDIR)$(BINDIR)/$(BINARY)
 
-# Mutation. scripts/mutate.sh owns the warm-up, the coefficient, the supervisor and the
-# verdict: local and CI measure through the same path. The per-mutant deadline derives
-# from ceil(cap / coverage pass) instead of a pinned MUTATE_TIMEOUT, so a slow machine
-# raises the deadline instead of timing mutants out mid-measurement.
-mutate: ## Whole-module mutation run, with the verdict (same wiring as CI)
+mutate:
 	@scripts/mutate.sh --run
 
-mutate-diff: ## Mutation run over the diff vs MUTATE_BASE, with the verdict
+mutate-diff:
 	@scripts/mutate.sh --diff
 
 COVER_PROFILE ?= coverage.out

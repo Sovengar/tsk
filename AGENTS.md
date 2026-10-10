@@ -90,12 +90,26 @@ required check.
 - **Budget** (mandatory under `--ci`, asserted at startup):
   `2*CAP < STALL < CEILING`, `CEILING + SETUP_RESERVE < JOB_CEILING` →
   `180s · 4 workers · 8m · 13m · +600s · 25m`.
-- **Local loop**: `make mutate` (whole module) and `make mutate-diff` (the diff
-  against `MUTATE_BASE`), same wiring as CI. `make coverage-check` is the local
-  equivalent of the coverage gate. The coefficient is derived from
-  `ceil(cap / coverage pass)`, so there is no pinned `MUTATE_TIMEOUT` to tune.
+- **Where it runs**: the gate is CI (the `Mutation` job above). Locally it is
+  never automatic: run it manually, only when needed, with `make mutate`
+  (whole module) and `make mutate-diff` (the diff against `MUTATE_BASE`), same
+  wiring as CI. `make coverage-check` is the local equivalent of the coverage
+  gate. The coefficient is derived from `ceil(cap / coverage pass)`, so there
+  is no pinned `MUTATE_TIMEOUT` to tune.
 - **Scope**: `MUTATE_EXCLUDE` in the `Makefile` (`cmd/`), read by
   `scripts/mutate.sh` so local and CI gate the same set.
+- **Two counts, and they are different numbers**: `WATCH_LINES` (every mutant
+  considered = the supervisor's denominator) and `EXPECTED_MEASURED` (in-scope
+  `RUNNABLE` only = what the verdict compares against the report's
+  `mutants_total`, which is `killed + lived + notViable`). `SKIPPED` leaves the
+  scope and `NOT COVERED` sits in no cover block (Go cover starts a case
+  clause after the colon), so neither can be measured and neither belongs in
+  the denominator; the exclusion and its reason are published by the verdict.
+- The gitconfig is neutralised (`GIT_CONFIG_GLOBAL`/`GIT_CONFIG_SYSTEM` →
+  `/dev/null`, `GIT_CONFIG_NOSYSTEM=1`): gremlins computes its `--diff` ranges
+  with a plain `git diff` run with the AMBIENT config, so a dev's
+  `diff.algorithm`/`diff.interhunkcontext` would make the local loop measure a
+  different mutant set than CI's defaults. Hermetic by construction.
 - **Files that make the gate possible** (all committed):
   `.mutation-allowlist` (survivors accepted **by line**; missing = red with the
   command to seed it), `.mutation-timeouts` (`<file> <ceiling>` for mutants that
