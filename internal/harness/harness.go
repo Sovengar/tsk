@@ -40,11 +40,14 @@ var ErrNoHandoff = errors.New(NoHandoffMessage)
 // carry the required {{prompt_file}} placeholder.
 var ErrMissingPromptPlaceholder = errors.New("handoff.command must contain {{prompt_file}}")
 
-// Template placeholders understood by the handoff command.
+// Template placeholders understood by the handoff command. {{harness}} is the
+// display Name (wrappers key on it, e.g. herdr --kind); {{harness_binary}} is
+// the executable to run, so a config `binary` override is usable.
 const (
-	placeholderHarness = "{{harness}}"
-	placeholderCwd     = "{{cwd}}"
-	placeholderPrompt  = "{{prompt_file}}"
+	placeholderHarness       = "{{harness}}"
+	placeholderHarnessBinary = "{{harness_binary}}"
+	placeholderCwd           = "{{cwd}}"
+	placeholderPrompt        = "{{prompt_file}}"
 )
 
 // builtinRegistry maps best-known harness display names to their executable.
@@ -117,11 +120,18 @@ func merge(detected, declared []Harness) []Harness {
 }
 
 // ComposePrompt is the prompt handed to the harness. It identifies the task and
-// points the harness at the tsk CLI to read the task and update its state; the
-// description is not embedded so the harness always reads the current task.
-func ComposePrompt(t model.Task) string {
-	return fmt.Sprintf("I need to implement this task: Task #%d: %s (%s). You can check the task with the tsk CLI. After finishing, update its state with the same tsk CLI.",
-		t.ID, t.Title, t.ProjectName)
+// gives the concrete tsk CLI commands to read it and update its state; the
+// description is not embedded so the harness always reads the current task. The
+// statuses are the task project's workflow. An empty workflow drops the state
+// clause, so the prompt never ends with a dangling "valid statuses:".
+func ComposePrompt(t model.Task, statuses []string) string {
+	prompt := fmt.Sprintf("I need to implement this task: Task #%d: %s (%s). Check it with `tsk show %d`.",
+		t.ID, t.Title, t.ProjectName, t.ID)
+	if len(statuses) == 0 {
+		return prompt
+	}
+	return fmt.Sprintf("%s Update its state as you go with `tsk move %d <status>`; valid statuses: %s.",
+		prompt, t.ID, strings.Join(statuses, ", "))
 }
 
 // ValidateCommand reports whether the handoff command can be used: it must be
@@ -137,14 +147,16 @@ func ValidateCommand(command string) error {
 }
 
 // ExpandTemplate replaces the placeholders with shell-quoted values, so a
-// template uses them bare (e.g. --cwd {{cwd}}). It refuses a command without
-// the required {{prompt_file}} placeholder.
-func ExpandTemplate(command, harnessName, cwd, promptFile string) (string, error) {
+// template uses them bare (e.g. --cwd {{cwd}}). {{harness}} is the display name
+// and {{harness_binary}} the executable. It refuses a command without the
+// required {{prompt_file}} placeholder.
+func ExpandTemplate(command string, h Harness, cwd, promptFile string) (string, error) {
 	if err := ValidateCommand(command); err != nil {
 		return "", err
 	}
 	r := strings.NewReplacer(
-		placeholderHarness, shellQuote(harnessName),
+		placeholderHarness, shellQuote(h.Name),
+		placeholderHarnessBinary, shellQuote(h.Binary),
 		placeholderCwd, shellQuote(cwd),
 		placeholderPrompt, shellQuote(promptFile),
 	)
@@ -175,23 +187,29 @@ func HandoffDir(cfg config.Config) string {
 // HandoffDir is reachable in a test.
 var getwd = os.Getwd
 
-// Execute is the whole handoff: it validates the command, composes the prompt,
-// writes it to a private temp file and launches the command detached. It
-// returns as soon as the process starts (fire-and-forget).
-func Execute(cfg config.Config, task model.Task, harnessName string) error {
+// Execute is the whole handoff: it validates the command, composes the prompt
+// with the task project's statuses, writes it to a private temp file and
+// launches the command detached. It returns as soon as the process starts
+// (fire-and-forget).
+func Execute(cfg config.Config, task model.Task, statuses []string, h Harness) error {
 	if err := ValidateCommand(cfg.Handoff.Command); err != nil {
 		return err
 	}
-	promptPath, err := PromptFile(ComposePrompt(task))
+	promptPath, err := PromptFile(ComposePrompt(task, statuses))
 	if err != nil {
 		return err
 	}
-	return Launch(cfg.Handoff.Command, harnessName, HandoffDir(cfg), promptPath)
+	if err := Launch(cfg.Handoff.Command, h, HandoffDir(cfg), promptPath); err != nil {
+		// The harness never started, so the prompt file would be orphaned.
+		_ = os.Remove(promptPath)
+		return err
+	}
+	return nil
 }
 
 // Launch expands the template and starts /bin/sh -c <expanded> detached.
-func Launch(command, harnessName, cwd, promptFile string) error {
-	expanded, err := ExpandTemplate(command, harnessName, cwd, promptFile)
+func Launch(command string, h Harness, cwd, promptFile string) error {
+	expanded, err := ExpandTemplate(command, h, cwd, promptFile)
 	if err != nil {
 		return err
 	}

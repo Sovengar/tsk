@@ -39,9 +39,11 @@ func stubExecute(t *testing.T) *handoffCall {
 	t.Helper()
 	call := &handoffCall{}
 	orig := executeHandoff
-	executeHandoff = func(_ config.Config, task model.Task, name string) error {
+	executeHandoff = func(_ config.Config, task model.Task, statuses []string, h harness.Harness) error {
 		call.task = task
-		call.name = name
+		call.statuses = statuses
+		call.name = h.Name
+		call.binary = h.Binary
 		return call.err
 	}
 	t.Cleanup(func() { executeHandoff = orig })
@@ -49,9 +51,11 @@ func stubExecute(t *testing.T) *handoffCall {
 }
 
 type handoffCall struct {
-	name string
-	task model.Task
-	err  error
+	name     string
+	binary   string
+	task     model.Task
+	statuses []string
+	err      error
 }
 
 func askNames(list []harness.Harness) []string {
@@ -213,8 +217,27 @@ func TestAskAISelectLaunches(t *testing.T) {
 	if call.name != "opencode" {
 		t.Errorf("handoff harness = %q, want opencode", call.name)
 	}
+	if call.binary != "opencode" {
+		t.Errorf("handoff harness binary = %q, want opencode (defaulted from the name)", call.binary)
+	}
 	if call.task.ID != wantTaskID {
 		t.Errorf("handoff task = %d, want %d", call.task.ID, wantTaskID)
+	}
+	if len(call.statuses) == 0 {
+		t.Error("handoff must carry the task project's workflow statuses")
+	}
+}
+
+func TestWorkflowForProject(t *testing.T) {
+	m := askModel(t, askConfig("opencode"))
+
+	got := m.workflowForProject("web")
+	want := []string{"todo", "doing", "done"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("workflowForProject(web) = %v, want %v", got, want)
+	}
+	if got := m.workflowForProject("unknown"); len(got) == 0 {
+		t.Error("an unknown project must fall back to a merged workflow")
 	}
 }
 

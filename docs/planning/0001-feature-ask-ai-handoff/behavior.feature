@@ -56,15 +56,22 @@ Feature: Ask AI — hand a task off to an external AI harness
   Scenario: Hand a task off to the selected harness
     Given a handoff command is configured
     And at least one harness is available
-    And a task "#7 Add dark mode" in project "tsk" is focused
+    And a task "#7 Add dark mode" in project "tsk" whose workflow is the default one is focused
     When the user selects a harness in the picker
     Then the picker closes and the handoff command is launched detached, without blocking the TUI
-    And the template placeholder "{{harness}}" is replaced by the selected harness
+    And the template placeholder "{{harness}}" is replaced by the selected harness's display name
+    And the template placeholder "{{harness_binary}}" is replaced by the selected harness's binary
     And the template placeholder "{{cwd}}" is replaced by the handoff working directory
     And the template placeholder "{{prompt_file}}" is replaced by the path of a file containing:
       """
-      I need to implement this task: Task #7: Add dark mode (tsk). You can check the task with the tsk CLI. After finishing, update its state with the same tsk CLI.
+      I need to implement this task: Task #7: Add dark mode (tsk). Check it with `tsk show 7`. Update its state as you go with `tsk move 7 <status>`; valid statuses: backlog, todo, doing, delivered, reviewing, done, cancelled.
       """
+
+  Scenario: A project with an empty workflow drops the status clause
+    Given a task "#3 Tidy" in a project whose workflow is empty is focused
+    When the handoff prompt is composed
+    Then it reads "I need to implement this task: Task #3: Tidy (tsk). Check it with `tsk show 3`."
+    And it does not contain "valid statuses"
 
   Scenario: The handoff runs in tsk's launch directory by default
     Given "handoff.cwd" is not set in the config

@@ -645,7 +645,7 @@ func cmdShow(idStr string) {
 // It never waits for the harness; it prints a JSON result as soon as the
 // process is started.
 func cmdAsk(args []string) {
-	if len(args) == 0 {
+	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
 		outputError("usage: tsk ask <task-id> [--harness NAME]")
 	}
 
@@ -679,43 +679,62 @@ func cmdAsk(args []string) {
 		outputError(err.Error())
 	}
 
+	statuses := askStatuses(database, task)
+
 	selected, err := selectHarness(harness.Detect(cfg), harnessName)
 	if err != nil {
 		outputError(err.Error())
 	}
 
-	if err := harness.Execute(cfg, *task, selected); err != nil {
+	if err := harness.Execute(cfg, *task, statuses, selected); err != nil {
 		outputError(err.Error())
 	}
 
 	outputJSON(map[string]any{
 		"ok":       true,
 		"task_id":  id,
-		"harness":  selected,
+		"harness":  selected.Name,
 		"launched": true,
 	})
 }
 
+// askStatuses returns the task project's workflow for the prompt's valid-status
+// list. GetTask already joined the project, so a lookup failure here is a
+// degenerate race: fall back to the default workflow (matching the TUI's merged
+// fallback) instead of failing the handoff.
+func askStatuses(database *db.DB, task *model.Task) []string {
+	statuses := model.DefaultWorkflow
+	if project, err := database.GetProject(task.ProjectName); err == nil {
+		statuses = project.Workflow
+	}
+	return statuses
+}
+
 // selectHarness resolves the harness to use: the requested one, the only
 // available one, or an error listing the options (never guesses between
-// several, so an agent always knows which one ran).
-func selectHarness(available []harness.Harness, want string) (string, error) {
+// several, so an agent always knows which one ran). It returns the full
+// Harness so the launched command can use its binary.
+func selectHarness(available []harness.Harness, want string) (harness.Harness, error) {
 	if want != "" {
 		for _, h := range available {
 			if h.Name == want {
-				return h.Name, nil
+				return h, nil
 			}
 		}
-		return "", fmt.Errorf("unknown harness: %s (available: %s)", want, harnessNames(available))
+		if len(available) == 0 {
+			//nolint:staticcheck // the message is pinned by behavior.feature
+			return harness.Harness{}, errors.New(harness.NoHarnessesMessage)
+		}
+		return harness.Harness{}, fmt.Errorf("unknown harness: %s (available: %s)", want, harnessNames(available))
 	}
 	if len(available) == 1 {
-		return available[0].Name, nil
+		return available[0], nil
 	}
 	if len(available) == 0 {
 		//nolint:staticcheck // the message is pinned by behavior.feature
-		return "", errors.New(harness.NoHarnessesMessage)
+		return harness.Harness{}, errors.New(harness.NoHarnessesMessage)
 	}
-	return "", fmt.Errorf("several harnesses available, pass --harness: %s", harnessNames(available))
+	return harness.Harness{}, fmt.Errorf("several harnesses available, pass --harness: %s", harnessNames(available))
 }
 
 // harnessNames joins the display names for the error messages.

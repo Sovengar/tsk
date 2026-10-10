@@ -104,29 +104,34 @@ path = ""                 # default: ~/.local/share/tsk/tsk.db (respects $XDG_DA
 [editor]
 command = "nvim"          # external editor (E key)
 
-[list]
-page_size        = 10     # tasks per page in List view
-default_estimate_days = 1.0  # estimate for tasks without estimate (Gantt)
-gantt_weeks      = 6      # default Gantt horizon
+list_page_size        = 10    # tasks per page in List view
+default_estimate_days = 1.0   # estimate for tasks without estimate (Gantt)
+gantt_weeks           = 6     # default Gantt horizon
 
 # Ask AI: hand a task to an external harness with `a` (TUI) or `tsk ask` (CLI).
 [[harness]]
-name   = "opencode"       # display name and default binary
-binary = "opencode"       # optional; listed even when PATH detection misses it
+name   = "opencode"       # display name; also the default binary and {{harness}}
+binary = "opencode"       # optional executable, exposed as {{harness_binary}}
 
 [handoff]
-command = "herdr pane split --current --direction down --cwd {{cwd}} && herdr agent start {{harness}} --kind {{harness}} --pane $(herdr pane current) && herdr agent prompt {{harness}} \"$(cat {{prompt_file}})\""
+command = "pane=$(herdr pane split --current --direction down --cwd {{cwd}} | jq -r '.result.pane.pane_id') && herdr agent start {{harness}}-$$ --kind {{harness}} --pane \"$pane\" -- --prompt \"$(cat {{prompt_file}})\""
 cwd     = ""              # default: the directory where tsk was launched
 ```
 
-The handoff is generic: `command` is a `/bin/sh` template with `{{harness}}`,
-`{{cwd}}` and `{{prompt_file}}` (required) placeholders; swap it for tmux or a
-plain detached command with no code change. The task text never reaches the
+The herdr example needs `jq` on `PATH` (it parses the `pane split` JSON).
+
+The handoff is generic: `command` is a `/bin/sh` template with `{{harness}}`
+(display name), `{{harness_binary}}` (the harness executable), `{{cwd}}` and
+`{{prompt_file}}` (required) placeholders; swap it for tmux or a plain detached
+command with no code change. The task text never reaches the
 command line — it is written to a private temp file. The prompt does not embed
-the description: it identifies the task and points the harness at the `tsk` CLI,
-so the harness reads the task itself (`tsk show <id>`) and updates its state when
-done. Omit `[handoff]` to disable Ask AI (the action then refuses, naming the key
-to set).
+the description: it identifies the task, tells the harness to read it with
+`tsk show <id>`, and to update it as it goes with `tsk move <id> <status>`,
+listing the task project's valid statuses. The example opens the harness with
+the prompt **pre-loaded but not
+submitted** (herdr `agent start … -- --prompt`), so you can adjust the agent
+before running it; omit `[handoff]` to disable Ask AI (the action then refuses,
+naming the key to set).
 
 A malformed config does not break anything: defaults are applied.
 

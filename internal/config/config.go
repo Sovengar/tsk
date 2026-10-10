@@ -44,8 +44,9 @@ type HarnessConfig struct {
 }
 
 // HandoffConfig is the shell template used to launch a harness. Command is a
-// shell command template with {{harness}}, {{cwd}} and {{prompt_file}}
-// placeholders; CWD overrides the working directory (default: tsk's launch dir).
+// shell command template with {{harness}} (display name), {{harness_binary}}
+// (executable), {{cwd}} and {{prompt_file}} placeholders; CWD overrides the
+// working directory (default: tsk's launch dir).
 type HandoffConfig struct {
 	Command string `toml:"command"`
 	CWD     string `toml:"cwd"`

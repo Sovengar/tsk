@@ -1,12 +1,12 @@
 # Plan: Ask AI — hand a task off to an external AI harness
 
 - Slug: `ask-ai-handoff` · Type: feature · Branch: `feat/ask-ai-handoff`
-- Behavior source: `behavior.feature` (17 scenarios) — the exact user-visible strings, prompt shape and config-driven flows live there.
+- Behavior source: `behavior.feature` (18 scenarios) — the exact user-visible strings, prompt shape and config-driven flows live there.
 - `adr_required: true` — reason: this change freezes a new permanent public config surface (`[[harness]]`, `[handoff]`) and commits to a launch mechanism with a real security/genericity tradeoff (shell template + prompt-file carriage + detached session) that is hard to reverse. Proposed ADR title: **`ask-ai-handoff-contract`** (to be authored as part of this change).
 
 ## Intended outcome
 
-Pressing `a` on a focused task opens a picker of the AI harnesses available on this machine (installed best-known harnesses + config-declared entries) and hands the task's description to the chosen harness through a configurable, non-blocking launch. The same flow is available as a CLI subcommand for scripts and agents. Fire-and-forget: `tsk` never waits on, observes or tracks the harness.
+Pressing `a` on a focused task opens a picker of the AI harnesses available on this machine (installed best-known harnesses + config-declared entries) and hands the task to the chosen harness through a configurable, non-blocking launch. The prompt does not embed the task: it names the concrete commands to read it (`tsk show <id>`) and update it (`tsk move <id> <status>`) plus the project's valid statuses. The same flow is available as a CLI subcommand for scripts and agents. Fire-and-forget: `tsk` never waits on, observes or tracks the harness.
 
 ## Approach at high level
 
@@ -14,8 +14,8 @@ Pressing `a` on a focused task opens a picker of the AI harnesses available on t
 - **Config — the feature's public API**:
   - `[[harness]]` entries: `name` (required; display name and default binary) + optional `binary`. Additive to detection; declared entries are listed even when not on PATH (the fix path when detection misses something); a declared entry with the same display name replaces the detected one. Malformed/nameless entries are dropped (never fatal).
   - `[handoff]`: `command` (shell template; empty = handoff disabled) + optional `cwd` (default: the directory where `tsk` was launched).
-  - Template placeholders: `{{harness}}`, `{{cwd}}`, `{{prompt_file}}` (required — refuse otherwise). Substituted values are shell-quoted by tsk so templates use them bare (e.g. `--cwd {{cwd}}`).
-- **Prompt carriage**: the prompt text never enters the command line — it is written to a 0600 temp file that `{{prompt_file}}` points at. The file is not deleted by tsk (the harness may read it after tsk exits; the OS temp reaper owns it). Content is pinned in `behavior.feature`: `I need to implement this task: Task #<id>: <title> (<project>). You can check the task with the tsk CLI. After finishing, update its state with the same tsk CLI.` (single line; the description is not embedded — the harness reads the task via the `tsk` CLI).
+  - Template placeholders: `{{harness}}` (display name), `{{harness_binary}}` (the executable), `{{cwd}}`, `{{prompt_file}}` (required — refuse otherwise). Substituted values are shell-quoted by tsk so templates use them bare (e.g. `--cwd {{cwd}}`).
+- **Prompt carriage**: the prompt text never enters the command line — it is written to a 0600 temp file that `{{prompt_file}}` points at. The file is not deleted by tsk (the harness may read it after tsk exits; the OS temp reaper owns it). Content is pinned in `behavior.feature`: `I need to implement this task: Task #<id>: <title> (<project>). Check it with `tsk show <id>`. Update its state as you go with `tsk move <id> <status>`; valid statuses: <statuses>.` (single line; the description is not embedded — the harness reads the task via the `tsk` CLI; `<statuses>` is the task project's workflow, dropped when empty).
 - **Handoff execution**: `/bin/sh -c <expanded template>` with working directory `handoff.cwd` (or launch dir), inherited environment, std streams to `/dev/null`, started in its own session (`Setsid`) and reaped in the background. Only spawn-time failures are surfaced (TUI error toast / CLI JSON error); after a successful start it is fire-and-forget.
 - **TUI**: a new picker modal following the existing overlay pattern (open flag + priority key dispatch + centered modal render + overlay kind in the bottom bar). `a` is added to the List/Kanban keybind hints and handled in List/Kanban/Detail; refusal and launch errors use the existing transient toast; zero harnesses shows exactly `No harnesses found`; no focus means no-op. Never `tea.ExecProcess` — that would freeze the dashboard.
 - **CLI**: `tsk ask <task-id> [--harness NAME]` — JSON output by default; auto-selects only when exactly one harness is available; every failure (unknown task, unknown/ambiguous harness, unconfigured handoff, zero harnesses, spawn error) exits non-zero with a JSON error listing what is available.
@@ -50,6 +50,10 @@ Pressing `a` on a focused task opens a picker of the AI harnesses available on t
 6. Full gates (`make check`, mutation) and `make install`.
 
 ## Progress
+Phase: review
+
+Review: 2026-10-10 — verdict **fix** (5-way parallel review: behavior + code/security/performance/docs lenses over `main...HEAD`); 0 CRITICAL, 0 HIGH, 5 MEDIUM, 14 LOW. Change left unopened. MEDIUMs: `Harness.Binary` never reaches the launch (`internal/harness/harness.go:94`), prompt temp file orphaned on launch failure (`harness.go:186`), README config sample still nests flat keys under `[list]` (`README.md:107-110`), FEATURES.md claims a config warning the code never emits (`docs/FEATURES.md:93`), planning docs still describe an embedded-description prompt (`plan.md:9`, `issue.md:33-36,72-73`).
+
 Phase: execution
 | Scenario (behavior.feature) | Status | Commit |
 | --- | --- | --- |
@@ -70,3 +74,21 @@ Phase: execution
 | CLI refuses to guess between several harnesses | ✅ | 3690506 |
 | CLI reports unknown task or unknown harness | ✅ | 3690506 |
 | CLI refuses when no handoff is configured | ✅ | 3690506 |
+| Hand a task off to the selected harness (tsk CLI commands + statuses) | ✅ | 73d07d0 |
+| A project with an empty workflow drops the status clause | ✅ | 73d07d0 |
+
+Pre-review iterations (user-directed):
+- The handoff prompt became a single line pointing the harness at the `tsk` CLI
+  (description no longer embedded); the former title-fallback scenario was
+  removed — commit `4e53cc8`. The broken herdr example was corrected in
+  README/ADR — commit `2e79d5b`; later switched to the prefill form — commit
+  `fe95e24`.
+- The prompt now names the concrete commands `tsk show <id>` and
+  `tsk move <id> <status>` and the task project's valid statuses (threaded
+  through `ComposePrompt`/`Execute`); a new scenario covers the empty-workflow
+  fallback. 18 scenarios.
+- Review fix pass: `{{harness_binary}}` placeholder makes the config `binary`
+  override usable at launch; `Execute` removes the prompt temp file when the
+  launch fails; README config sample uses the real flat keys; FEATURES drops the
+  "with a warning" claim; the CLI guards a flag-first `tsk ask`, drops the
+  dangling "(available: )", and the CLI/TUI status fallback is consistent.
