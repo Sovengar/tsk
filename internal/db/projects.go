@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -85,7 +86,7 @@ func (db *DB) GetProject(name string) (*model.Project, error) {
 	p, err := scanProject(db.conn.QueryRow(
 		`SELECT `+projectColumns+` FROM projects WHERE name = ?`, name,
 	).Scan)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("project not found: %s", name)
 	}
 	if err != nil {
@@ -99,7 +100,7 @@ func (db *DB) GetProjectByID(id int64) (*model.Project, error) {
 	p, err := scanProject(db.conn.QueryRow(
 		`SELECT `+projectColumns+` FROM projects WHERE id = ?`, id,
 	).Scan)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("project not found: id %d", id)
 	}
 	if err != nil {

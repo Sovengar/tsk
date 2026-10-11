@@ -78,9 +78,9 @@ func dropColumn(t *testing.T, column string) *DB {
 	colStatus, colAssignee := "t0.status AS status", "t0.assignee AS assignee"
 	switch column {
 	case "status":
-		colStatus = `t0.status AS estado`
+		colStatus = `t0.status AS state`
 	case "assignee":
-		colAssignee = `t0.assignee AS responsable`
+		colAssignee = `t0.assignee AS owner`
 	default:
 		t.Fatalf("unknown column: %q", column)
 	}

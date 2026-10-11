@@ -143,7 +143,7 @@ func parseEditFile(content string) (title, description, assignee string, priorit
 		}
 	}
 
-	return
+	return title, description, assignee, priority, estimate, tags
 }
 
 // nonNegativeEstimate parses the template's estimate field and returns the

@@ -40,20 +40,20 @@ func fuzzyScore(query, target string) (int, bool) {
 // len(x) > max`. With the if, the `len(x) > max` only differed from the `>=`
 // when len(x) == max, and there both branches give the same slice; the min has
 // no edge to mutate.
-func cappedLen(n, max int) int {
-	if max <= 0 {
+func cappedLen(n, limit int) int {
+	if limit <= 0 {
 		return n
 	}
-	return min(n, max)
+	return min(n, limit)
 }
 
 // fuzzyFilter returns up to max items that match query, sorted by descending
 // score and ascending name as a tiebreaker. With an empty query it returns
 // the first max in the original order.
-func fuzzyFilter(items []string, query string, max int) []string {
+func fuzzyFilter(items []string, query string, limit int) []string {
 	// With no query there is no ranking: the original order is returned (the cap applies).
 	if strings.TrimSpace(query) == "" {
-		return append([]string(nil), items[:cappedLen(len(items), max)]...)
+		return append([]string(nil), items[:cappedLen(len(items), limit)]...)
 	}
 
 	type scored struct {
@@ -85,7 +85,7 @@ func fuzzyFilter(items []string, query string, max int) []string {
 		}
 		return strings.Compare(a.item, b.item)
 	})
-	out = out[:cappedLen(len(out), max)]
+	out = out[:cappedLen(len(out), limit)]
 	res := make([]string, len(out))
 	for i, s := range out {
 		res[i] = s.item

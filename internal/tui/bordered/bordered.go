@@ -107,7 +107,7 @@ func styledChar(style *ansi.Style, char string) string {
 
 func buildBorderLine(style *ansi.Style, left, fill, right string, innerWidth, align int, title string) string {
 	titleDisplay := ansi.Strip(title)
-	titleWidth := ansi.StringWidth(string(titleDisplay))
+	titleWidth := ansi.StringWidth(titleDisplay)
 
 	// The truncation ALWAYS happens, with no condition. ansi.Truncate is an
 	// identity when the text already fits -- verified with a text of exactly
