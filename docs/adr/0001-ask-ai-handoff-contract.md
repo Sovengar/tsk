@@ -104,17 +104,18 @@ name = "opencode"
 binary = "opencode"
 
 [ai.ask.handoff]
-command = "pane=$(herdr pane split --current --direction down --cwd {{cwd}} | jq -r '.result.pane.pane_id') && herdr agent start {{harness}}-$$ --kind {{harness}} --pane \"$pane\" -- --prompt \"$(cat {{prompt_file}})\""
+command = "pane=$(herdr tab create --cwd {{cwd}} --label {{harness}}-$$ --focus | jq -r '.result.root_pane.pane_id') && herdr agent start {{harness}}-$$ --kind {{harness}} --pane \"$pane\" -- --prompt \"$(cat {{prompt_file}})\""
 ```
 
-The example needs `jq` on `PATH` (it parses the `pane split` JSON). Verified
+The example needs `jq` on `PATH` (it parses the `tab create` JSON). Verified
 against `herdr 0.9.2-preview`: the pane id must be captured from the
-`pane split` result (`| jq -r '.result.pane.pane_id'`) — `herdr pane current`
-returns a JSON object, not a bare id, so passing it to `--pane` fails while the
-split has already happened. The prompt rides on `agent start … -- --prompt
+`tab create` result (`| jq -r '.result.root_pane.pane_id'`) — `tab create`
+nests the pane under `result.root_pane` (not `result.pane_id`), and `herdr pane
+current` returns a JSON object, not a bare id, so a wrong path yields `null`
+and passing it to `--pane` fails while the tab has already been created. The prompt rides on `agent start … -- --prompt
 "<text>"`, which **pre-loads** it into the harness input without submitting, so
 the user can adjust the agent before sending it; a separate `agent prompt` step
 would auto-submit and is not used. Agent names must be unique (`{{harness}}-$$`,
-`$$` = the handoff shell's PID). The split pane must land at an interactive shell
+`$$` = the handoff shell's PID). The new tab must land at an interactive shell
 prompt ready for `agent start`; if it does not, the failure is a surfaced
 spawn/exit error, never a hang.

@@ -114,7 +114,7 @@ name   = "opencode"       # display name; also the default binary and {{harness}
 binary = "opencode"       # optional executable, exposed as {{harness_binary}}
 
 [ai.ask.handoff]
-command = "pane=$(herdr pane split --current --direction down --cwd {{cwd}} | jq -r '.result.pane.pane_id') && herdr agent start {{harness}}-$$ --kind {{harness}} --pane \"$pane\" -- --prompt \"$(cat {{prompt_file}})\""
+command = "pane=$(herdr tab create --cwd {{cwd}} --label {{harness}}-$$ --focus | jq -r '.result.root_pane.pane_id') && herdr agent start {{harness}}-$$ --kind {{harness}} --pane \"$pane\" -- --prompt \"$(cat {{prompt_file}})\""
 cwd     = ""              # default: the directory where tsk was launched
 prompt  = "Run this task: Task #{{id}}: {{title}} ({{project}}). Check it with `tsk show {{id}}`. Update its state as you go with `tsk move {{id}} <status>`; valid statuses: {{statuses}}."
 ```
