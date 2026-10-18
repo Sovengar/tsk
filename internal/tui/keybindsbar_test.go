@@ -75,7 +75,7 @@ func TestKeybindsBarDetailAllActions(t *testing.T) {
 			t.Errorf("detail row with more than %d actions:\n%s", keybindsPerRow, line)
 		}
 	}
-	for _, want := range []string{"j/k", "select comment", "new comment", "tags", "delete/done", "edit/editor", "start", "cancel", "close"} {
+	for _, want := range []string{"j/k", "select comment", "new comment", "tags", "ask AI", "status", "move project", "delete comment", "edit/editor", "close"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("%q is missing in the detail:\n%s", want, out)
 		}
@@ -90,7 +90,7 @@ func TestKeybindsBarDetailOverlay(t *testing.T) {
 
 	out := ansi.Strip(kb.View())
 	// Only detail modal keys.
-	for _, want := range []string{"comment", "select", "delete/done", "edit", "start", "cancel", "close"} {
+	for _, want := range []string{"comment", "select", "delete comment", "edit", "status", "move project", "close"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("%q is missing in the detail overlay:\n%s", want, out)
 		}

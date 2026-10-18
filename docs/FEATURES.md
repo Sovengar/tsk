@@ -15,6 +15,8 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 | Estimate | Task duration in days (feeds the Gantt) | `--estimate` |
 | Tags | Labels on tasks | `--tag`; `t` (detail) |
 | Comments | Per-task discussion | `c` (detail); `tsk comment` |
+| Status overlay | Move a task to any workflow status, backwards included | `m` (List/Kanban/Detail) |
+| Cross-project move | Move a task to another project, then pick its status | `M` (List/Kanban/Detail) |
 | Ask AI handoff | Hand a task to an external AI harness (detected + config) | `a` (List/Kanban/Detail); `tsk ask` |
 | Off-days | Non-working days per person | `m` (Dashboard); `tsk offday` |
 | Project archiving | Reversible soft delete | `d`/`r` (Dashboard); `tsk project archive` |
@@ -35,20 +37,19 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 
 - **View switching** — `1`/`2`/`3`/`4` switch between List, Kanban, Gantt, Dashboard.
 - **Navigation** — `hjkl` or arrows move the cursor; `Tab` cycles projects.
-- **Task actions** — `s` start, `d` done, `x` cancel, `Ctrl+p` cycle priority.
+- **Task actions** — `m` opens the status overlay (the next workflow status first, then the already-passed ones, `cancelled` last); `M` moves the task to another project and then asks for its status; `Ctrl+p` cycle priority.
 - **Ask AI** — `a` on a focused task opens the harness picker and hands the task to the selected harness: the prompt tells the harness to read the task (`tsk show <id>`) and update it as it goes (`tsk move <id> <status>`), listing the project's valid statuses (List, Kanban, Detail).
 - **Insert** — `i` creates a project (Dashboard) or task (List/Kanban).
 - **Edit** — `e` opens inline description editor; `E` opens external editor.
 - **Filters** — `/` opens the filter modal; `Esc` clears active filter.
 - **Pagination** — `n`/`p` next/previous page, `N`/`P` first/last page (List).
 - **Gantt scroll** — `h`/`l` scroll days, `g`/`G` jump to first/last task.
-- **Kanban move** — `s` advance status, `S` retreat status.
 - **Dashboard extras** — `A` toggle archived, `d` archive, `r` restore, `e` edit project, `m` assignees.
 - **Help** — `?` toggles help overlay; `q` quits.
 
 ## Modals and detail
 
-- **Task detail** — metadata, description, comments; opened with `Enter`.
+- **Task detail** — metadata, description, comments; opened with `Enter`; `m` opens the status overlay, `M` moves it to another project, `d` deletes the selected comment.
 - **Filter modal** — filter by project, status, assignee, priority, tag; fuzzy search; `Ctrl+R` resets.
 - **New task modal** — priority, title, description, assignee with autocomplete, tags with suggestions; `Ctrl+S` creates.
 - **Project modal** — name, workflow, list order; `Tab` cycles fields.

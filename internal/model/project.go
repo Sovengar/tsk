@@ -108,6 +108,61 @@ func PrevStatus(workflow []string, current string) (string, bool) {
 	return "", false
 }
 
+// StatusChoices returns the statuses the status overlay offers for current:
+// first the ones after it in workflow order, then the already-passed ones from
+// the closest to the oldest, and "cancelled" last.
+//
+// CancelledStatus is skipped when locating current so that it never splits the
+// forward/reverse halves, and it is always the last entry. The result never
+// contains current nor duplicates, and an empty workflow yields an empty one.
+func StatusChoices(workflow []string, current string) []string {
+	if len(workflow) == 0 {
+		return nil
+	}
+
+	idx := -1
+	for i, s := range workflow {
+		if s == CancelledStatus {
+			continue
+		}
+		if s == current {
+			idx = i
+			break
+		}
+	}
+
+	seen := make(map[string]bool, len(workflow))
+	result := make([]string, 0, len(workflow))
+	add := func(s string) {
+		if s == current || s == CancelledStatus || seen[s] {
+			return
+		}
+		seen[s] = true
+		result = append(result, s)
+	}
+
+	if idx < 0 {
+		// current is cancelled or unknown: the whole workflow in its order.
+		for _, s := range workflow {
+			add(s)
+		}
+	} else {
+		for _, s := range workflow[idx+1:] {
+			add(s)
+		}
+		for i := idx - 1; i >= 0; i-- {
+			add(workflow[i])
+		}
+	}
+
+	// Cancelled is the last entry even when the workflow does not carry it.
+	// When current is already cancelled it is left out: current is never offered.
+	if current != CancelledStatus {
+		result = append(result, CancelledStatus)
+	}
+	return result
+}
+
 // ValidateWorkflow checks that there are no duplicates and that it includes the state
 // "done", required by the closing actions.
 func ValidateWorkflow(workflow []string) error {

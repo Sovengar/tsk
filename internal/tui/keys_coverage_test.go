@@ -175,43 +175,23 @@ func TestListKeys(t *testing.T) {
 }
 
 func TestKanbanKeys(t *testing.T) {
-	t.Run("d marks the focused card as done", func(t *testing.T) {
+	t.Run("m opens the status overlay on the focused card", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 
-		id := m.kanbanColumns()[m.kanbanCol].tasks[m.kanbanRow].ID
-		_, cmd := pressKeys(t, m, "d")
-		if cmd == nil {
-			t.Fatal("d did not launch any action")
-		}
-		mustRun(t, cmd)
-
-		task, err := m.database.GetTask(id)
-		if err != nil {
-			t.Fatalf("GetTask(%d): %v", id, err)
-		}
-		if task.Status != "done" {
-			t.Errorf("the task ended up as %q, want done", task.Status)
+		next, _ := pressKeys(t, m, "m")
+		if !next.statusOpen {
+			t.Error("m did not open the status overlay")
 		}
 	})
 
-	t.Run("x cancels the focused card", func(t *testing.T) {
+	t.Run("M opens the project picker on the focused card", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 
-		id := m.kanbanColumns()[m.kanbanCol].tasks[m.kanbanRow].ID
-		_, cmd := pressKeys(t, m, "x")
-		if cmd == nil {
-			t.Fatal("x did not launch any action")
-		}
-		mustRun(t, cmd)
-
-		task, err := m.database.GetTask(id)
-		if err != nil {
-			t.Fatalf("GetTask(%d): %v", id, err)
-		}
-		if task.Status != "cancelled" {
-			t.Errorf("the task ended up as %q, want cancelled", task.Status)
+		next, _ := pressKeys(t, m, "M")
+		if !next.moveProjectOpen {
+			t.Error("M did not open the project picker")
 		}
 	})
 
@@ -309,7 +289,7 @@ func TestKanbanKeys(t *testing.T) {
 			t.Fatalf("the fixture did not leave the board empty: %d columns", len(cols))
 		}
 
-		for _, k := range []string{"h", "l", "j", "k", "d", "x", "s", "S", "enter", "ctrl+p"} {
+		for _, k := range []string{"h", "l", "j", "k", "m", "M", "enter", "ctrl+p"} {
 			next, cmd := pressKeys(t, m, k)
 			if cmd != nil {
 				t.Errorf("%q on the empty board launched an action", k)
@@ -318,90 +298,65 @@ func TestKanbanKeys(t *testing.T) {
 				t.Errorf("%q on the empty board moved the cursor to [%d,%d]",
 					k, next.kanbanCol, next.kanbanRow)
 			}
+			if next.statusOpen || next.moveProjectOpen {
+				t.Errorf("%q on the empty board opened an overlay", k)
+			}
 		}
 	})
 }
 
 func TestDetailKeys(t *testing.T) {
-	t.Run("s starts the task and closes the detail", func(t *testing.T) {
-		// StartStatus returns the second state of the workflow, so it is only
-		// noticed from "backlog": in any other status moving to "s" is a
-		// no-op by design, not a failure.
+	t.Run("m opens the status overlay and keeps the detail open", func(t *testing.T) {
 		m := newDetailModel(t, 0)
 		m.detailTask = taskByStatus(t, m, "backlog")
 		m.detailOpen = true
 
-		id := m.detailTask.ID
-		next, cmd := pressKeys(t, m, "s")
-		if next.detailOpen {
-			t.Error("s did not close the detail")
+		next, _ := pressKeys(t, m, "m")
+		if !next.statusOpen {
+			t.Fatal("m did not open the status overlay")
 		}
-		if next.detailTask != nil {
-			t.Error("s did not clear the task from the detail")
+		if !next.detailOpen {
+			t.Error("opening the overlay must not close the detail")
 		}
-		if cmd == nil {
-			t.Fatal("s did not launch the start action")
-		}
-		_, _ = updateMsg(t, next, mustMsg(t, cmd))
-
-		task, err := m.database.GetTask(id)
-		if err != nil {
-			t.Fatalf("GetTask(%d): %v", id, err)
-		}
-		// StartStatus returns the SECOND state of the workflow, not the third:
-		// the name "doing" was my own assumption and not the contract.
-		if task.Status != "todo" {
-			t.Errorf("the task ended up as %q, want the second workflow state (todo)", task.Status)
+		// From backlog the first choice is the next workflow status.
+		if len(next.statusList) == 0 || next.statusList[0] != "todo" {
+			t.Errorf("choices = %v, want todo first", next.statusList)
 		}
 	})
 
-	t.Run("x cancels the task and closes the detail", func(t *testing.T) {
+	t.Run("M opens the project picker and keeps the detail open", func(t *testing.T) {
 		m := newDetailModel(t, 0)
 		m.detailOpen = true
 
-		id := m.detailTask.ID
-		next, cmd := pressKeys(t, m, "x")
-		if next.detailOpen || next.detailTask != nil {
-			t.Error("x did not close the detail")
+		next, _ := pressKeys(t, m, "M")
+		if !next.moveProjectOpen {
+			t.Fatal("M did not open the project picker")
 		}
-		if cmd == nil {
-			t.Fatal("x did not launch the cancel action")
-		}
-		_, _ = updateMsg(t, next, mustMsg(t, cmd))
-
-		task, err := m.database.GetTask(id)
-		if err != nil {
-			t.Fatalf("GetTask(%d): %v", id, err)
-		}
-		if task.Status != "cancelled" {
-			t.Errorf("the task ended up as %q, want cancelled", task.Status)
+		if !next.detailOpen {
+			t.Error("opening the picker must not close the detail")
 		}
 	})
 
-	t.Run("d with no comment selected marks the task as done", func(t *testing.T) {
+	t.Run("d with no comment selected does nothing", func(t *testing.T) {
 		m := newDetailModel(t, 3)
 		m.detailOpen = true
 		m.detailCommentSel = -1
 
 		id := m.detailTask.ID
 		next, cmd := pressKeys(t, m, "d")
-		if next.detailOpen || next.detailTask != nil {
-			t.Error("d did not close the detail")
+		if !next.detailOpen {
+			t.Error("d with no comment selected closed the detail")
 		}
-		if next.detailComments != nil {
-			t.Error("d did not clear the loaded comments")
+		if cmd != nil {
+			t.Error("d with no comment selected launched an action")
 		}
-		if cmd == nil {
-			t.Fatal("d did not launch the done action")
-		}
-		_, _ = updateMsg(t, next, mustMsg(t, cmd))
 
 		task, err := m.database.GetTask(id)
 		if err != nil {
 			t.Fatalf("GetTask(%d): %v", id, err)
 		}
-		if task.Status != "done" {
-			t.Errorf("the task ended up as %q, want done", task.Status)
+		if task.Status == "done" {
+			t.Errorf("the task ended up as %q, d must not mark it done", task.Status)
 		}
 	})
 
@@ -488,11 +443,11 @@ func TestDetailKeys(t *testing.T) {
 		if next, _ := pressKeys(t, m, "t"); next.tagOpen {
 			t.Error("t with no task opened the tags modal")
 		}
-		if next, _ := pressKeys(t, m, "s"); next.detailOpen == false {
-			t.Error("s with no task closed the detail")
+		if next, _ := pressKeys(t, m, "m"); next.statusOpen {
+			t.Error("m with no task opened the status overlay")
 		}
-		if next, _ := pressKeys(t, m, "x"); next.detailOpen == false {
-			t.Error("x with no task closed the detail")
+		if next, _ := pressKeys(t, m, "M"); next.moveProjectOpen {
+			t.Error("M with no task opened the project picker")
 		}
 	})
 

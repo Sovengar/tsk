@@ -24,6 +24,8 @@ const (
 	overlayAssigneeDetail
 	overlayOffdayForm
 	overlayAskAI
+	overlayStatus
+	overlayMoveProject
 )
 
 // KeybindsBar renders the keybinds in a pane with borders.
@@ -108,6 +110,10 @@ func (s KeybindsBar) title() string {
 		return " Keybinds · Off-day "
 	case overlayAskAI:
 		return " Keybinds · Ask AI "
+	case overlayStatus:
+		return " Keybinds · Status "
+	case overlayMoveProject:
+		return " Keybinds · Move to project "
 	}
 	return " Keybinds "
 }
@@ -203,6 +209,18 @@ func (s KeybindsBar) renderOverlay() []string {
 		return s.renderRows([]keybind{
 			{"↑↓", "move"},
 			{"Enter", "handoff"},
+			{"Esc", "close"},
+		})
+	case overlayStatus:
+		return s.renderRows([]keybind{
+			{"j/k", "move"},
+			{"Enter", "select"},
+			{"Esc", "close"},
+		})
+	case overlayMoveProject:
+		return s.renderRows([]keybind{
+			{"j/k", "move"},
+			{"Enter", "select"},
 			{"Esc", "close"},
 		})
 	}

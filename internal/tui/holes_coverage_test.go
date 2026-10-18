@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"tsk/internal/config"
-	"tsk/internal/model"
 )
 
 // The two external editor callbacks, already taken out of their tea.Cmd, have
@@ -283,31 +282,42 @@ func TestKanbanColumnsDoNotWrap(t *testing.T) {
 // S moves the card backwards in ITS project's workflow. It is the path that
 // is not pressed today and the one that breaks the most when the project's
 // workflow changes.
-func TestKanbanMoveLeft(t *testing.T) {
+//
+// The status overlay covers going backwards: it offers the already passed
+// statuses, so the old Kanban retreat key is not needed.
+func TestKanbanStatusOverlayGoesBackwards(t *testing.T) {
 	m := newKanbanModelWithWorkflow(t, 4, []string{"backlog", "todo", "doing", "done"})
 	m.currentView = viewKanban
 
-	// Put the cursor on a card that is not in the first status.
+	// Put the cursor on a card in "todo": the passed "backlog" must be offered.
 	cols := m.kanbanColumns()
-	col := -1
-	for i, c := range cols {
-		if len(c.tasks) > 0 {
-			col = i
-			break
-		}
-	}
-	if col < 0 {
-		t.Skip("the fixture left no cards")
+	col := kanbanColumnIndex(m, "todo")
+	if col < 0 || len(cols[col].tasks) == 0 {
+		t.Skip("the fixture left no todo cards")
 	}
 	m.kanbanCol = col
 	m.kanbanRow = 0
 
 	id := cols[col].tasks[0].ID
-	status := cols[col].tasks[0].Status
 
-	_, cmd := pressKeys(t, m, "S")
+	opened, _ := pressKeys(t, m, "m")
+	if !opened.statusOpen {
+		t.Fatal("m did not open the status overlay")
+	}
+	backlogIdx := -1
+	for i, s := range opened.statusList {
+		if s == "backlog" {
+			backlogIdx = i
+		}
+	}
+	if backlogIdx < 0 {
+		t.Fatalf("choices = %v, want the passed backlog included", opened.statusList)
+	}
+
+	opened.statusIdx = backlogIdx
+	_, cmd := pressKeys(t, opened, "enter")
 	if cmd == nil {
-		t.Fatal("S did not emit any action")
+		t.Fatal("enter did not emit any action")
 	}
 	mustRun(t, cmd)
 
@@ -315,11 +325,8 @@ func TestKanbanMoveLeft(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTask(%d): %v", id, err)
 	}
-	if task.Status == status {
-		t.Errorf("the task is still at %q after moving it left", status)
-	}
-	if prev, _ := model.PrevStatus(m.projects[0].Workflow, status); task.Status != prev {
-		t.Errorf("the task ended at %q, want the previous status %q", task.Status, prev)
+	if task.Status != "backlog" {
+		t.Errorf("the task ended at %q, want the previous status backlog", task.Status)
 	}
 }
 

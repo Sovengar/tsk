@@ -14,10 +14,10 @@ func detailKeybinds() []keybind {
 		{"c", "new comment"},
 		{"t", "tags"},
 		{"a", "ask AI"},
-		{"d", "delete/done"},
+		{"m", "status"},
+		{"M", "move project"},
+		{"d", "delete comment"},
 		{"e/E", "edit/editor"},
-		{"s", "start"},
-		{"x", "cancel"},
 		{"Esc", "close"},
 	}
 }

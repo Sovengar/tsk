@@ -65,6 +65,20 @@ type Model struct {
 	confirmProject string
 	confirmOffday  model.OffDay
 
+	// Status overlay (opened with "m" on a focused task)
+	statusOpen        bool
+	statusTaskID      int64
+	statusList        []string
+	statusIdx         int
+	statusProjectID   int64 // 0 = keep the task's project; >0 = target when coming from "M"
+	statusProjectName string
+
+	// Project picker for "M"
+	moveProjectOpen   bool
+	moveProjectIdx    int
+	moveProjectTaskID int64
+	moveProjectList   []model.Project
+
 	// Assignee / off-day modal (opened with "m" from the Dashboard)
 	assigneeModalOpen bool
 	assigneeDetail    bool // false = people list, true = detail
@@ -628,6 +642,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleConfirmKey(key)
 	}
 
+	// Status overlay and move-to-project picker (strict overlays)
+	if m.statusOpen {
+		return m.handleStatusKey(key)
+	}
+	if m.moveProjectOpen {
+		return m.handleMoveProjectKey(key)
+	}
+
 	// Project modal takes priority
 	if m.projectModalOpen {
 		return m.handleProjectModalKey(key)
@@ -785,20 +807,17 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			m.detailCommentSel = -1
 			return m, m.loadCommentsCmd(t.ID)
 		}
-	case "s":
-		// Start: move to next status
+	case "m":
+		// Status overlay: the next workflow status first.
 		if inRange(m.cursor, len(tasks)) {
-			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.StartTask)
+			t := tasks[m.cursor]
+			return m, m.openStatus(&t)
 		}
-	case "d":
-		// Done
+	case "M":
+		// Move the task to another project, then pick its status there.
 		if inRange(m.cursor, len(tasks)) {
-			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.DoneTask)
-		}
-	case "x":
-		// Cancel
-		if inRange(m.cursor, len(tasks)) {
-			return m, m.taskActionCmd(tasks[m.cursor].ID, m.database.CancelTask)
+			t := tasks[m.cursor]
+			return m, m.openMoveProject(&t)
 		}
 	case "/":
 		// Open filter modal
@@ -857,41 +876,17 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 		m.kanbanRow = cycleIndex(m.kanbanRow, len(colTasks), 1)
 	case "k", "up":
 		m.kanbanRow = cycleIndex(m.kanbanRow, len(colTasks), -1)
-	case "s":
-		// Move task right (advance status) according to ITS project's workflow:
-		// the merge's order may not exist in the project and the move would be
-		// silently rejected by MoveTask.
+	case "m":
+		// Status overlay: the next workflow status first.
 		if inRange(m.kanbanRow, len(colTasks)) {
 			t := colTasks[m.kanbanRow]
-			if p := m.projectByName(t.ProjectName); p != nil {
-				if nextStatus, ok := model.NextStatus(p.Workflow, t.Status); ok {
-					return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
-						return m.database.MoveTask(id, nextStatus)
-					})
-				}
-			}
+			return m, m.openStatus(&t)
 		}
-	case "S":
-		// Move task left (retreat status) according to its project's workflow.
+	case "M":
+		// Move the card to another project, then pick its status there.
 		if inRange(m.kanbanRow, len(colTasks)) {
 			t := colTasks[m.kanbanRow]
-			if p := m.projectByName(t.ProjectName); p != nil {
-				if prevStatus, ok := model.PrevStatus(p.Workflow, t.Status); ok {
-					return m, m.taskActionCmd(t.ID, func(id int64) (*model.Task, error) {
-						return m.database.MoveTask(id, prevStatus)
-					})
-				}
-			}
-		}
-	case "d":
-		// Done
-		if inRange(m.kanbanRow, len(colTasks)) {
-			return m, m.taskActionCmd(colTasks[m.kanbanRow].ID, m.database.DoneTask)
-		}
-	case "x":
-		// Cancel
-		if inRange(m.kanbanRow, len(colTasks)) {
-			return m, m.taskActionCmd(colTasks[m.kanbanRow].ID, m.database.CancelTask)
+			return m, m.openMoveProject(&t)
 		}
 	case "e":
 		// Edit the description inline, from the TUI itself.
@@ -992,35 +987,24 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 			m.detailTask = nil
 			return m, cmd
 		}
-	case "s":
+	case "m":
+		// Status overlay; the detail stays open behind it until Enter.
 		if m.detailTask != nil {
-			id := m.detailTask.ID
-			m.detailOpen = false
-			m.detailTask = nil
-			return m, m.taskActionCmd(id, m.database.StartTask)
+			return m, m.openStatus(m.detailTask)
+		}
+	case "M":
+		// Move to another project, then pick its status there.
+		if m.detailTask != nil {
+			return m, m.openMoveProject(m.detailTask)
 		}
 	case "d":
+		// Delete the selected comment; with none selected it does nothing.
 		if m.detailTask == nil {
 			return m, nil
 		}
-		// With a comment selected, delete the comment.
 		if inRange(m.detailCommentSel, len(m.detailComments)) {
 			comment := m.detailComments[m.detailCommentSel]
 			return m, m.deleteCommentCmd(m.detailTask.ID, comment.ID, m.detailCommentSel)
-		}
-		// With no selection, mark the task as done.
-		id := m.detailTask.ID
-		m.detailOpen = false
-		m.detailTask = nil
-		m.detailComments = nil
-		return m, m.taskActionCmd(id, m.database.DoneTask)
-	case "x":
-		if m.detailTask != nil {
-			id := m.detailTask.ID
-			m.detailOpen = false
-			m.detailTask = nil
-			m.detailComments = nil
-			return m, m.taskActionCmd(id, m.database.CancelTask)
 		}
 	}
 	return m, nil
@@ -1095,6 +1079,10 @@ func (m Model) overlayKind() overlayKind {
 	switch {
 	case m.confirmOpen:
 		return overlayConfirm
+	case m.statusOpen:
+		return overlayStatus
+	case m.moveProjectOpen:
+		return overlayMoveProject
 	case m.projectModalOpen:
 		return overlayProject
 	case m.newTaskOpen:
@@ -1189,6 +1177,14 @@ func (m Model) View() tea.View {
 
 	if m.confirmOpen {
 		content = m.renderConfirmModal(content)
+	}
+
+	if m.moveProjectOpen {
+		content = m.renderMoveProjectModal(content)
+	}
+
+	if m.statusOpen {
+		content = m.renderStatusModal(content)
 	}
 
 	if m.helpOpen {

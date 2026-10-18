@@ -22,9 +22,9 @@ var errActionFailed = errors.New("action failed")
 // These tests pin that edge down: with tasks the key acts, with no tasks it
 // does nothing.
 
-// With the filtered list empty, no action key touches the database.
+// With the filtered list empty, the overlay keys open nothing.
 func TestListActionKeysNoopWithEmptyList(t *testing.T) {
-	for _, key := range []string{"s", "d", "x"} {
+	for _, key := range []string{"m", "M"} {
 		t.Run(key, func(t *testing.T) {
 			m := newTestModel(t)
 			m.tasks = nil
@@ -38,23 +38,34 @@ func TestListActionKeysNoopWithEmptyList(t *testing.T) {
 			if next.cursor != 0 {
 				t.Errorf("the cursor ended at %d with no tasks", next.cursor)
 			}
+			if next.statusOpen || next.moveProjectOpen {
+				t.Errorf("key %q with no tasks opened an overlay", key)
+			}
 		})
 	}
 }
 
-// The other side of the same guard: with a task under the cursor, the key acts.
-// Without this half, the previous test would also pass with the guard removed.
+// The other side of the same guard: with a task under the cursor, the key opens
+// its overlay. Without this half, the previous test would also pass with the
+// guard removed.
 func TestListActionKeysActWithValidCursor(t *testing.T) {
-	for _, key := range []string{"s", "d", "x"} {
-		t.Run(key, func(t *testing.T) {
+	for _, tt := range []struct {
+		key  string
+		open func(*Model) bool
+	}{
+		{"m", func(m *Model) bool { return m.statusOpen }},
+		{"M", func(m *Model) bool { return m.moveProjectOpen }},
+	} {
+		t.Run(tt.key, func(t *testing.T) {
 			m := newTestModel(t)
 			if len(m.filteredTasks()) == 0 {
 				t.Skip("the fixture left no visible tasks")
 			}
 			m.cursor = 0
 
-			if _, cmd := press(m, key); cmd == nil {
-				t.Errorf("key %q with a task selected produced no command", key)
+			next, _ := press(m, tt.key)
+			if !tt.open(next) {
+				t.Errorf("key %q with a task selected opened nothing", tt.key)
 			}
 		})
 	}
@@ -64,19 +75,19 @@ func TestListActionKeysActWithValidCursor(t *testing.T) {
 // The toast takes one line, so adding it instead of subtracting it changes how
 // many task rows fit in the box.
 //
-// At a height of 19 the difference falls right on the edge: with toast 2 task
-// rows are painted, without toast 3. The numbers are literals, not derived: if
+// At a height of 19 the difference falls right on the edge: with toast 3 task
+// rows are painted, without toast 4. The numbers are literals, not derived: if
 // someone changes the layout's height split the test has to be updated by hand,
-// which is exactly what is wanted. (The height moved from 18 to 19 when the
-// List gained the "a / ask AI" hint: 15 actions no longer fit in two rows of
-// keybindsPerRow, so the bar grew a row and the edge shifted.)
+// which is exactly what is wanted. (The List dropped s/d/x for m/M, so its 14
+// actions fit in two rows of keybindsPerRow again: the bar lost a row and the
+// edge shifted back up.)
 func TestViewBudgetCountsToastLine(t *testing.T) {
 	for _, tt := range []struct {
 		toast string
 		want  int
 	}{
-		{"saved", 2},
-		{"", 3},
+		{"saved", 3},
+		{"", 4},
 	} {
 		t.Run("toast="+tt.toast, func(t *testing.T) {
 			m := newTestModel(t)
@@ -184,18 +195,20 @@ func newDetailModel(t *testing.T, comments int) *Model {
 }
 
 // "d" in the detail deletes the selected comment; with no selection, or with
-// a selection that does not apply to the list, it marks the task. The guard's
+// a selection that does not apply to the list, it does nothing. The guard's
 // edge is detailCommentSel == len(comments), which the interface never produces
 // but the code checks: if the guard disappeared, it would index out of range.
-func TestDetailDeleteFallsBackToTaskWhenSelectionOutOfRange(t *testing.T) {
+func TestDetailDeleteDoesNothingWhenSelectionOutOfRange(t *testing.T) {
 	for _, sel := range []int{-1, -5, 2, 99} {
 		m := newDetailModel(t, 2)
 		m.detailCommentSel = sel
 
-		next, _ := press(m, "d")
-		// Marking the task closes the detail; deleting a comment does not.
-		if next.detailOpen {
-			t.Errorf("sel %d: neither deleted nor marked; the detail is still open", sel)
+		next, cmd := press(m, "d")
+		if cmd != nil {
+			t.Errorf("sel %d: it deleted something without a valid selection", sel)
+		}
+		if !next.detailOpen {
+			t.Errorf("sel %d: it closed the detail", sel)
 		}
 	}
 }

@@ -137,11 +137,11 @@ func TestKanbanAllStatusCardsAreNavigable(t *testing.T) {
 	}
 }
 
-// TestKanbanAdvanceUsesProjectWorkflow verifies that "s" advances according
-// to the task's project workflow, not the merge. The merge would put
-// "reviewing" as the next of "doing", but web does not have that status and
-// the move would be silently rejected.
-func TestKanbanAdvanceUsesProjectWorkflow(t *testing.T) {
+// TestKanbanStatusOverlayUsesProjectWorkflow verifies that "m" offers the
+// statuses according to the task's project workflow, not the merge. The merge
+// would put "reviewing" as the next of "doing", but web does not have that
+// status and the move would be silently rejected.
+func TestKanbanStatusOverlayUsesProjectWorkflow(t *testing.T) {
 	m := newTestModel(t)
 	if _, err := m.database.CreateTask("web", "Deploy", "", "@john", 1, "doing"); err != nil {
 		t.Fatal(err)
@@ -169,17 +169,28 @@ func TestKanbanAdvanceUsesProjectWorkflow(t *testing.T) {
 	}
 	m.kanbanCol, m.kanbanRow = col, row
 
-	_, cmd := press(m, "s")
-	if cmd == nil {
-		t.Fatal("s should emit a command")
+	opened, _ := press(m, "m")
+	if !opened.statusOpen {
+		t.Fatal("m should open the status overlay")
 	}
-	mustMsg(t, cmd)
+	// web = [todo,doing,done]: the next of doing is done, not reviewing.
+	if len(opened.statusList) == 0 || opened.statusList[0] != "done" {
+		t.Fatalf("choices = %v, want done first (web's workflow)", opened.statusList)
+	}
+
+	applied, cmd := press(opened, "enter")
+	if cmd == nil {
+		t.Fatal("enter should emit the move command")
+	}
+	mustRun(t, cmd)
+	if applied.statusOpen {
+		t.Error("enter should close the overlay")
+	}
 
 	got, err := m.database.GetTask(id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// web = [todo,doing,done]: the next of doing is done, not reviewing.
 	if got.Status != "done" {
 		t.Errorf("status = %q, want done (web's workflow)", got.Status)
 	}

@@ -228,33 +228,18 @@ func TestListNavigation(t *testing.T) {
 	}
 }
 
-func TestListStartTask(t *testing.T) {
+func TestListStatusAndMoveKeys(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "1") // list view
 
-	_, cmd := press(m, "s")
-	if cmd == nil {
-		t.Error("s should produce a command")
+	status, _ := press(m, "m")
+	if !status.statusOpen {
+		t.Error("m should open the status overlay")
 	}
-}
 
-func TestListDoneTask(t *testing.T) {
-	m := newTestModel(t)
-	m, _ = press(m, "1")
-
-	_, cmd := press(m, "d")
-	if cmd == nil {
-		t.Error("d should produce a command")
-	}
-}
-
-func TestListCancelTask(t *testing.T) {
-	m := newTestModel(t)
-	m, _ = press(m, "1")
-
-	_, cmd := press(m, "x")
-	if cmd == nil {
-		t.Error("x should produce a command")
+	move, _ := press(m, "M")
+	if !move.moveProjectOpen {
+		t.Error("M should open the project picker")
 	}
 }
 
@@ -498,13 +483,13 @@ func TestKanbanNavigation(t *testing.T) {
 	}
 }
 
-func TestKanbanMoveRight(t *testing.T) {
+func TestKanbanStatusOverlayKey(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "2") // kanban view
 
-	// Find a column with tasks that isn't the last column
+	// Find a column with tasks
 	workflow := m.mergedWorkflow()
-	for i := 0; i < len(workflow)-1; i++ {
+	for i := 0; i < len(workflow); i++ {
 		if len(m.tasksInColumn(workflow[i])) > 0 {
 			m.kanbanCol = i
 			m.kanbanRow = 0
@@ -512,9 +497,10 @@ func TestKanbanMoveRight(t *testing.T) {
 		}
 	}
 
-	_, cmd := press(m, "s")
-	// cmd may be nil if task is already in last status; that's ok
-	_ = cmd
+	next, _ := press(m, "m")
+	if !next.statusOpen {
+		t.Error("m should open the status overlay on a focused card")
+	}
 }
 
 // --- Merged workflow ---

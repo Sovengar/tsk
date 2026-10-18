@@ -190,6 +190,38 @@ func (db *DB) MoveTask(id int64, newStatus string) (*model.Task, error) {
 	return db.GetTask(id)
 }
 
+// MoveTaskToProject moves a task to another project and sets its status there.
+// The status has to be cancelled or belong to the target project's workflow.
+// completed_at is set when the new status is the target's terminal one or
+// cancelled, and cleared otherwise, so moving a done task back clears it.
+func (db *DB) MoveTaskToProject(id, projectID int64, newStatus string) (*model.Task, error) {
+	if _, err := db.GetTask(id); err != nil {
+		return nil, err
+	}
+
+	p, err := db.GetProjectByID(projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	if newStatus != model.CancelledStatus && !model.HasStatus(p.Workflow, newStatus) {
+		return nil, fmt.Errorf("status %q not in project workflow %v", newStatus, p.Workflow)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	completedAt := "NULL"
+	if newStatus == model.TerminalStatus(p.Workflow) || newStatus == model.CancelledStatus {
+		completedAt = "datetime('now')"
+	}
+
+	query := fmt.Sprintf(`UPDATE tasks SET project_id = ?, status = ?, updated_at = ?, completed_at = %s WHERE id = ?`, completedAt)
+	if _, err := db.conn.Exec(query, projectID, newStatus, now, id); err != nil {
+		return nil, err
+	}
+
+	return db.GetTask(id)
+}
+
 // StartTask moves to the second status of the workflow.
 func (db *DB) StartTask(id int64) (*model.Task, error) {
 	t, err := db.GetTask(id)

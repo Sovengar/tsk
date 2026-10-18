@@ -147,25 +147,24 @@ func TestDetailDeleteLastCommentClearsSelection(t *testing.T) {
 	}
 }
 
-func TestDetailDoneWithoutCommentSelection(t *testing.T) {
+func TestDetailDeleteWithoutCommentSelectionDoesNothing(t *testing.T) {
 	m := newTestModel(t)
 	task := taskByTitle(t, m, "Fix N+1 query")
 	mustAddComment(t, m.database, task.ID, "note")
 	openDetail(m, task)
 
-	// With no selection, d marks done and closes the modal.
+	// With no selection, d does nothing.
 	m, cmd := press(m, "d")
-	if m.detailOpen {
-		t.Error("d with no selection must close the detail")
+	if !m.detailOpen {
+		t.Error("d with no selection must not close the detail")
 	}
-	if cmd == nil {
-		t.Fatal("d with no selection must produce the Done command")
+	if cmd != nil {
+		t.Error("d with no selection must not produce a command")
 	}
-	applyMsg(t, m, mustMsg(t, cmd))
 
 	stored, _ := m.database.GetTask(task.ID)
-	if stored.Status != "done" {
-		t.Errorf("status = %q, want done", stored.Status)
+	if stored.Status == "done" {
+		t.Errorf("status = %q, d must not mark the task done", stored.Status)
 	}
 }
 
