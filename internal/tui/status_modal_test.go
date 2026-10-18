@@ -591,6 +591,63 @@ func TestOldStatusKeysInertInListAndKanban(t *testing.T) {
 	})
 }
 
+// ---- Row building ----
+
+// statusOverlayLines is the row builder: one selection marker on the cursor
+// row, the cursor row styled, and exactly one blank line before cancelled.
+// The cancelled-first case pins the spacing edge: a leading cancelled must not
+// add a second blank line.
+func TestStatusOverlayLinesSpacingAndSelection(t *testing.T) {
+	lines := statusOverlayLines([]string{"cancelled", "todo"}, 1)
+
+	if len(lines) != 3 {
+		t.Fatalf("len(lines) = %d, want 3 (no extra blank before a leading cancelled): %q", len(lines), lines)
+	}
+	if lines[0] != "" {
+		t.Errorf("lines[0] = %q, want the leading blank", lines[0])
+	}
+	if got := ansi.Strip(lines[1]); got != selectionPrefix(false)+"cancelled" {
+		t.Errorf("the unselected row = %q, want it unprefixed", got)
+	}
+	if want := styleSelected.Render(selectionPrefix(true) + "todo"); lines[2] != want {
+		t.Errorf("the selected row = %q, want %q", lines[2], want)
+	}
+}
+
+// The move-project picker carries the same marker and style on its cursor row.
+func TestMoveProjectModalSelectionMarker(t *testing.T) {
+	m := newTestModel(t)
+	m.moveProjectList = []model.Project{{Name: "api"}, {Name: "web"}}
+	m.moveProjectIdx = 1
+
+	raw := m.renderMoveProjectModal("base")
+	if want := styleSelected.Render(selectionPrefix(true) + "web"); !strings.Contains(raw, want) {
+		t.Errorf("the cursor row must be selected and prefixed, want %q:\n%q", want, raw)
+	}
+	if strings.Contains(ansi.Strip(raw), selectionPrefix(true)+"api") {
+		t.Errorf("a non-selected row must not carry the marker:\n%s", ansi.Strip(raw))
+	}
+}
+
+// Applying a status closes the detail and resets the comment selection, so the
+// next detail starts with no comment marked.
+func TestApplyStatusResetsCommentSelection(t *testing.T) {
+	m := newDetailModel(t, 2)
+	m.detailCommentSel = 1
+	m.statusOpen = true
+	m.statusTaskID = m.detailTask.ID
+	m.statusList = []string{"done"}
+
+	next, cmd := press(m, "enter")
+	if cmd == nil {
+		t.Fatal("enter emitted no command")
+	}
+	if next.detailCommentSel != -1 {
+		t.Errorf("detailCommentSel = %d, want -1", next.detailCommentSel)
+	}
+	mustRun(t, cmd)
+}
+
 // ---- Routing and keybinds ----
 
 func TestOverlayKindStatusAndMoveProject(t *testing.T) {

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -133,6 +134,31 @@ func TestVisibleListColumns(t *testing.T) {
 				t.Errorf("visibleListColumns(%d) = %d, want %d", tt.avail, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestListColumnWidthsReservesOneSeparatorPerGap pins the separator
+// arithmetic: the elastic column gets what the fixed columns leave, minus one
+// space for each gap between columns. The exact widths are asserted because a
+// wider or narrower elastic column still renders, but the table would no longer
+// fill the row.
+func TestListColumnWidthsReservesOneSeparatorPerGap(t *testing.T) {
+	// Four columns: 6 + 12 + 12 + elastic, and three separators.
+	got := listColumnWidths(100, 4)
+	if want := []int{6, 12, 12, 67}; !slices.Equal(got, want) {
+		t.Fatalf("listColumnWidths(100, 4) = %v, want %v", got, want)
+	}
+
+	// The same width with all five columns: four separators, 40 fixed columns.
+	got = listColumnWidths(100, 5)
+	if want := []int{6, 12, 12, 56, 10}; !slices.Equal(got, want) {
+		t.Fatalf("listColumnWidths(100, 5) = %v, want %v", got, want)
+	}
+
+	// Below the minimum the elastic column stops shrinking.
+	got = listColumnWidths(20, 4)
+	if got[3] != listElasticMinWidth {
+		t.Errorf("the elastic column = %d, want the minimum %d", got[3], listElasticMinWidth)
 	}
 }
 

@@ -141,18 +141,15 @@ func StatusChoices(workflow []string, current string) []string {
 		result = append(result, s)
 	}
 
-	if idx < 0 {
-		// current is cancelled or unknown: the whole workflow in its order.
-		for _, s := range workflow {
-			add(s)
-		}
-	} else {
-		for _, s := range workflow[idx+1:] {
-			add(s)
-		}
-		for i := idx - 1; i >= 0; i-- {
-			add(workflow[i])
-		}
+	// Everything after current, then everything before it from the closest to
+	// the oldest. With idx == -1 (current cancelled or unknown) idx+1 is 0, so
+	// the forward slice is the whole workflow and the reverse loop is empty.
+	// There is no separate branch to get wrong, and no edge left to mutate.
+	for _, s := range workflow[idx+1:] {
+		add(s)
+	}
+	for i := idx - 1; i >= 0; i-- {
+		add(workflow[i])
 	}
 
 	// Cancelled is the last entry even when the workflow does not carry it.
