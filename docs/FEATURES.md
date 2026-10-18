@@ -37,7 +37,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 
 - **View switching** — `1`/`2`/`3`/`4` switch between List, Kanban, Gantt, Dashboard.
 - **Navigation** — `hjkl` or arrows move the cursor; `Tab` cycles projects.
-- **Task actions** — `m` opens the status overlay (the next workflow status first, then the already-passed ones, `cancelled` last); `M` moves the task to another project and then asks for its status; `Ctrl+p` cycle priority.
+- **Task actions** — `m` opens the status overlay (the next workflow status first, then the already-passed ones, `cancelled` last); `M` moves the task to another project and then asks for its status; `D` hard-deletes the opened task (with confirmation); `Ctrl+p` cycle priority.
 - **Ask AI** — `a` on a focused task opens the harness picker and hands the task to the selected harness: the prompt tells the harness to read the task (`tsk show <id>`) and update it as it goes (`tsk move <id> <status>`), listing the project's valid statuses (List, Kanban, Detail).
 - **Insert** — `i` creates a project (Dashboard) or task (List/Kanban).
 - **Edit** — `e` opens inline description editor; `E` opens external editor.
@@ -49,7 +49,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 
 ## Modals and detail
 
-- **Task detail** — metadata, description, comments; opened with `Enter`; `m` opens the status overlay, `M` moves it to another project, `d` deletes the selected comment.
+- **Task detail** — metadata, description, comments; opened with `Enter`; `m` opens the status overlay, `M` moves it to another project, `d` deletes the selected comment, `D` hard-deletes the task.
 - **Filter modal** — filter by project, status, assignee, priority, tag; fuzzy search; `Ctrl+R` resets.
 - **New task modal** — priority, title, description, assignee with autocomplete, tags with suggestions; `Ctrl+S` creates.
 - **Project modal** — name, workflow, list order; `Tab` cycles fields.
@@ -57,14 +57,14 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **Off-day form** — start, end, note; `Tab` cycles fields.
 - **Tag modal** — toggle tags on the opened task; `Tab` completes, `Enter` toggles.
 - **Ask AI picker** — the harnesses available on this machine (built-in detection: `aider`, `claude`, `codex`, `gemini`, `opencode`, `pi`, each listed when its binary is on PATH; plus config-declared); `↑↓` move, `Enter` hands the task off detached, `Esc` closes. With none available it shows `No harnesses found`.
-- **Confirmation modal** — yes/no for archive/restore project, delete off-day; `y`/`n`.
+- **Confirmation modal** — yes/no for archive/restore project, delete off-day, delete task; `y`/`n`.
 - **Description editor** — inline textarea embedded in detail; `Ctrl+S` saves, `Esc` cancels.
 - **Help modal** — keybindings for the current view plus the Task detail, New task and Filters modals.
 
 ## CLI commands
 
 - **Project management** — `tsk project add|list|show|update|remove|archive|unarchive` (`--archived` lists archived ones).
-- **Task CRUD** — `tsk add`, `tsk list`, `tsk show`, `tsk update`, `tsk move`.
+- **Task CRUD** — `tsk add`, `tsk list`, `tsk show`, `tsk update`, `tsk move`, `tsk delete`.
 - **Workflow shortcuts** — `tsk start`, `tsk review`, `tsk done`, `tsk cancel`.
 - **Ask AI** — `tsk ask <task-id> [--harness NAME]` hands a task to a harness and exits without waiting.
 - **Comments** — `tsk comment add|list|remove`.

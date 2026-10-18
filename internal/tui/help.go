@@ -17,6 +17,7 @@ func detailKeybinds() []keybind {
 		{"m", "status"},
 		{"M", "move project"},
 		{"d", "delete comment"},
+		{"D", "delete task"},
 		{"e/E", "edit/editor"},
 		{"Esc", "close"},
 	}

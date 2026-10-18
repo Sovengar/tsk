@@ -221,12 +221,20 @@ func (m Model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
 		m.confirmAction = ""
 		m.confirmProject = ""
 		m.confirmOffday = model.OffDay{}
+		m.confirmTaskID = 0
 		switch action {
 		case "delete-offday":
 			if offday.ID == 0 {
 				return m, nil
 			}
 			return m, m.deleteOffDayCmd(offday.ID, offday.Assignee)
+		case "delete-task":
+			if m.confirmTaskID == 0 {
+				return m, nil
+			}
+			id := m.confirmTaskID
+			m.confirmTaskID = 0
+			return m, m.deleteTaskCmd(id)
 		case "archive", "unarchive":
 			if project == "" {
 				return m, nil
@@ -239,6 +247,7 @@ func (m Model) handleConfirmKey(key string) (tea.Model, tea.Cmd) {
 		m.confirmAction = ""
 		m.confirmProject = ""
 		m.confirmOffday = model.OffDay{}
+		m.confirmTaskID = 0
 	}
 	return m, nil
 }
@@ -316,7 +325,8 @@ func (m *Model) renderConfirmModal(content string) string {
 
 	var title string
 	var lines []string
-	if m.confirmAction == "delete-offday" {
+	switch m.confirmAction {
+	case "delete-offday":
 		o := m.confirmOffday
 		title = " Delete off-day "
 		lines = []string{
@@ -325,7 +335,13 @@ func (m *Model) renderConfirmModal(content string) string {
 			fmt.Sprintf("  To:     %s", o.EndDate),
 			styleDim.Render("  This only removes the absence; tasks are unaffected."),
 		}
-	} else {
+	case "delete-task":
+		title = " Delete task "
+		lines = []string{
+			fmt.Sprintf("  Task: %s", m.confirmProject),
+			styleDim.Render("  This permanently deletes the task and its comments."),
+		}
+	default:
 		title = " Archive project "
 		detail := "Tasks will be hidden. You can restore it later."
 		if m.confirmAction == "unarchive" {

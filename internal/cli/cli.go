@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,7 +49,7 @@ func Run(args []string) bool {
 		cmdGantt(args[1:])
 	case "update":
 		if len(args) < 2 {
-			outputError("usage: tsk update <id> [--title ...] [--description ...] [--priority N] [--assignee @name] [--tag T] [--untag T]")
+			outputError("usage: tsk update <id> [--title ...] [--description ...] [--priority N] [--assignee @name] [--project X] [--tag T] [--untag T]")
 		}
 		cmdUpdate(args[1:])
 	case "move":
@@ -76,6 +77,8 @@ func Run(args []string) bool {
 			outputError("usage: tsk cancel <id>")
 		}
 		cmdCancel(args[1])
+	case "delete":
+		cmdDelete(args[1:])
 	case "stats":
 		cmdStats(args[1:])
 	case "ask":
@@ -1113,6 +1116,7 @@ func cmdUpdate(args []string) {
 	updates := map[string]any{}
 	var tagsSet, tagsAdd, tagsRemove []string
 	hasTagsSet := false
+	var projectName string
 
 	s := newFlagScanner(args, 1)
 	for {
@@ -1160,11 +1164,35 @@ func cmdUpdate(args []string) {
 			if v, ok := s.next(); ok {
 				tagsRemove = append(tagsRemove, model.ParseTags(v)...)
 			}
+		case "--project":
+			if v, ok := s.next(); ok {
+				projectName = v
+			}
 		}
 	}
 
 	database := openDB()
 	defer closeDB(database)
+
+	if projectName != "" {
+		task, err := database.GetTask(id)
+		if err != nil {
+			outputError(err.Error())
+		}
+		target, err := database.GetProject(projectName)
+		if err != nil {
+			outputError(err.Error())
+		}
+		if target.Archived {
+			outputError(fmt.Sprintf("project %q is archived", projectName))
+		}
+		if task.Status != model.CancelledStatus && !model.HasStatus(target.Workflow, task.Status) {
+			outputError(fmt.Sprintf("status %q not in project workflow %v", task.Status, target.Workflow))
+		}
+		if _, err := database.MoveTaskToProject(id, target.ID, task.Status); err != nil {
+			outputError(err.Error())
+		}
+	}
 
 	if len(updates) > 0 {
 		if _, err := database.UpdateTask(id, updates); err != nil {
@@ -1270,6 +1298,49 @@ func cmdCancel(idStr string) {
 	outputJSON(model.TaskActionResult{OK: true, Task: *t})
 }
 
+func cmdDelete(args []string) {
+	if len(args) < 1 {
+		outputError("usage: tsk delete <id> [--force]")
+	}
+
+	idStr := args[0]
+	force := false
+	s := newFlagScanner(args, 1)
+	for {
+		flag, ok := s.next()
+		if !ok {
+			break
+		}
+		switch flag {
+		case "--force":
+			force = true
+		default:
+			outputError(fmt.Sprintf("unknown flag: %s", flag))
+		}
+	}
+
+	id := parseID(idStr)
+
+	if !force {
+		_, _ = fmt.Fprintf(stderr, "Delete task %d? This cannot be undone. [y/N] ", id)
+		reader := bufio.NewReader(os.Stdin)
+		line, _ := reader.ReadString('\n')
+		answer := strings.ToLower(strings.TrimSpace(line))
+		if answer != "y" && answer != "yes" {
+			outputError("delete cancelled")
+		}
+	}
+
+	database := openDB()
+	defer closeDB(database)
+
+	if err := database.DeleteTask(id); err != nil {
+		outputError(err.Error())
+	}
+
+	outputJSON(map[string]any{"ok": true, "deleted": id})
+}
+
 func cmdStats(args []string) {
 	var project string
 	jsonOutput := false
@@ -1357,7 +1428,7 @@ _tsk_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    commands="project add list show update move start review done cancel comment offday gantt stats ask migrate completion help"
+    commands="project add list show update move start review done cancel delete comment offday gantt stats ask migrate completion help"
 
     if [[ ${cur} == -* ]] ; then
         COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --estimate --from --weeks --note --workflow --list-order --force --archived --name --harness" -- ${cur}) )
@@ -1377,7 +1448,7 @@ _tsk_completions() {
             COMPREPLY=( $(compgen -W "add list remove" -- ${cur}) )
             return 0
             ;;
-        add|list|show|update|move|start|review|done|cancel|gantt|stats)
+        add|list|show|update|move|start|review|done|cancel|delete|gantt|stats)
             return 0
             ;;
     esac
@@ -1392,7 +1463,7 @@ const zshCompletion = `#compdef tsk
 
 _tsk() {
     _arguments \
-        '1:command:(project add list show update move start review done cancel comment offday gantt stats ask migrate completion help)' \
+        '1:command:(project add list show update move start review done cancel delete comment offday gantt stats ask migrate completion help)' \
         '*::arg:->args'
 }
 
@@ -1417,6 +1488,7 @@ complete -c tsk -n '__fish_use_subcommand' -a start -d 'Start a task'
 complete -c tsk -n '__fish_use_subcommand' -a review -d 'Move to review'
 complete -c tsk -n '__fish_use_subcommand' -a done -d 'Complete a task'
 complete -c tsk -n '__fish_use_subcommand' -a cancel -d 'Cancel a task'
+complete -c tsk -n '__fish_use_subcommand' -a delete -d 'Hard-delete a task'
 complete -c tsk -n '__fish_use_subcommand' -a comment -d 'Manage task comments'
 complete -c tsk -n '__fish_use_subcommand' -a offday -d 'Manage off-days'
 complete -c tsk -n '__fish_seen_subcommand_from offday' -a add -d 'Add off-days'
@@ -1455,12 +1527,13 @@ func cmdHelp() {
 		"tsk add <title> --project X [--priority N] [--assignee @name] [--estimate N] [--tag T]": "create a task",
 		"tsk list [--project X] [--status S] [--assignee A] [--tag T]":                           "list tasks",
 		"tsk show <id>": "show task detail",
-		"tsk update <id> [--title] [--description] [--priority N] [--assignee @name] [--estimate N] [--tag T] [--untag T] [--tags a,b]": "update task metadata (--tag adds, --untag removes, --tags replaces)",
+		"tsk update <id> [--title] [--description] [--priority N] [--assignee @name] [--project X] [--estimate N] [--tag T] [--untag T] [--tags a,b]": "update task metadata (--tag adds, --untag removes, --tags replaces; --project moves it)",
 		"tsk move <id> <status>":                               "move task to a specific status",
 		"tsk start <id>":                                       "move task to 2nd workflow status",
 		"tsk review <id>":                                      "move task to review status",
 		"tsk done <id>":                                        "move task to terminal status",
 		"tsk cancel <id>":                                      "cancel a task",
+		"tsk delete <id> [--force]":                            "hard-delete a task (and its comments)",
 		"tsk comment add <task-id> \"<text>\"":                 "add a comment to a task",
 		"tsk comment list <task-id>":                           "list comments of a task",
 		"tsk comment remove <comment-id>":                      "delete a comment",

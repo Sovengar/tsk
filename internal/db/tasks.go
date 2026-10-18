@@ -399,3 +399,18 @@ func (db *DB) Stats(projectName string) (map[string]any, error) {
 		"by_assignee": byAssignee,
 	}, nil
 }
+
+// DeleteTask hard-deletes a task. Comments and any other task-owned rows go
+// with it through the ON DELETE CASCADE foreign keys, so no orphan rows
+// remain.
+func (db *DB) DeleteTask(id int64) error {
+	result, err := db.conn.Exec(`DELETE FROM tasks WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := result.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("task not found: %d", id)
+	}
+	return nil
+}

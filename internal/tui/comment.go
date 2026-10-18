@@ -165,3 +165,13 @@ func (m *Model) deleteCommentCmd(taskID, commentID int64, sel int) tea.Cmd {
 		return commentsLoadedMsg{taskID: taskID, comments: comments, selectIdx: next}
 	}
 }
+
+// deleteTaskCmd hard-deletes a task and emits taskDeletedMsg with the result.
+func (m *Model) deleteTaskCmd(id int64) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.database.DeleteTask(id); err != nil {
+			return taskDeletedMsg{id: id, err: err}
+		}
+		return taskDeletedMsg{id: id}
+	}
+}

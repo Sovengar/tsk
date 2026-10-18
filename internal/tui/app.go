@@ -61,9 +61,10 @@ type Model struct {
 
 	// Confirmation (archive/restore project, delete off-day)
 	confirmOpen    bool
-	confirmAction  string // "archive" | "unarchive" | "delete-offday"
+	confirmAction  string // "archive" | "unarchive" | "delete-offday" | "delete-task"
 	confirmProject string
 	confirmOffday  model.OffDay
+	confirmTaskID  int64
 
 	// Status overlay (opened with "m" on a focused task)
 	statusOpen        bool
@@ -198,6 +199,12 @@ type offdaySavedMsg struct {
 	err    error
 	action string // "add" | "delete"
 	name   string
+}
+
+// taskDeletedMsg results from hard-deleting a task from the TUI.
+type taskDeletedMsg struct {
+	id  int64
+	err error
 }
 
 // tagToggledMsg results from toggling a tag: it brings the updated task (for
@@ -549,6 +556,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case offdaySavedMsg:
 		return m.handleOffdaySaved(msg)
+
+	case taskDeletedMsg:
+		if msg.err != nil {
+			return m, m.setToast(msg.err.Error(), "error")
+		}
+		m.detailOpen = false
+		m.detailTask = nil
+		m.detailComments = nil
+		m.detailCommentSel = -1
+		return m, tea.Batch(m.setToast("task deleted", "info"), m.loadTasks())
 
 	case editorFinishedMsg:
 		if msg.err != nil {
@@ -1006,6 +1023,15 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 			comment := m.detailComments[m.detailCommentSel]
 			return m, m.deleteCommentCmd(m.detailTask.ID, comment.ID, m.detailCommentSel)
 		}
+	case "D", "delete":
+		// Hard-delete the opened task (with confirmation).
+		if m.detailTask == nil {
+			return m, nil
+		}
+		m.confirmOpen = true
+		m.confirmAction = "delete-task"
+		m.confirmTaskID = m.detailTask.ID
+		m.confirmProject = m.detailTask.Title
 	}
 	return m, nil
 }
