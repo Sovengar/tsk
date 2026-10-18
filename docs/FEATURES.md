@@ -27,7 +27,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 ## TUI views
 
 - **Dashboard** — project overview with status counts, team workload, active tasks; triggered by `4`.
-- **List** — paginated task table with columns (priority, status, assignee, title, tags, description); triggered by `1`.
+- **List** — paginated task table with columns (`Prio`, status, assignee, title, tags); the title column stretches to the terminal width and tags drop first when space runs out. No description column (it lives in the detail). Triggered by `1`.
 - **Kanban** — board with one column per workflow state; triggered by `2`.
 - **Gantt** — capacity projection per person on business days, respecting off-days; triggered by `3`.
 

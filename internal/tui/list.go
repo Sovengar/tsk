@@ -26,26 +26,35 @@ type listColumn struct {
 }
 
 // listColumns defines the columns in order. When the width is not enough for
-// all of them they are dropped from the end, so Description is the first to
-// fall and Tags the second. Tags comes before Description so that "blocked"
-// is visible on common-width terminals.
+// all of them they are dropped from the end, so Tags is the first to fall and
+// Title the second. The description is not a column: it lives in the detail and
+// stealing its space gives the title room to breathe.
+//
+// A width of 0 marks the elastic column: it takes whatever the fixed ones leave
+// over, so the title grows with the terminal instead of stopping at 24 columns.
 var listColumns = []listColumn{
-	{"Priority", 10},
+	{"Prio", 6},
 	{"Status", 12},
 	{"Assignee", 12},
-	{"Title", 24},
+	{"Title", 0},
 	{"Tags", 10},
-	{"Description", 40},
 }
+
+// listElasticMinWidth is the smallest width the elastic column accepts when the
+// whole table fits. Below it the column is dropped instead of being squeezed.
+const listElasticMinWidth = 12
 
 // visibleListColumns returns how many columns fit in the available width.
 // It always leaves at least one so the table is never left empty.
 func visibleListColumns(avail int) int {
 	used := 0
 	count := 0
-	for i, col := range listColumns {
+	for _, col := range listColumns {
 		need := col.width
-		if i > 0 {
+		if need == 0 {
+			need = listElasticMinWidth
+		}
+		if count > 0 {
 			need++ // separator space
 		}
 		if used+need > avail {
@@ -58,11 +67,29 @@ func visibleListColumns(avail int) int {
 	return count
 }
 
-// formatListRow aligns the cells of a row to the width of each column.
-func formatListRow(cells []string, count int) string {
-	parts := make([]string, count)
+// listColumnWidths resolves the width of each visible column for the available
+// width: fixed columns keep theirs and the elastic one takes the rest of the
+// row, never less than its minimum.
+func listColumnWidths(avail, count int) []int {
+	widths := make([]int, count)
+	reserved := max(count-1, 0) // separators
 	for i := range count {
-		parts[i] = cellWidth(cells[i], listColumns[i].width)
+		reserved += listColumns[i].width
+	}
+	for i := range count {
+		widths[i] = listColumns[i].width
+		if widths[i] == 0 {
+			widths[i] = max(avail-reserved, listElasticMinWidth)
+		}
+	}
+	return widths
+}
+
+// formatListRow aligns the cells of a row to the given column widths.
+func formatListRow(cells []string, widths []int) string {
+	parts := make([]string, len(widths))
+	for i := range widths {
+		parts[i] = cellWidth(cells[i], widths[i])
 	}
 	return strings.Join(parts, " ")
 }
@@ -75,14 +102,16 @@ func (m *Model) renderList(maxHeight int) string {
 	sep := styleSep.Render(strings.Repeat("─", separatorWidth(innerW)))
 
 	// Columns that fit in the available width. If there is not enough for all,
-	// the last ones are dropped (Description first) instead of being cut in half.
-	cols := visibleListColumns(listContentWidth(innerW))
+	// the last ones are dropped (Title first) instead of being cut in half.
+	avail := listContentWidth(innerW)
+	cols := visibleListColumns(avail)
+	widths := listColumnWidths(avail, cols)
 
-	headerCells := make([]string, len(listColumns))
-	for i, col := range listColumns {
-		headerCells[i] = col.header
+	headerCells := make([]string, cols)
+	for i := range cols {
+		headerCells[i] = listColumns[i].header
 	}
-	headerLine := styleColumnHeader.Render("  " + formatListRow(headerCells, cols))
+	headerLine := styleColumnHeader.Render("  " + formatListRow(headerCells, widths))
 
 	tasks := m.filteredTasks()
 	pageStart, pageEnd := m.pageBounds()
@@ -102,9 +131,8 @@ func (m *Model) renderList(maxHeight int) string {
 			t.Assignee,
 			singleLine(t.Title),
 			singleLine(strings.Join(t.Tags, ",")),
-			singleLine(t.Description),
 		}
-		line := formatListRow(cells, cols)
+		line := formatListRow(cells, widths)
 
 		if i == m.cursor {
 			line = styleSelected.Render("> " + line)

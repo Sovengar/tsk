@@ -114,13 +114,15 @@ func TestVisibleListColumns(t *testing.T) {
 		avail int
 		want  int
 	}{
-		{name: "all fit", avail: 126, want: 6},
-		{name: "exact edge with Description", avail: 113, want: 6},
-		{name: "Description drops", avail: 112, want: 5},
-		{name: "exact edge with Tags", avail: 72, want: 5},
-		{name: "Tags drops", avail: 71, want: 4},
-		{name: "exact edge without Tags", avail: 61, want: 4},
-		{name: "Title drops", avail: 60, want: 3},
+		{name: "all fit", avail: 126, want: 5},
+		{name: "exact edge with Tags", avail: 56, want: 5},
+		{name: "Tags drops", avail: 55, want: 4},
+		{name: "exact edge with Title", avail: 45, want: 4},
+		{name: "Title drops", avail: 44, want: 3},
+		{name: "exact edge with Assignee", avail: 32, want: 3},
+		{name: "Assignee drops", avail: 31, want: 2},
+		{name: "exact edge with Status", avail: 19, want: 2},
+		{name: "Status drops", avail: 18, want: 1},
 		{name: "very narrow", avail: 10, want: 1},
 		{name: "narrower than the first", avail: 5, want: 1},
 	}
@@ -134,24 +136,25 @@ func TestVisibleListColumns(t *testing.T) {
 	}
 }
 
-// TestRenderListHidesDescriptionWhenNarrow verifies that the Description column
-// is omitted entirely when it does not fit, instead of being cut in half.
-func TestRenderListHidesDescriptionWhenNarrow(t *testing.T) {
+// TestRenderListHidesTagsWhenNarrow verifies that the Tags column is omitted
+// entirely when it does not fit, instead of being cut in half, and that Title --
+// the elastic column -- survives it.
+func TestRenderListHidesTagsWhenNarrow(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "1")
 
 	wide := ansi.Strip(m.renderList(m.height))
-	if !strings.Contains(wide, "Description") {
-		t.Fatalf("with width %d Description should be visible:\n%s", m.width, wide)
+	if !strings.Contains(wide, "Tags") {
+		t.Fatalf("with width %d Tags should be visible:\n%s", m.width, wide)
 	}
 
-	m.width = 80
+	m.width = 55
 	narrow := ansi.Strip(m.renderList(m.height))
-	if strings.Contains(narrow, "Descr") {
-		t.Errorf("with width 80 Description should be hidden:\n%s", narrow)
+	if strings.Contains(narrow, "Tags") {
+		t.Errorf("with width 55 Tags should be hidden:\n%s", narrow)
 	}
 	if !strings.Contains(narrow, "Title") {
-		t.Errorf("with width 80 Title should still be visible:\n%s", narrow)
+		t.Errorf("with width 55 Title should still be visible:\n%s", narrow)
 	}
 }
 
@@ -168,7 +171,7 @@ func TestRenderListColumnsAligned(t *testing.T) {
 
 	headerIdx := -1
 	for i, l := range lines {
-		if strings.Contains(l, "Description") {
+		if strings.Contains(l, "Title") {
 			headerIdx = i
 			break
 		}
@@ -179,7 +182,7 @@ func TestRenderListColumnsAligned(t *testing.T) {
 	header := lines[headerIdx]
 
 	// Columns with a non-empty value in every task of the fixture.
-	columns := []string{"Priority", "Status", "Assignee", "Title"}
+	columns := []string{"Prio", "Status", "Assignee", "Title"}
 
 	rows := 0
 	for _, l := range lines[headerIdx+1:] {
