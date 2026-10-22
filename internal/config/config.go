@@ -52,9 +52,11 @@ type HarnessConfig struct {
 // handed to the harness, with {{id}}, {{title}}, {{project}} and {{statuses}}
 // placeholders; empty selects the built-in default.
 type HandoffConfig struct {
-	Command string `toml:"command"`
-	CWD     string `toml:"cwd"`
-	Prompt  string `toml:"prompt"`
+	Command  string `toml:"command"`
+	CWD      string `toml:"cwd"`
+	Prompt   string `toml:"prompt"`
+	Model    string `toml:"model"`
+	Thinking string `toml:"thinking"`
 }
 
 // scalarConfig is the view of the config file used for the scalar decode. It
@@ -186,6 +188,12 @@ func handoffFromRaw(raw map[string]any, current HandoffConfig) HandoffConfig {
 	}
 	if v, ok := handoff["prompt"].(string); ok {
 		current.Prompt = v
+	}
+	if v, ok := handoff["model"].(string); ok {
+		current.Model = v
+	}
+	if v, ok := handoff["thinking"].(string); ok {
+		current.Thinking = v
 	}
 	return current
 }

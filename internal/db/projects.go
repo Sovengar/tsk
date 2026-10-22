@@ -19,6 +19,12 @@ func (db *DB) CreateProject(name string, workflow []string) (*model.Project, err
 // CreateProjectWithListOrder registers a new project with explicit
 // workflow and list_order.
 func (db *DB) CreateProjectWithListOrder(name string, workflow, listOrder []string) (*model.Project, error) {
+	return db.CreateProjectWithListOrderAndPath(name, workflow, listOrder, "")
+}
+
+// CreateProjectWithListOrderAndPath registers a project including its optional
+// working directory used by AI handoffs.
+func (db *DB) CreateProjectWithListOrderAndPath(name string, workflow, listOrder []string, path string) (*model.Project, error) {
 	if workflow == nil {
 		workflow = model.DefaultWorkflow
 	}
@@ -31,8 +37,8 @@ func (db *DB) CreateProjectWithListOrder(name string, workflow, listOrder []stri
 
 	now := time.Now().UTC().Format(time.RFC3339)
 	result, err := db.conn.Exec(
-		`INSERT INTO projects (name, workflow, list_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-		name, model.WorkflowJSON(workflow), model.WorkflowJSON(listOrder), now, now,
+		`INSERT INTO projects (name, path, workflow, list_order, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		name, path, model.WorkflowJSON(workflow), model.WorkflowJSON(listOrder), now, now,
 	)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -45,6 +51,7 @@ func (db *DB) CreateProjectWithListOrder(name string, workflow, listOrder []stri
 	return &model.Project{
 		ID:        id,
 		Name:      name,
+		Path:      path,
 		Workflow:  workflow,
 		ListOrder: listOrder,
 		CreatedAt: now,
@@ -54,14 +61,21 @@ func (db *DB) CreateProjectWithListOrder(name string, workflow, listOrder []stri
 
 // projectColumns is the list of projects columns in scan order.
 const projectColumns = `id, name, workflow, list_order, archived, archived_at, created_at, updated_at`
+const projectColumnsWithPath = `id, name, path, workflow, list_order, archived, archived_at, created_at, updated_at`
 
 // scanProject scans a projects row using projectColumns.
-func scanProject(scan func(dest ...any) error) (model.Project, error) {
+func scanProject(scan func(dest ...any) error, hasPath bool) (model.Project, error) {
 	var p model.Project
 	var workflowJSON, listOrderJSON string
 	var archived int
 	var archivedAt sql.NullString
-	if err := scan(&p.ID, &p.Name, &workflowJSON, &listOrderJSON, &archived, &archivedAt, &p.CreatedAt, &p.UpdatedAt); err != nil {
+	var err error
+	if hasPath {
+		err = scan(&p.ID, &p.Name, &p.Path, &workflowJSON, &listOrderJSON, &archived, &archivedAt, &p.CreatedAt, &p.UpdatedAt)
+	} else {
+		err = scan(&p.ID, &p.Name, &workflowJSON, &listOrderJSON, &archived, &archivedAt, &p.CreatedAt, &p.UpdatedAt)
+	}
+	if err != nil {
 		return p, err
 	}
 	wf, err := model.ParseWorkflowJSON(workflowJSON)
@@ -83,9 +97,14 @@ func scanProject(scan func(dest ...any) error) (model.Project, error) {
 
 // GetProject looks up a project by name, including archived ones.
 func (db *DB) GetProject(name string) (*model.Project, error) {
+	hasPath := db.hasProjectPath()
+	columns := projectColumns
+	if hasPath {
+		columns = projectColumnsWithPath
+	}
 	p, err := scanProject(db.conn.QueryRow(
-		`SELECT `+projectColumns+` FROM projects WHERE name = ?`, name,
-	).Scan)
+		`SELECT `+columns+` FROM projects WHERE name = ?`, name,
+	).Scan, hasPath)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("project not found: %s", name)
 	}
@@ -97,9 +116,14 @@ func (db *DB) GetProject(name string) (*model.Project, error) {
 
 // GetProjectByID looks up a project by ID, including archived ones.
 func (db *DB) GetProjectByID(id int64) (*model.Project, error) {
+	hasPath := db.hasProjectPath()
+	columns := projectColumns
+	if hasPath {
+		columns = projectColumnsWithPath
+	}
 	p, err := scanProject(db.conn.QueryRow(
-		`SELECT `+projectColumns+` FROM projects WHERE id = ?`, id,
-	).Scan)
+		`SELECT `+columns+` FROM projects WHERE id = ?`, id,
+	).Scan, hasPath)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("project not found: id %d", id)
 	}
@@ -120,7 +144,12 @@ func (db *DB) ListArchivedProjects() ([]model.Project, error) {
 }
 
 func (db *DB) listProjectsWhere(where string) ([]model.Project, error) {
-	rows, err := db.conn.Query(`SELECT ` + projectColumns + ` FROM projects WHERE ` + where + ` ORDER BY name`)
+	hasPath := db.hasProjectPath()
+	columns := projectColumns
+	if hasPath {
+		columns = projectColumnsWithPath
+	}
+	rows, err := db.conn.Query(`SELECT ` + columns + ` FROM projects WHERE ` + where + ` ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -128,13 +157,30 @@ func (db *DB) listProjectsWhere(where string) ([]model.Project, error) {
 
 	var projects []model.Project
 	for rows.Next() {
-		p, err := scanProject(rows.Scan)
+		p, err := scanProject(rows.Scan, hasPath)
 		if err != nil {
 			return nil, err
 		}
 		projects = append(projects, p)
 	}
 	return projects, rows.Err()
+}
+
+func (db *DB) hasProjectPath() bool {
+	rows, err := db.conn.Query(`PRAGMA table_info(projects)`)
+	if err != nil {
+		return false
+	}
+	defer func() { _ = rows.Close() }()
+	var cid, notnull, pk int
+	var name, typ string
+	var defaultValue sql.NullString
+	for rows.Next() {
+		if rows.Scan(&cid, &name, &typ, &notnull, &defaultValue, &pk) == nil && name == "path" {
+			return true
+		}
+	}
+	return false
 }
 
 // ArchiveProject marks a project as archived (soft delete). Tasks are not

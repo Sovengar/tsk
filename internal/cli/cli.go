@@ -194,7 +194,7 @@ func cmdProject(args []string) {
 		cmdProjectShow(args[1:])
 	case "update":
 		if len(args) < 2 {
-			outputError("usage: tsk project update <name> [--name ...] [--workflow ...] [--list-order ...]")
+			outputError("usage: tsk project update <name> [--name ...] [--workflow ...] [--list-order ...] [--path ...]")
 		}
 		cmdProjectUpdate(args[1:])
 	case "remove":
@@ -219,10 +219,10 @@ func cmdProject(args []string) {
 
 func cmdProjectAdd(args []string) {
 	if len(args) == 0 {
-		outputError("usage: tsk project add <name> [--workflow ...] [--list-order ...]")
+		outputError("usage: tsk project add <name> [--workflow ...] [--list-order ...] [--path ...]")
 	}
 	name := args[0]
-	var workflow, listOrder string
+	var workflow, listOrder, path string
 
 	s := newFlagScanner(args, 1)
 	for {
@@ -238,6 +238,10 @@ func cmdProjectAdd(args []string) {
 		case "--list-order":
 			if v, ok := s.next(); ok {
 				listOrder = v
+			}
+		case "--path":
+			if v, ok := s.next(); ok {
+				path = v
 			}
 		}
 	}
@@ -261,7 +265,7 @@ func cmdProjectAdd(args []string) {
 		}
 	}
 
-	p, err := database.CreateProjectWithListOrder(name, wf, lo)
+	p, err := database.CreateProjectWithListOrderAndPath(name, wf, lo, path)
 	if err != nil {
 		outputError(err.Error())
 	}
@@ -300,6 +304,7 @@ func cmdProjectList(args []string) {
 
 	type ProjectInfo struct {
 		Name      string   `json:"name"`
+		Path      string   `json:"path,omitempty"`
 		Workflow  []string `json:"workflow"`
 		ListOrder []string `json:"list_order"`
 		Archived  bool     `json:"archived"`
@@ -311,6 +316,7 @@ func cmdProjectList(args []string) {
 		count, _ := database.ProjectTaskCount(p.ID)
 		result = append(result, ProjectInfo{
 			Name:      p.Name,
+			Path:      p.Path,
 			Workflow:  p.Workflow,
 			ListOrder: p.ListOrder,
 			Archived:  p.Archived,
@@ -367,6 +373,7 @@ func cmdProjectShow(args []string) {
 
 	// Human-readable
 	_, _ = fmt.Fprintf(stdout, "Project:  %s\n", p.Name)
+	_, _ = fmt.Fprintf(stdout, "Path:     %s\n", p.Path)
 	_, _ = fmt.Fprintf(stdout, "Workflow: %s\n", strings.Join(p.Workflow, " → "))
 	listOrder := strings.Join(p.ListOrder, " → ")
 	if listOrder == "" {
@@ -380,7 +387,8 @@ func cmdProjectShow(args []string) {
 
 func cmdProjectUpdate(args []string) {
 	name := args[0]
-	var newName, workflow, listOrder string
+	var newName, workflow, listOrder, path string
+	pathSet := false
 	listOrderSet := false
 
 	s := newFlagScanner(args, 1)
@@ -403,6 +411,11 @@ func cmdProjectUpdate(args []string) {
 				listOrder = v
 			}
 			listOrderSet = true
+		case "--path":
+			if v, ok := s.next(); ok {
+				path = v
+			}
+			pathSet = true
 		}
 	}
 
@@ -426,6 +439,9 @@ func cmdProjectUpdate(args []string) {
 			outputError(err.Error())
 		}
 		updates["list_order"] = lo
+	}
+	if pathSet {
+		updates["path"] = path
 	}
 
 	if err := database.UpdateProject(name, updates); err != nil {
@@ -649,11 +665,11 @@ func cmdShow(idStr string) {
 // process is started.
 func cmdAsk(args []string) {
 	if len(args) == 0 || strings.HasPrefix(args[0], "-") {
-		outputError("usage: tsk ask <task-id> [--harness NAME]")
+		outputError("usage: tsk ask <task-id> [--harness NAME] [--model MODEL] [--thinking LEVEL]")
 	}
 
 	idStr := args[0]
-	var harnessName string
+	var harnessName, modelName, thinking string
 	s := newFlagScanner(args, 1)
 	for {
 		flag, ok := s.next()
@@ -664,6 +680,14 @@ func cmdAsk(args []string) {
 		case "--harness":
 			if v, ok := s.next(); ok {
 				harnessName = v
+			}
+		case "--model":
+			if v, ok := s.next(); ok {
+				modelName = v
+			}
+		case "--thinking":
+			if v, ok := s.next(); ok {
+				thinking = v
 			}
 		}
 	}
@@ -689,7 +713,7 @@ func cmdAsk(args []string) {
 		outputError(err.Error())
 	}
 
-	if err := harness.Execute(cfg, *task, statuses, selected); err != nil {
+	if err := harness.ExecuteWithOptions(cfg, *task, statuses, selected, modelName, thinking); err != nil {
 		outputError(err.Error())
 	}
 
@@ -1431,7 +1455,7 @@ _tsk_completions() {
     commands="project add list show update move start review done cancel delete comment offday gantt stats ask migrate completion help"
 
     if [[ ${cur} == -* ]] ; then
-        COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --estimate --from --weeks --note --workflow --list-order --force --archived --name --harness" -- ${cur}) )
+		COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --estimate --from --weeks --note --workflow --list-order --path --force --archived --name --harness --model --thinking" -- ${cur}) )
         return 0
     fi
 
@@ -1511,15 +1535,18 @@ complete -c tsk -l weeks -d 'Gantt horizon in weeks'
 complete -c tsk -l note -d 'Off-day note'
 complete -c tsk -l archived -d 'List archived projects'
 complete -c tsk -l harness -d 'AI harness to hand a task to'
+complete -c tsk -l path -d 'Project working directory for AI handoff'
+complete -c tsk -l model -d 'AI model for handoff'
+complete -c tsk -l thinking -d 'AI thinking level for handoff'
 `
 
 func cmdHelp() {
 	commands := map[string]string{
 		"tsk": "launch the TUI (default when no arguments)",
-		"tsk project add <name> [--workflow] [--list-order]": "register a project",
+		"tsk project add <name> [--workflow] [--list-order] [--path]": "register a project",
 		"tsk project list":        "list all projects",
 		"tsk project show <name>": "show project detail + workflow",
-		"tsk project update <name> [--name] [--workflow] [--list-order]": "update project (rename/workflow/list order)",
+		"tsk project update <name> [--name] [--workflow] [--list-order] [--path]": "update project (rename/workflow/list order/path)",
 		"tsk project remove <name>":                                      "delete project + tasks",
 		"tsk project archive <name>":                                     "archive project (hides tasks, reversible)",
 		"tsk project unarchive <name>":                                   "restore an archived project",
@@ -1542,7 +1569,7 @@ func cmdHelp() {
 		"tsk offday remove <id>":                               "delete an off-day",
 		"tsk gantt [--project X] [--assignee A] [--from DATE] [--weeks N] [--json]": "project the schedule per person (--project/--assignee filter the view, not the dates)",
 		"tsk stats [--project X]":            "show statistics",
-		"tsk ask <task-id> [--harness NAME]": "hand a task off to an AI harness",
+		"tsk ask <task-id> [--harness NAME] [--model MODEL] [--thinking LEVEL]": "hand a task off to an AI harness",
 		"tsk migrate":                        "run pending migrations",
 	}
 

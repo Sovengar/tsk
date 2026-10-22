@@ -9,6 +9,7 @@ import (
 type Project struct {
 	ID         int64    `json:"id"`
 	Name       string   `json:"name"`
+	Path       string   `json:"path,omitempty"`
 	Workflow   []string `json:"workflow"`
 	ListOrder  []string `json:"list_order"`
 	Archived   bool     `json:"archived"`

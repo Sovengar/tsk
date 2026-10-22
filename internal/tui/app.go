@@ -10,6 +10,7 @@ import (
 	"tsk/internal/db"
 	"tsk/internal/harness"
 	"tsk/internal/model"
+	"tsk/internal/state"
 )
 
 // Model is the TUI's main model.
@@ -49,6 +50,7 @@ type Model struct {
 	showArchived      bool
 	archivedProjects  []model.Project
 	pendingSelectName string // project to select after reloading
+	restoredProject   string // project loaded from persistent UI state
 
 	// Project modal (create/edit project)
 	projectModalOpen      bool
@@ -154,6 +156,7 @@ type Model struct {
 // New builds the model with the database.
 func New(database *db.DB, cfg config.Config) Model {
 	pageSize := resolvePageSize(cfg.ListPageSize)
+	saved := state.Load()
 	return Model{
 		database:         database,
 		config:           cfg,
@@ -167,6 +170,7 @@ func New(database *db.DB, cfg config.Config) Model {
 		height:           24,
 		statusbar:        NewKeybindsBar(80),
 		preview:          NewPreviewBar(80),
+		restoredProject:  saved.Project,
 	}
 }
 
@@ -518,6 +522,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case projectsLoadedMsg:
 		m.projects = msg.projects
 		m.archivedProjects = msg.archivedProjects
+		if m.restoredProject != "" {
+			if m.projectByName(m.restoredProject) != nil {
+				m.filterProject = m.restoredProject
+				m.invalidateFilterCache()
+			}
+			m.restoredProject = ""
+		}
 		if m.pendingSelectName != "" {
 			m.selectProjectByName(m.pendingSelectName)
 			m.pendingSelectName = ""

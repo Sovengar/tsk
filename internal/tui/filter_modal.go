@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
+	"tsk/internal/state"
 )
 
 // filterField indices
@@ -124,6 +125,7 @@ func (m *Model) filterCurrentValue(field int) string {
 
 // filterApplySelection applies the selected value to the filter.
 func (m *Model) filterApplySelection(field int, value string) {
+	projectChanged := false
 	switch field {
 	case filterFieldProject:
 		if value == "all" {
@@ -131,6 +133,7 @@ func (m *Model) filterApplySelection(field int, value string) {
 		} else {
 			m.filterProject = value
 		}
+		projectChanged = true
 		// The status is per-project: if the active filter no longer exists in
 		// the new context (another project, or the intersection in "all"), it is cleared.
 		m.clearInvalidStatusFilter()
@@ -167,6 +170,11 @@ func (m *Model) filterApplySelection(field int, value string) {
 		}
 	}
 	m.invalidateFilterCache()
+	if projectChanged {
+		// State persistence is best-effort: selecting a project must keep working
+		// when the state directory is unavailable or its file is corrupt.
+		_ = state.Save(state.State{Project: m.filterProject})
+	}
 }
 
 // cycleProjectFilter advances (dir=+1) or goes back (dir=-1) the Project

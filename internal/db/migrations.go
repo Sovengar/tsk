@@ -98,6 +98,11 @@ const schemaV8 = `
 ALTER TABLE tasks ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
 `
 
+// schemaV12 restores project path as user-managed metadata for AI handoffs.
+const schemaV12 = `
+ALTER TABLE projects ADD COLUMN path TEXT NOT NULL DEFAULT '';
+`
+
 // migrations is the ordered list of migrations. `run` allows data
 // migrations in Go (e.g. rewriting JSON); if present, `query` is ignored.
 var migrations = []struct {
@@ -123,6 +128,7 @@ var migrations = []struct {
 	{"009", "", noopMigration},
 	{"010", "", noopMigration},
 	{"011", "", noopMigration},
+	{"012", schemaV12, nil},
 }
 
 // noopMigration is the run of a reserved slot: it does not touch the schema, it only

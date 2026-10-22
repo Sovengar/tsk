@@ -72,11 +72,11 @@ func (db *DB) GetTask(id int64) (*model.Task, error) {
 	var completedAt sql.NullString
 	var tagsJSON string
 	err := db.conn.QueryRow(`
-		SELECT t.id, t.project_id, p.name, t.title, t.description, t.status, t.priority, t.assignee,
+		SELECT t.id, t.project_id, p.name, p.path, t.title, t.description, t.status, t.priority, t.assignee,
 		       t.estimate, t.tags, t.created_at, t.updated_at, t.completed_at
 		FROM tasks t JOIN projects p ON t.project_id = p.id
 		WHERE t.id = ?`, id,
-	).Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.Title, &t.Description, &t.Status,
+	).Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.ProjectPath, &t.Title, &t.Description, &t.Status,
 		&t.Priority, &t.Assignee, &t.Estimate, &tagsJSON, &t.CreatedAt, &t.UpdatedAt, &completedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("task not found: %d", id)
@@ -99,7 +99,7 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 	// that do not exist in the workflow (e.g. cancelled) at the end.
 	query := `
 		WITH ranked AS (
-			SELECT t.id, t.project_id, p.name, t.title, t.description, t.status, t.priority, t.assignee,
+			SELECT t.id, t.project_id, p.name, p.path, t.title, t.description, t.status, t.priority, t.assignee,
 			       t.estimate, t.tags, t.created_at, t.updated_at, t.completed_at,
 			       (SELECT je.key FROM json_each(p.list_order) AS je WHERE je.value = t.status) AS lo_rank,
 			       (SELECT COUNT(*) FROM json_each(p.list_order)) AS lo_len,
@@ -123,7 +123,7 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 
 	query += `
 		)
-		SELECT id, project_id, name, title, description, status, priority, assignee,
+		SELECT id, project_id, name, path, title, description, status, priority, assignee,
 		       estimate, tags, created_at, updated_at, completed_at
 		FROM ranked
 		ORDER BY priority DESC,
@@ -147,7 +147,7 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 		var t model.Task
 		var completedAt sql.NullString
 		var tagsJSON string
-		if err := rows.Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.Title, &t.Description,
+		if err := rows.Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.ProjectPath, &t.Title, &t.Description,
 			&t.Status, &t.Priority, &t.Assignee, &t.Estimate, &tagsJSON, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
 			return nil, err
 		}

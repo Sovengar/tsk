@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -8,6 +9,7 @@ import (
 	"tsk/internal/config"
 	"tsk/internal/db"
 	"tsk/internal/model"
+	"tsk/internal/state"
 )
 
 // newTestModel builds a model with an in-memory DB and test data.
@@ -178,6 +180,39 @@ func TestTabCyclesProjectFilter(t *testing.T) {
 	}
 	if m.dashProjectIdx != 1 {
 		t.Errorf("tab in the dashboard: projectIdx = %d, want 1", m.dashProjectIdx)
+	}
+}
+
+func TestRestoresLastProjectWhenProjectsLoad(t *testing.T) {
+	t.Setenv("TSK_STATE", filepath.Join(t.TempDir(), "state.json"))
+	if err := state.Save(state.State{Project: "api"}); err != nil {
+		t.Fatal(err)
+	}
+
+	database, err := db.NewTestDB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	mustCreateProject(t, database, "api", nil)
+
+	m := New(database, config.Defaults())
+	next, _ := m.Update(projectsLoadedMsg{projects: []model.Project{{Name: "api"}}})
+	got := next.(Model)
+	if got.filterProject != "api" {
+		t.Errorf("restored project = %q, want api", got.filterProject)
+	}
+}
+
+func TestProjectFilterPersistsOnlyProject(t *testing.T) {
+	t.Setenv("TSK_STATE", filepath.Join(t.TempDir(), "state.json"))
+	m := newTestModel(t)
+	m.filterStatus = "doing"
+	m.filterAssignee = "@john"
+	m.filterApplySelection(filterFieldProject, "web")
+
+	if got := state.Load(); got != (state.State{Project: "web"}) {
+		t.Errorf("saved state = %#v, want project web only", got)
 	}
 }
 

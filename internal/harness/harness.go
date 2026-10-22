@@ -48,6 +48,8 @@ const (
 	placeholderHarnessBinary = "{{harness_binary}}"
 	placeholderCwd           = "{{cwd}}"
 	placeholderPrompt        = "{{prompt_file}}"
+	placeholderModel         = "{{model}}"
+	placeholderThinking      = "{{thinking}}"
 )
 
 // Template placeholders understood by the handoff prompt. Unlike the command
@@ -201,6 +203,12 @@ func ValidateCommand(command string) error {
 // and {{harness_binary}} the executable. It refuses a command without the
 // required {{prompt_file}} placeholder.
 func ExpandTemplate(command string, h Harness, cwd, promptFile string) (string, error) {
+	return ExpandTemplateWithOptions(command, h, cwd, promptFile, "", "")
+}
+
+// ExpandTemplateWithOptions expands command placeholders including model
+// selection controls.
+func ExpandTemplateWithOptions(command string, h Harness, cwd, promptFile, modelName, thinking string) (string, error) {
 	if err := ValidateCommand(command); err != nil {
 		return "", err
 	}
@@ -209,6 +217,8 @@ func ExpandTemplate(command string, h Harness, cwd, promptFile string) (string, 
 		placeholderHarnessBinary, shellQuote(h.Binary),
 		placeholderCwd, shellQuote(cwd),
 		placeholderPrompt, shellQuote(promptFile),
+		placeholderModel, shellQuote(modelName),
+		placeholderThinking, shellQuote(thinking),
 	)
 	return r.Replace(command), nil
 }
@@ -233,6 +243,18 @@ func HandoffDir(cfg config.Config) string {
 	return wd
 }
 
+// ResolveCWD selects the project path for a handoff, falling back to the
+// configured directory and finally the user's home shorthand.
+func ResolveCWD(cfg config.Config, projectPath string) string {
+	if projectPath != "" {
+		return projectPath
+	}
+	if cfg.Handoff.CWD != "" {
+		return cfg.Handoff.CWD
+	}
+	return "~"
+}
+
 // getwd is the working directory probe; a variable so the error branch of
 // HandoffDir is reachable in a test.
 var getwd = os.Getwd
@@ -242,6 +264,12 @@ var getwd = os.Getwd
 // launches the command detached. It returns as soon as the process starts
 // (fire-and-forget).
 func Execute(cfg config.Config, task model.Task, statuses []string, h Harness) error {
+	return ExecuteWithOptions(cfg, task, statuses, h, cfg.Handoff.Model, cfg.Handoff.Thinking)
+}
+
+// ExecuteWithOptions performs a handoff with optional per-invocation model and
+// thinking values. Empty values inherit the configured defaults.
+func ExecuteWithOptions(cfg config.Config, task model.Task, statuses []string, h Harness, modelName, thinking string) error {
 	if err := ValidateCommand(cfg.Handoff.Command); err != nil {
 		return err
 	}
@@ -249,7 +277,13 @@ func Execute(cfg config.Config, task model.Task, statuses []string, h Harness) e
 	if err != nil {
 		return err
 	}
-	if err := Launch(cfg.Handoff.Command, h, HandoffDir(cfg), promptPath); err != nil {
+	if modelName == "" {
+		modelName = cfg.Handoff.Model
+	}
+	if thinking == "" {
+		thinking = cfg.Handoff.Thinking
+	}
+	if err := LaunchWithOptions(cfg.Handoff.Command, h, ResolveCWD(cfg, task.ProjectPath), promptPath, modelName, thinking); err != nil {
 		// The harness never started, so the prompt file would be orphaned.
 		_ = os.Remove(promptPath)
 		return err
@@ -259,7 +293,12 @@ func Execute(cfg config.Config, task model.Task, statuses []string, h Harness) e
 
 // Launch expands the template and starts /bin/sh -c <expanded> detached.
 func Launch(command string, h Harness, cwd, promptFile string) error {
-	expanded, err := ExpandTemplate(command, h, cwd, promptFile)
+	return LaunchWithOptions(command, h, cwd, promptFile, "", "")
+}
+
+// LaunchWithOptions expands and starts a handoff command with model controls.
+func LaunchWithOptions(command string, h Harness, cwd, promptFile, modelName, thinking string) error {
+	expanded, err := ExpandTemplateWithOptions(command, h, cwd, promptFile, modelName, thinking)
 	if err != nil {
 		return err
 	}
@@ -274,6 +313,11 @@ var runDetached = realRunDetached
 // its standard streams, so it does not interfere with the TUI, does not receive
 // Ctrl+C, and is reaped in the background (no zombie).
 func realRunDetached(name string, args []string, dir string) error {
+	if dir == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			dir = home
+		}
+	}
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}

@@ -50,7 +50,7 @@ Full cycle example:
 
 ```bash
 # Register a project with its workflow
-tsk project add web --workflow backlog,todo,doing,review,done --list-order todo,doing,review,done
+tsk project add web --workflow backlog,todo,doing,review,done --list-order todo,doing,review,done --path ~/src/web
 
 # Create a task
 tsk add "Fix login redirect" --project web \
@@ -117,13 +117,15 @@ binary = "opencode"       # optional executable, exposed as {{harness_binary}}
 command = "pane=$(herdr tab create --cwd {{cwd}} --label {{harness}}-$$ --focus | jq -r '.result.root_pane.pane_id') && herdr agent start {{harness}}-$$ --kind {{harness}} --pane \"$pane\" -- --prompt \"$(cat {{prompt_file}})\""
 cwd     = ""              # default: the directory where tsk was launched
 prompt  = "Run this task: Task #{{id}}: {{title}} ({{project}}). Check it with `tsk show {{id}}`. Update its state as you go with `tsk move {{id}} <status>`; valid statuses: {{statuses}}."
+model   = ""              # optional default exposed as {{model}}
+thinking = ""             # optional default exposed as {{thinking}}
 ```
 
 The herdr example needs `jq` on `PATH` (it parses the `pane split` JSON).
 
 The handoff is generic: `command` is a `/bin/sh` template with `{{harness}}`
-(display name), `{{harness_binary}}` (the harness executable), `{{cwd}}` and
-`{{prompt_file}}` (required) placeholders; swap it for tmux or a plain detached
+(display name), `{{harness_binary}}` (the harness executable), `{{cwd}}`,
+`{{model}}`, `{{thinking}}` and `{{prompt_file}}` (required) placeholders; swap it for tmux or a plain detached
 command with no code change. The task text never reaches the
 command line — it is written to a private temp file. The prompt comes from
 `prompt` (a template with `{{id}}`, `{{title}}`, `{{project}}` and

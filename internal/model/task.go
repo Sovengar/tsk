@@ -18,6 +18,7 @@ type Task struct {
 	ID          int64    `json:"id"`
 	ProjectID   int64    `json:"project_id"`
 	ProjectName string   `json:"project,omitempty"`
+	ProjectPath string   `json:"-"`
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Status      string   `json:"status"`

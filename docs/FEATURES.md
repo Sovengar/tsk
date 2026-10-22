@@ -8,6 +8,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 |---|---|---|
 | Four TUI views | List, Kanban, Gantt, Dashboard | `1`/`2`/`3`/`4` |
 | Per-project workflow | State sequence defined at project registration | `tsk project add --workflow` |
+| Project handoff path | Working directory stored per project for Ask AI | `tsk project add|update --path` |
 | Kanban by state | One column per workflow state | `2` |
 | Capacity Gantt | Per-person queue on business days | `3`; `tsk gantt` |
 | Priority | none/low/medium/high with visual marker | `Ctrl+p`; `--priority` |
@@ -24,6 +25,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 | Shell completion | bash/zsh/fish autocompletion | `tsk completion` |
 | Database migrations | Schema version tracking | `tsk migrate` |
 | TOML config | Optional configuration file | `~/.config/tsk/config.toml` |
+| Remembered project | Restores the last selected project in List, Kanban and Gantt | `Tab` or Project filter; `$XDG_STATE_HOME/tsk/state.json` |
 | Embedded SQLite | Pure Go, no CGO | default storage |
 
 ## TUI views
@@ -64,6 +66,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 ## CLI commands
 
 - **Project management** — `tsk project add|list|show|update|remove|archive|unarchive` (`--archived` lists archived ones).
+- **Project handoff path** — `--path <dir>` stores the working directory for Ask AI; empty paths use `~` (or configured handoff `cwd`).
 - **Task CRUD** — `tsk add`, `tsk list`, `tsk show`, `tsk update`, `tsk move`, `tsk delete`.
 - **Workflow shortcuts** — `tsk start`, `tsk review`, `tsk done`, `tsk cancel`.
 - **Ask AI** — `tsk ask <task-id> [--harness NAME]` hands a task to a harness and exits without waiting.
@@ -92,6 +95,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **`[ai.ask.handoff] command`** — shell template that launches a harness, with `{{harness}}` (display name), `{{harness_binary}}`, `{{cwd}}` and `{{prompt_file}}` (required) placeholders; values are shell-quoted by tsk. Empty = Ask AI disabled.
 - **`[ai.ask.handoff] cwd`** — working directory for the handoff; default: where `tsk` was launched.
 - **`[ai.ask.handoff] prompt`** — prompt template handed to the harness, with `{{id}}`, `{{title}}`, `{{project}}` and `{{statuses}}` (the task project's workflow; an empty workflow drops the state clause). Empty = built-in default ("Run this task: …').
+- **`[ai.ask.handoff] model` / `thinking`** — defaults exposed as `{{model}}` and `{{thinking}}`; `tsk ask --model MODEL --thinking LEVEL` overrides them for one handoff.
 - Malformed config falls back to defaults silently (the "config never fails" pattern). A single malformed `[[harness]]` entry is dropped without discarding the rest of the file.
 
 ## Storage and migrations
