@@ -163,6 +163,55 @@ func TestExpandTemplateSubstitutesAndQuotes(t *testing.T) {
 	}
 }
 
+func TestExpandTemplateInjectsHarnessFlagsAfterWrapperDelimiter(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		want string
+	}{
+		{"pi", `run -- --model 'provider/model' --thinking 'high' '/tmp/p'`},
+		{"codex", `run -- --model 'provider/model' -c 'model_reasoning_effort=high' '/tmp/p'`},
+		{"opencode", `run -- --model 'provider/model' --variant 'high' '/tmp/p'`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ExpandTemplateWithOptions("run -- {{prompt_file}}", Harness{Name: tc.name}, "/work", "/tmp/p", "provider/model", "high")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Errorf("expanded = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestExpandTemplateUsesExplicitModelArgsPosition(t *testing.T) {
+	got, err := ExpandTemplateWithOptions(
+		"wrapper -- {{model_args}} --extension my-extension {{prompt_file}}",
+		Harness{Name: "codex"}, "/work", "/tmp/p", "gpt-5", "high",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `wrapper -- --model 'gpt-5' -c 'model_reasoning_effort=high' --extension my-extension '/tmp/p'`
+	if got != want {
+		t.Errorf("expanded = %q, want %q", got, want)
+	}
+}
+
+func TestExpandTemplateSupportsHerdrStartThenPrompt(t *testing.T) {
+	got, err := ExpandTemplateWithOptions(
+		"agent={{harness}}-$$; herdr agent start \"$agent\" --kind {{harness}} --pane p1 -- {{model_args}} && herdr agent prompt \"$agent\" \"$(cat {{prompt_file}})\"",
+		Harness{Name: "codex"}, "/work", "/tmp/task prompt", "gpt-5", "high",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `agent='codex'-$$; herdr agent start "$agent" --kind 'codex' --pane p1 -- --model 'gpt-5' -c 'model_reasoning_effort=high' && herdr agent prompt "$agent" "$(cat '/tmp/task prompt')"`
+	if got != want {
+		t.Errorf("expanded = %q, want %q", got, want)
+	}
+}
+
 func TestExpandTemplateMissingPromptPlaceholder(t *testing.T) {
 	_, err := ExpandTemplate("run {{harness}}", Harness{Name: "opencode", Binary: "opencode"}, "/tmp", "/tmp/p")
 	if !errors.Is(err, ErrMissingPromptPlaceholder) {

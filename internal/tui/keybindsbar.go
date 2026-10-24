@@ -207,7 +207,9 @@ func (s KeybindsBar) renderOverlay() []string {
 		})
 	case overlayAskAI:
 		return s.renderRows([]keybind{
-			{"↑↓", "move"},
+			{"↑↓/j/k", "move"},
+			{"/", "model search"},
+			{"Tab", "effort"},
 			{"Enter", "handoff"},
 			{"Esc", "close"},
 		})

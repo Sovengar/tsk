@@ -18,7 +18,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 | Comments | Per-task discussion | `c` (detail); `tsk comment` |
 | Status overlay | Move a task to any workflow status, backwards included | `m` (List/Kanban/Detail) |
 | Cross-project move | Move a task to another project, then pick its status | `M` (List/Kanban/Detail) |
-| Ask AI handoff | Hand a task to an external AI harness (detected + config) | `a` (List/Kanban/Detail); `tsk ask` |
+| Ask AI handoff | Hand a task to an external AI harness with per-task harness/model/thinking selection | `a` (List/Kanban/Detail); `tsk ask` |
 | Off-days | Non-working days per person | `m` (Dashboard); `tsk offday` |
 | Project archiving | Reversible soft delete | `d`/`r` (Dashboard); `tsk project archive` |
 | JSON-first CLI | All commands output JSON | `tsk <cmd>` |
@@ -58,7 +58,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **Assignee modal** — people roster with task counts; `Enter` opens detail with active tasks and off-days.
 - **Off-day form** — start, end, note; `Tab` cycles fields.
 - **Tag modal** — toggle tags on the opened task; `Tab` completes, `Enter` toggles.
-- **Ask AI picker** — the harnesses available on this machine (built-in detection: `aider`, `claude`, `codex`, `gemini`, `opencode`, `pi`, each listed when its binary is on PATH; plus config-declared); `↑↓` move, `Enter` hands the task off detached, `Esc` closes. With none available it shows `No harnesses found`.
+- **Ask AI picker** — shows the selected harness, model and effort in one wide row separated by `⟡`, with no header or inline shortcut hints; it expands for long model IDs when the terminal has room. Its Keybinds section lists `↑↓`/`j`/`k` to move, `/` to search models, `Tab` to cycle effort, `Enter` to hand off and `Esc` to close. Model lists come from the harness's local registry: Pi `models-store.json`, Codex `models_cache.json`, and OpenCode `model.json`. With none available it shows `No harnesses found`.
 - **Confirmation modal** — yes/no for archive/restore project, delete off-day, delete task; `y`/`n`.
 - **Description editor** — inline textarea embedded in detail; `Ctrl+S` saves, `Esc` cancels.
 - **Help modal** — keybindings for the current view plus the Task detail, New task and Filters modals.
@@ -69,7 +69,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **Project handoff path** — `--path <dir>` stores the working directory for Ask AI; empty paths use `~` (or configured handoff `cwd`).
 - **Task CRUD** — `tsk add`, `tsk list`, `tsk show`, `tsk update`, `tsk move`, `tsk delete`.
 - **Workflow shortcuts** — `tsk start`, `tsk review`, `tsk done`, `tsk cancel`.
-- **Ask AI** — `tsk ask <task-id> [--harness NAME]` hands a task to a harness and exits without waiting.
+- **Ask AI** — `tsk ask <task-id> [--harness NAME] [--model MODEL] [--thinking LEVEL]` hands a task to a harness and exits without waiting.
 - **Comments** — `tsk comment add|list|remove`.
 - **Off-days** — `tsk offday add|list|remove`.
 - **Gantt** — `tsk gantt [--project] [--assignee] [--from] [--weeks]`.
@@ -92,10 +92,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **`default_estimate_days`** — estimate for tasks without one in the Gantt; default 1.0.
 - **`gantt_weeks`** — default Gantt horizon; default 6.
 - **`[[harness]] name` / `binary`** — additive harnesses: listed in the Ask AI picker even when detection misses them; `binary` defaults to `name` and is exposed to the command as `{{harness_binary}}`. A declared entry replaces a detected one with the same name.
-- **`[ai.ask.handoff] command`** — shell template that launches a harness, with `{{harness}}` (display name), `{{harness_binary}}`, `{{cwd}}` and `{{prompt_file}}` (required) placeholders; values are shell-quoted by tsk. Empty = Ask AI disabled.
-- **`[ai.ask.handoff] cwd`** — working directory for the handoff; default: where `tsk` was launched.
-- **`[ai.ask.handoff] prompt`** — prompt template handed to the harness, with `{{id}}`, `{{title}}`, `{{project}}` and `{{statuses}}` (the task project's workflow; an empty workflow drops the state clause). Empty = built-in default ("Run this task: …').
-- **`[ai.ask.handoff] model` / `thinking`** — defaults exposed as `{{model}}` and `{{thinking}}`; `tsk ask --model MODEL --thinking LEVEL` overrides them for one handoff.
+- **`[harness.handoff]`** — each `[[harness]]` owns its complete `command`, `cwd`, `prompt`, `model` and `thinking`; `{{model_args}}` is expanded exactly where that harness needs it. With Herdr, launch with `herdr agent start … -- {{model_args}}` and then submit the task with `herdr agent prompt`; do not pass the task as a native `--prompt` flag. Add extensions and wrapper arguments directly to the command. The old global `[ai.ask.handoff]` form remains as a compatibility fallback.
 - Malformed config falls back to defaults silently (the "config never fails" pattern). A single malformed `[[harness]]` entry is dropped without discarding the rest of the file.
 
 ## Storage and migrations

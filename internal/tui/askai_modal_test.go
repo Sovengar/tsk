@@ -39,6 +39,7 @@ func stubExecute(t *testing.T) *handoffCall {
 	t.Helper()
 	call := &handoffCall{}
 	orig := executeHandoff
+	origOptions := executeHandoffWithOptions
 	executeHandoff = func(_ config.Config, task model.Task, statuses []string, h harness.Harness) error {
 		call.task = task
 		call.statuses = statuses
@@ -46,7 +47,16 @@ func stubExecute(t *testing.T) *handoffCall {
 		call.binary = h.Binary
 		return call.err
 	}
-	t.Cleanup(func() { executeHandoff = orig })
+	executeHandoffWithOptions = func(_ config.Config, task model.Task, statuses []string, h harness.Harness, modelName, thinking string) error {
+		call.task = task
+		call.statuses = statuses
+		call.name = h.Name
+		call.binary = h.Binary
+		call.model = modelName
+		call.thinking = thinking
+		return call.err
+	}
+	t.Cleanup(func() { executeHandoff, executeHandoffWithOptions = orig, origOptions })
 	return call
 }
 
@@ -56,6 +66,8 @@ type handoffCall struct {
 	task     model.Task
 	statuses []string
 	err      error
+	model    string
+	thinking string
 }
 
 func askNames(list []harness.Harness) []string {
@@ -86,6 +98,30 @@ func TestAskAIRendersHarnessNames(t *testing.T) {
 	out := ansi.Strip(m.renderAskAIModal("base"))
 	if !strings.Contains(out, "opencode") {
 		t.Errorf("picker does not render opencode:\n%s", out)
+	}
+	if !strings.Contains(out, "> opencode"+askAISeparator) {
+		t.Errorf("picker does not render the selected harness/model/effort row:\n%s", out)
+	}
+	for _, hint := range []string{"(j/k)", "(/: search)", "Tab: cycle effort", "Enter: launch"} {
+		if strings.Contains(out, hint) {
+			t.Errorf("picker must not render the %q keybind hint:\n%s", hint, out)
+		}
+	}
+}
+
+func TestAskAIModalExpandsForLongModelName(t *testing.T) {
+	m := askModel(t, askConfig("codex"))
+	m.width = 140
+	m, _ = press(m, "a")
+	m.askAIModel = "openai/gpt-5.6-super-long-model-name-for-regression-testing"
+	m.askAIThinking = "medium"
+
+	out := ansi.Strip(m.renderAskAIModal("base"))
+	if !strings.Contains(out, m.askAIModel) {
+		t.Errorf("long model name was truncated despite available width:\n%s", out)
+	}
+	if m.askAIModalWidth() <= 72 {
+		t.Errorf("modal width = %d, want it to expand for the long model", m.askAIModalWidth())
 	}
 }
 
@@ -228,6 +264,27 @@ func TestAskAISelectLaunches(t *testing.T) {
 	}
 }
 
+func TestAskAISelectsModelAndThinkingPerTask(t *testing.T) {
+	call := stubExecute(t)
+	origOptions := loadAskAIOptions
+	loadAskAIOptions = func(string) harness.ModelOptions {
+		return harness.ModelOptions{Models: []string{"model-a", "model-b"}, Thinking: []string{"low", "high"}}
+	}
+	t.Cleanup(func() { loadAskAIOptions = origOptions })
+	m := askModel(t, askConfig("opencode"))
+	m, _ = press(m, "a")
+	for _, key := range []string{"/", "down", "enter", "tab"} {
+		m, _ = press(m, key)
+	}
+	_, cmd := press(m, "enter")
+	if _, ok := mustMsg(t, cmd).(askLaunchedMsg); !ok {
+		t.Fatal("model/thinking selection must launch the handoff")
+	}
+	if call.model != "model-b" || call.thinking != "high" {
+		t.Errorf("handoff options = model %q, thinking %q; want model-b/high", call.model, call.thinking)
+	}
+}
+
 func TestWorkflowForProject(t *testing.T) {
 	m := askModel(t, askConfig("opencode"))
 
@@ -304,7 +361,8 @@ func TestAskAISelectionPrefixMarksCursor(t *testing.T) {
 	}
 	// The cursor row is the styled one: without this the style branch's
 	// negation is invisible once the ANSI codes are stripped.
-	if !strings.Contains(raw, styleSelected.Render("> aaa")) {
+	selected := "> aaa" + askAISeparator + m.askAIModel + askAISeparator + m.askAIThinking
+	if !strings.Contains(raw, styleSelected.Render(selected)) {
 		t.Error("the cursor row must be rendered with the selected style")
 	}
 }
@@ -370,6 +428,11 @@ func TestAskAIViewRendersOverlayAndTitle(t *testing.T) {
 	}
 	if !strings.Contains(out, "Keybinds · Ask AI") {
 		t.Errorf("view does not switch the keybinds bar to Ask AI:\n%s", out)
+	}
+	for _, want := range []string{"model search", "effort", "handoff", "close"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("Ask AI keybinds are missing %q:\n%s", want, out)
+		}
 	}
 }
 

@@ -693,10 +693,11 @@ func cmdAsk(args []string) {
 	}
 
 	cfg := config.Load()
-	if err := harness.ValidateCommand(cfg.Handoff.Command); err != nil {
-		outputError(err.Error())
+	if cfg.Handoff.Command != "" {
+		if err := harness.ValidateCommand(cfg.Handoff.Command); err != nil {
+			outputError(err.Error())
+		}
 	}
-
 	database := openDB()
 	defer closeDB(database)
 
@@ -708,8 +709,15 @@ func cmdAsk(args []string) {
 
 	statuses := askStatuses(database, task)
 
-	selected, err := selectHarness(harness.Detect(cfg), harnessName)
+	available := harness.Configured(cfg)
+	if cfg.Handoff.Command == "" && len(available) == 0 {
+		outputError(harness.NoHandoffMessage)
+	}
+	selected, err := selectHarness(available, harnessName)
 	if err != nil {
+		outputError(err.Error())
+	}
+	if err := harness.ValidateCommand(cfg.HandoffFor(selected.Name).Command); err != nil {
 		outputError(err.Error())
 	}
 
@@ -1547,10 +1555,10 @@ func cmdHelp() {
 		"tsk project list":        "list all projects",
 		"tsk project show <name>": "show project detail + workflow",
 		"tsk project update <name> [--name] [--workflow] [--list-order] [--path]": "update project (rename/workflow/list order/path)",
-		"tsk project remove <name>":                                      "delete project + tasks",
-		"tsk project archive <name>":                                     "archive project (hides tasks, reversible)",
-		"tsk project unarchive <name>":                                   "restore an archived project",
-		"tsk project list [--archived]":                                  "list active or archived projects",
+		"tsk project remove <name>":     "delete project + tasks",
+		"tsk project archive <name>":    "archive project (hides tasks, reversible)",
+		"tsk project unarchive <name>":  "restore an archived project",
+		"tsk project list [--archived]": "list active or archived projects",
 		"tsk add <title> --project X [--priority N] [--assignee @name] [--estimate N] [--tag T]": "create a task",
 		"tsk list [--project X] [--status S] [--assignee A] [--tag T]":                           "list tasks",
 		"tsk show <id>": "show task detail",
@@ -1568,9 +1576,9 @@ func cmdHelp() {
 		"tsk offday list [--assignee A] [--json]":              "list off-days",
 		"tsk offday remove <id>":                               "delete an off-day",
 		"tsk gantt [--project X] [--assignee A] [--from DATE] [--weeks N] [--json]": "project the schedule per person (--project/--assignee filter the view, not the dates)",
-		"tsk stats [--project X]":            "show statistics",
+		"tsk stats [--project X]": "show statistics",
 		"tsk ask <task-id> [--harness NAME] [--model MODEL] [--thinking LEVEL]": "hand a task off to an AI harness",
-		"tsk migrate":                        "run pending migrations",
+		"tsk migrate": "run pending migrations",
 	}
 
 	// Group by category

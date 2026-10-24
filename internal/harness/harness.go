@@ -50,6 +50,7 @@ const (
 	placeholderPrompt        = "{{prompt_file}}"
 	placeholderModel         = "{{model}}"
 	placeholderThinking      = "{{thinking}}"
+	placeholderModelArgs     = "{{model_args}}"
 )
 
 // Template placeholders understood by the handoff prompt. Unlike the command
@@ -92,6 +93,19 @@ var lookPath = exec.LookPath
 // is sorted by display name.
 func Detect(cfg config.Config) []Harness {
 	return merge(detectedBuiltins(), declaredHarnesses(cfg.Harnesses))
+}
+
+// Configured returns detected/declared harnesses with a usable per-harness
+// handoff command. It is the list shown by Ask AI and used by `tsk ask`.
+func Configured(cfg config.Config) []Harness {
+	all := Detect(cfg)
+	out := make([]Harness, 0, len(all))
+	for _, h := range all {
+		if ValidateCommand(cfg.HandoffFor(h.Name).Command) == nil {
+			out = append(out, h)
+		}
+	}
+	return out
 }
 
 // detectedBuiltins is the registry filtered by PATH availability.
@@ -212,6 +226,13 @@ func ExpandTemplateWithOptions(command string, h Harness, cwd, promptFile, model
 	if err := ValidateCommand(command); err != nil {
 		return "", err
 	}
+	modelArgs := ModelArgs(h, modelName, thinking)
+	// Keep the old Herdr-style template working. New configurations should put
+	// {{model_args}} exactly where the selected harness expects its arguments.
+	if modelArgs != "" && !strings.Contains(command, placeholderModelArgs) &&
+		!strings.Contains(command, placeholderModel) && !strings.Contains(command, placeholderThinking) {
+		command = injectModelArgs(command, modelArgs)
+	}
 	r := strings.NewReplacer(
 		placeholderHarness, shellQuote(h.Name),
 		placeholderHarnessBinary, shellQuote(h.Binary),
@@ -219,8 +240,58 @@ func ExpandTemplateWithOptions(command string, h Harness, cwd, promptFile, model
 		placeholderPrompt, shellQuote(promptFile),
 		placeholderModel, shellQuote(modelName),
 		placeholderThinking, shellQuote(thinking),
+		placeholderModelArgs, modelArgs,
 	)
 	return r.Replace(command), nil
+}
+
+// ModelArgs returns shell-safe arguments understood by the selected harness.
+// It is intentionally a string because handoff commands are POSIX shell
+// templates and may run the harness inside a wrapper such as herdr.
+func ModelArgs(h Harness, modelName, thinking string) string {
+	if modelName == "" && thinking == "" {
+		return ""
+	}
+	var args []string
+	switch h.Name {
+	case "pi":
+		if modelName != "" {
+			args = append(args, "--model", shellQuote(modelName))
+		}
+		if thinking != "" {
+			args = append(args, "--thinking", shellQuote(thinking))
+		}
+	case "codex":
+		if modelName != "" {
+			args = append(args, "--model", shellQuote(modelName))
+		}
+		if thinking != "" {
+			args = append(args, "-c", shellQuote("model_reasoning_effort="+thinking))
+		}
+	case "opencode":
+		if modelName != "" {
+			args = append(args, "--model", shellQuote(modelName))
+		}
+		if thinking != "" {
+			args = append(args, "--variant", shellQuote(thinking))
+		}
+	}
+	return strings.Join(args, " ")
+}
+
+func injectModelArgs(command, modelArgs string) string {
+	// Herdr and similar wrappers forward arguments after `--`; put the
+	// harness flags immediately after that delimiter, before the prompt.
+	if i := strings.Index(command, " -- "); i >= 0 {
+		return command[:i+4] + modelArgs + " " + command[i+4:]
+	}
+	return command
+}
+
+// handoffFor keeps the old global config working while allowing each harness
+// to own a completely independent command and set of defaults.
+func handoffFor(cfg config.Config, h Harness) config.HandoffConfig {
+	return cfg.HandoffFor(h.Name)
 }
 
 // shellQuote wraps a value in single quotes, escaping embedded single quotes,
@@ -246,11 +317,15 @@ func HandoffDir(cfg config.Config) string {
 // ResolveCWD selects the project path for a handoff, falling back to the
 // configured directory and finally the user's home shorthand.
 func ResolveCWD(cfg config.Config, projectPath string) string {
+	return resolveCWD(cfg, cfg.Handoff, projectPath)
+}
+
+func resolveCWD(cfg config.Config, handoff config.HandoffConfig, projectPath string) string {
 	if projectPath != "" {
 		return projectPath
 	}
-	if cfg.Handoff.CWD != "" {
-		return cfg.Handoff.CWD
+	if handoff.CWD != "" {
+		return handoff.CWD
 	}
 	return "~"
 }
@@ -264,26 +339,28 @@ var getwd = os.Getwd
 // launches the command detached. It returns as soon as the process starts
 // (fire-and-forget).
 func Execute(cfg config.Config, task model.Task, statuses []string, h Harness) error {
-	return ExecuteWithOptions(cfg, task, statuses, h, cfg.Handoff.Model, cfg.Handoff.Thinking)
+	handoff := handoffFor(cfg, h)
+	return ExecuteWithOptions(cfg, task, statuses, h, handoff.Model, handoff.Thinking)
 }
 
 // ExecuteWithOptions performs a handoff with optional per-invocation model and
 // thinking values. Empty values inherit the configured defaults.
 func ExecuteWithOptions(cfg config.Config, task model.Task, statuses []string, h Harness, modelName, thinking string) error {
-	if err := ValidateCommand(cfg.Handoff.Command); err != nil {
+	handoff := handoffFor(cfg, h)
+	if err := ValidateCommand(handoff.Command); err != nil {
 		return err
 	}
-	promptPath, err := PromptFile(ComposePrompt(task, statuses, cfg.Handoff.Prompt))
+	promptPath, err := PromptFile(ComposePrompt(task, statuses, handoff.Prompt))
 	if err != nil {
 		return err
 	}
 	if modelName == "" {
-		modelName = cfg.Handoff.Model
+		modelName = handoff.Model
 	}
 	if thinking == "" {
-		thinking = cfg.Handoff.Thinking
+		thinking = handoff.Thinking
 	}
-	if err := LaunchWithOptions(cfg.Handoff.Command, h, ResolveCWD(cfg, task.ProjectPath), promptPath, modelName, thinking); err != nil {
+	if err := LaunchWithOptions(handoff.Command, h, resolveCWD(cfg, handoff, task.ProjectPath), promptPath, modelName, thinking); err != nil {
 		// The harness never started, so the prompt file would be orphaned.
 		_ = os.Remove(promptPath)
 		return err

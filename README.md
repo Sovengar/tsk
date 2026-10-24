@@ -113,30 +113,28 @@ gantt_weeks           = 6     # default Gantt horizon
 name   = "opencode"       # display name; also the default binary and {{harness}}
 binary = "opencode"       # optional executable, exposed as {{harness_binary}}
 
-[ai.ask.handoff]
-command = "pane=$(herdr tab create --cwd {{cwd}} --label {{harness}}-$$ --focus | jq -r '.result.root_pane.pane_id') && herdr agent start {{harness}}-$$ --kind {{harness}} --pane \"$pane\" -- --prompt \"$(cat {{prompt_file}})\""
-cwd     = ""              # default: the directory where tsk was launched
+[harness.handoff]
+command = "agent={{harness}}-$$; pane=$(herdr tab create --cwd {{cwd}} --label \"$agent\" --focus | jq -r '.result.root_pane.pane_id') && herdr agent start \"$agent\" --kind {{harness}} --pane \"$pane\" -- {{model_args}} && herdr agent prompt \"$agent\" \"$(cat {{prompt_file}})\""
+cwd     = ""              # default: ~ (or the task project's path)
 prompt  = "Run this task: Task #{{id}}: {{title}} ({{project}}). Check it with `tsk show {{id}}`. Update its state as you go with `tsk move {{id}} <status>`; valid statuses: {{statuses}}."
-model   = ""              # optional default exposed as {{model}}
-thinking = ""             # optional default exposed as {{thinking}}
+model   = ""              # default model in the Ask AI picker and {{model}}
+thinking = ""             # default thinking level and {{thinking}}
 ```
 
-The herdr example needs `jq` on `PATH` (it parses the `pane split` JSON).
+The herdr example needs `jq` on `PATH` (it parses the `tab create` JSON).
 
-The handoff is generic: `command` is a `/bin/sh` template with `{{harness}}`
+Each `[[harness]]` owns its complete handoff: `command` is a `/bin/sh` template with `{{harness}}`
 (display name), `{{harness_binary}}` (the harness executable), `{{cwd}}`,
-`{{model}}`, `{{thinking}}` and `{{prompt_file}}` (required) placeholders; swap it for tmux or a plain detached
-command with no code change. The task text never reaches the
+`{{model}}`, `{{thinking}}`, `{{model_args}}` and `{{prompt_file}}` (required) placeholders; put `{{model_args}}` exactly where that harness expects its flags and add extensions or wrapper arguments directly to the command. The task text never reaches the
 command line — it is written to a private temp file. The prompt comes from
 `prompt` (a template with `{{id}}`, `{{title}}`, `{{project}}` and
 `{{statuses}}` placeholders; empty = the built-in default): it identifies the
 task, tells the harness to read it with `tsk show <id>`, and to update it as
 it goes with `tsk move <id> <status>`, listing the task project's valid
-statuses (an empty workflow drops that clause). The example opens the harness
-with the prompt **pre-loaded but not
-submitted** (herdr `agent start … -- --prompt`), so you can adjust the agent
-before running it; omit `[ai.ask.handoff]` to disable Ask AI (the action then
-refuses, naming the key to set).
+statuses (an empty workflow drops that clause). With Herdr, start the harness
+first (`herdr agent start … -- {{model_args}}`) and then deliver the task through
+`herdr agent prompt`; `--prompt` is not a portable native CLI argument. The old
+global `[ai.ask.handoff]` form remains as a compatibility fallback.
 
 A malformed config does not break anything: defaults are applied.
 

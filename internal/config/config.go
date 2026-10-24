@@ -39,16 +39,34 @@ type Config struct {
 }
 
 // HarnessConfig declares one AI harness. Name is the display name and the
-// default binary; Binary overrides the executable to look up.
+// default binary; Binary overrides the executable to look up. Handoff contains
+// the complete command and defaults for this harness.
 type HarnessConfig struct {
-	Name   string `toml:"name"`
-	Binary string `toml:"binary"`
+	Name    string        `toml:"name"`
+	Binary  string        `toml:"binary"`
+	Handoff HandoffConfig `toml:"handoff"`
 }
 
-// HandoffConfig is the shell template used to launch a harness. Command is a
+// HandoffFor returns the handoff configuration for a harness. A matching
+// harness entry with handoff values wins; otherwise the global handoff is
+// retained as a backwards-compatible fallback for older configurations.
+func (c Config) HandoffFor(name string) HandoffConfig {
+	for _, entry := range c.Harnesses {
+		if entry.Name == name {
+			if entry.Handoff != (HandoffConfig{}) {
+				return entry.Handoff
+			}
+			break
+		}
+	}
+	return c.Handoff
+}
+
+// HandoffConfig is the shell template used to launch one harness. Command is a
 // shell command template with {{harness}} (display name), {{harness_binary}}
-// (executable), {{cwd}} and {{prompt_file}} placeholders; CWD overrides the
-// working directory (default: tsk's launch dir). Prompt is the prompt template
+// (executable), {{cwd}}, {{model}}, {{thinking}} and {{prompt_file}}
+// placeholders; CWD overrides the working directory. Model and Thinking are
+// defaults for the Ask AI picker and command template. Prompt is the prompt template
 // handed to the harness, with {{id}}, {{title}}, {{project}} and {{statuses}}
 // placeholders; empty selects the built-in default.
 type HandoffConfig struct {
@@ -215,7 +233,21 @@ func decodeHarnesses(raw map[string]any) []HarnessConfig {
 			continue
 		}
 		binary, _ := e["binary"].(string)
-		out = append(out, HarnessConfig{Name: name, Binary: binary})
+		out = append(out, HarnessConfig{Name: name, Binary: binary, Handoff: decodeHandoff(e["handoff"])})
 	}
 	return out
+}
+
+func decodeHandoff(value any) HandoffConfig {
+	table, ok := value.(map[string]any)
+	if !ok {
+		return HandoffConfig{}
+	}
+	var handoff HandoffConfig
+	handoff.Command, _ = table["command"].(string)
+	handoff.CWD, _ = table["cwd"].(string)
+	handoff.Prompt, _ = table["prompt"].(string)
+	handoff.Model, _ = table["model"].(string)
+	handoff.Thinking, _ = table["thinking"].(string)
+	return handoff
 }

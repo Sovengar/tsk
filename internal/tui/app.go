@@ -127,10 +127,19 @@ type Model struct {
 	filterOptionIdx int    // option cursor of the active field
 
 	// Ask AI picker (opened with "a" on a focused task)
-	askAIOpen  bool
-	askAIIndex int
-	askAIList  []harness.Harness
-	askAITask  *model.Task
+	askAIOpen           bool
+	askAIIndex          int
+	askAIFocus          int // 0=harness, 1=model, 2=thinking
+	askAIList           []harness.Harness
+	askAITask           *model.Task
+	askAIModel          string
+	askAIThinking       string
+	askAIModels         []string
+	askAIModelIdx       int
+	askAIThinkingLevels []string
+	askAIThinkingIdx    int
+	askAISearchOpen     bool
+	askAISearch         string
 
 	// New task modal
 	newTaskOpen            bool

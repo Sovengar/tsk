@@ -113,6 +113,24 @@ binary = "my-tool-bin"
 	}
 }
 
+func TestLoadPerHarnessHandoff(t *testing.T) {
+	cfg := loadFrom(t, `
+[[harness]]
+name = "codex"
+binary = "codex"
+
+[harness.handoff]
+command = "codex {{model_args}} {{prompt_file}}"
+cwd = "/work/codex"
+model = "gpt-5"
+thinking = "high"
+`)
+	handoff := cfg.HandoffFor("codex")
+	if handoff.Command != "codex {{model_args}} {{prompt_file}}" || handoff.CWD != "/work/codex" || handoff.Model != "gpt-5" || handoff.Thinking != "high" {
+		t.Errorf("HandoffFor(codex) = %+v", handoff)
+	}
+}
+
 // A single malformed harness entry must not wipe the whole config: the scalars
 // survive and the bad entry is dropped without taking the valid ones with it.
 func TestLoadMalformedHarnessDoesNotWipeConfig(t *testing.T) {
