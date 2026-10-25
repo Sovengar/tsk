@@ -83,6 +83,12 @@ type Model struct {
 	statusProjectID   int64 // 0 = keep the task's project; >0 = target when coming from "M"
 	statusProjectName string
 
+	// Priority overlay (opened with "p" on a focused task)
+	priorityOpen   bool
+	priorityTaskID int64
+	priorityList   []int
+	priorityIdx    int
+
 	// Project picker for "M"
 	moveProjectOpen   bool
 	moveProjectIdx    int
@@ -696,6 +702,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.statusOpen {
 		return m.handleStatusKey(key)
 	}
+	if m.priorityOpen {
+		return m.handlePriorityKey(key)
+	}
 	if m.moveProjectOpen {
 		return m.handleMoveProjectKey(key)
 	}
@@ -1051,6 +1060,11 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		if m.detailTask != nil {
 			return m, m.openStatus(m.detailTask)
 		}
+	case "p":
+		// Priority overlay; the detail stays open behind it until Enter.
+		if m.detailTask != nil {
+			return m, m.openPriority(m.detailTask)
+		}
 	case "M":
 		// Move to another project, then pick its status there.
 		if m.detailTask != nil {
@@ -1070,6 +1084,8 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		if m.detailTask == nil {
 			return m, nil
 		}
+	case "q":
+		return m, tea.Quit
 		m.confirmOpen = true
 		m.confirmAction = "delete-task"
 		m.confirmTaskID = m.detailTask.ID
@@ -1262,6 +1278,9 @@ func (m Model) View() tea.View {
 
 	if m.statusOpen {
 		content = m.renderStatusModal(content)
+	}
+	if m.priorityOpen {
+		content = m.renderPriorityModal(content)
 	}
 
 	if m.helpOpen {
