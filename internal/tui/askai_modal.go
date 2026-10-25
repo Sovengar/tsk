@@ -106,39 +106,33 @@ func includeConfiguredOption(options []string, configured string) []string {
 	return append([]string{configured}, options...)
 }
 
-// handleAskAIKey processes the picker's keys: move, hand off, close.
+// The fields of the picker: harness, model and effort.
+const (
+	askAIFieldHarness = iota
+	askAIFieldModel
+	askAIFieldThinking
+	askAIFieldCount
+)
+
+// handleAskAIKey processes the picker's keys: jk/↑↓ move the value of the
+// focused field, h/l and ←→ move the focus between harness, model and effort,
+// Tab cycles the effort, / opens the model picker (also Enter on the model),
+// Enter hands off and Esc closes. The picker is a value list, not a two-step
+// form: the arrows never move the focus on their own.
 func (m Model) handleAskAIKey(key string) (tea.Model, tea.Cmd) {
 	if m.askAISearchOpen {
-		switch key {
-		case "esc":
-			m.askAISearchOpen = false
-			m.askAISearch = ""
-			return m, nil
-		case "enter":
-			m.askAISearchOpen = false
-			m.askAISearch = ""
-			return m, nil
-		case "backspace":
-			if len(m.askAISearch) > 0 {
-				m.askAISearch = m.askAISearch[:len(m.askAISearch)-1]
-			}
-			return m, nil
-		case "j", "down":
-			m.moveAskAIModel(1)
-			return m, nil
-		case "k", "up":
-			m.moveAskAIModel(-1)
-			return m, nil
-		}
-		if len(key) == 1 && key[0] >= 33 {
-			m.askAISearch += key
-		}
-		return m, nil
+		return m.handleAskAISearchKey(key)
 	}
 	switch key {
 	case "esc":
-		m.askAIOpen = false
-		m.askAITask = nil
+		return m.askAIClose()
+	case "ctrl+s":
+		return m.askAIHandoff()
+	case "h", "left":
+		m.askAIFocus = cycleIndex(m.askAIFocus, askAIFieldCount, -1)
+		return m, nil
+	case "l", "right":
+		m.askAIFocus = cycleIndex(m.askAIFocus, askAIFieldCount, 1)
 		return m, nil
 	case "tab":
 		m.moveAskAIThinking(1)
@@ -147,36 +141,98 @@ func (m Model) handleAskAIKey(key string) (tea.Model, tea.Cmd) {
 		m.moveAskAIThinking(-1)
 		return m, nil
 	case "/":
-		if len(m.askAIModels) > 0 {
-			m.askAISearchOpen = true
-			m.askAISearch = ""
+		m.openAskAIModels()
+		return m, nil
+	case "j", "down":
+		m.moveAskAIValue(1)
+		return m, nil
+	case "k", "up":
+		m.moveAskAIValue(-1)
+		return m, nil
+	case "enter":
+		if m.askAIFocus == askAIFieldModel {
+			m.openAskAIModels()
+			return m, nil
+		}
+		return m.askAIHandoff()
+	}
+	return m, nil
+}
+
+// openAskAIModels opens the model picker when there is a model to choose.
+func (m *Model) openAskAIModels() {
+	if len(m.askAIModels) == 0 {
+		return
+	}
+	m.askAISearchOpen = true
+	m.askAISearch = ""
+}
+
+// handleAskAISearchKey edits the model picker: typing filters the models,
+// jk/↑↓ move the choice and Enter or Esc closes the picker.
+func (m Model) handleAskAISearchKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "esc", "enter":
+		m.askAISearchOpen = false
+		m.askAISearch = ""
+		return m, nil
+	case "backspace":
+		if len(m.askAISearch) > 0 {
+			m.askAISearch = m.askAISearch[:len(m.askAISearch)-1]
 		}
 		return m, nil
 	case "j", "down":
-		switch m.askAIFocus {
-		case 0:
-			m.askAIIndex = cycleIndex(m.askAIIndex, len(m.askAIList), 1)
-			m.refreshAskAIOptions()
-		}
+		m.moveAskAIModel(1)
 		return m, nil
 	case "k", "up":
-		switch m.askAIFocus {
-		case 0:
-			m.askAIIndex = cycleIndex(m.askAIIndex, len(m.askAIList), -1)
-			m.refreshAskAIOptions()
-		}
+		m.moveAskAIModel(-1)
 		return m, nil
-	case "enter":
-		if !inRange(m.askAIIndex, len(m.askAIList)) || m.askAITask == nil {
-			return m, nil
-		}
-		selected := m.askAIList[m.askAIIndex]
-		task := *m.askAITask
-		m.askAIOpen = false
-		m.askAITask = nil
-		return m, m.askLaunchCmd(selected, task, m.askAIModel, m.askAIThinking)
+	}
+	if len(key) == 1 && key[0] >= 33 {
+		m.askAISearch += key
 	}
 	return m, nil
+}
+
+// moveAskAIValue moves the value of the focused field.
+func (m *Model) moveAskAIValue(delta int) {
+	switch m.askAIFocus {
+	case askAIFieldHarness:
+		m.askAIIndex = cycleIndex(m.askAIIndex, len(m.askAIList), delta)
+		m.refreshAskAIOptions()
+	case askAIFieldModel:
+		m.moveAskAIModelValue(delta)
+	case askAIFieldThinking:
+		m.moveAskAIThinking(delta)
+	}
+}
+
+// moveAskAIModelValue moves the chosen model in the full list.
+func (m *Model) moveAskAIModelValue(delta int) {
+	if len(m.askAIModels) == 0 {
+		return
+	}
+	m.askAIModelIdx = cycleIndex(m.askAIModelIdx, len(m.askAIModels), delta)
+	m.askAIModel = m.askAIModels[m.askAIModelIdx]
+}
+
+// askAIClose closes the picker.
+func (m Model) askAIClose() (tea.Model, tea.Cmd) {
+	m.askAIOpen = false
+	m.askAITask = nil
+	return m, nil
+}
+
+// askAIHandoff starts the handoff with the chosen harness, model and effort.
+func (m Model) askAIHandoff() (tea.Model, tea.Cmd) {
+	if !inRange(m.askAIIndex, len(m.askAIList)) || m.askAITask == nil {
+		return m, nil
+	}
+	selected := m.askAIList[m.askAIIndex]
+	task := *m.askAITask
+	m.askAIOpen = false
+	m.askAITask = nil
+	return m, m.askLaunchCmd(selected, task, m.askAIModel, m.askAIThinking)
 }
 
 func (m *Model) moveAskAIModel(delta int) {
@@ -257,10 +313,7 @@ func (m *Model) renderAskAIModal(content string) string {
 		for i := start; i < end; i++ {
 			line := selectionPrefix(i == m.askAIIndex) + m.askAIList[i].Name
 			if i == m.askAIIndex {
-				line += askAISeparator + m.askAIModel + askAISeparator + m.askAIThinking
-			}
-			if i == m.askAIIndex && m.askAIFocus == 0 {
-				line = styleSelected.Render(line)
+				line = m.askAISelectedRow()
 			}
 			lines = append(lines, line)
 		}
@@ -287,6 +340,24 @@ func (m *Model) renderAskAIModal(content string) string {
 	return overlayModal(content, renderModalBox(" Ask AI ", lines, totalWidth), totalWidth, m.width)
 }
 
+// askAISelectedRow draws the selected harness with its model and effort. The
+// focused field is highlighted and the others stay plain.
+func (m *Model) askAISelectedRow() string {
+	name := ""
+	if inRange(m.askAIIndex, len(m.askAIList)) {
+		name = m.askAIList[m.askAIIndex].Name
+	}
+	field := func(text string, index int) string {
+		if m.askAIFocus != index {
+			return text
+		}
+		return styleSelected.Render(text)
+	}
+	return selectionPrefix(true) + field(name, askAIFieldHarness) +
+		askAISeparator + field(m.askAIModel, askAIFieldModel) +
+		askAISeparator + field(m.askAIThinking, askAIFieldThinking)
+}
+
 // askAIModalWidth leaves enough room for the selected harness, model and
 // effort. Long model IDs get their full width on any terminal that permits it.
 func (m *Model) askAIModalWidth() int {
@@ -299,22 +370,3 @@ func (m *Model) askAIModalWidth() int {
 	return preferred
 }
 
-func renderAskAIOptions(label string, options []string, selected int, focused bool) []string {
-	lines := []string{"  " + label + ":"}
-	if len(options) == 0 {
-		lines = append(lines, styleDim.Render("    (use configured default)"))
-		return lines
-	}
-	start, end := visibleRange(selected, len(options), 5)
-	for i := start; i < end; i++ {
-		line := selectionPrefix(i == selected) + options[i]
-		if i == selected && focused {
-			line = styleSelected.Render(line)
-		}
-		lines = append(lines, line)
-	}
-	if len(options) > 5 {
-		lines = append(lines, styleDim.Render(fmt.Sprintf("    %d/%d", selected+1, len(options))))
-	}
-	return lines
-}

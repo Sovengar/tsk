@@ -403,7 +403,8 @@ func TestOpenDescEditorWithoutATask(t *testing.T) {
 func TestCreateNewTaskWithAClosedDB(t *testing.T) {
 	m := newTestModel(t)
 	open, _ := pressKeys(t, m, "i")
-	withTitle, _ := pressKeys(t, open, "n", "e", "w")
+	// Cursor on Priority: j moves to Title and Enter enters it.
+	withTitle, _ := pressKeys(t, open, "j", "enter", "n", "e", "w")
 	if strings.TrimSpace(withTitle.newTaskTitle) != "new" {
 		t.Fatalf("the title is %q, want new", withTitle.newTaskTitle)
 	}
@@ -412,9 +413,9 @@ func TestCreateNewTaskWithAClosedDB(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	_, cmd := pressKeys(t, withTitle, "enter")
+	_, cmd := pressKeys(t, withTitle, "ctrl+s")
 	if cmd == nil {
-		t.Fatal("enter did not try to create the task")
+		t.Fatal("ctrl+s did not try to create the task")
 	}
 	failed, ok := firstTaskFailure(t, cmd)
 	if !ok {

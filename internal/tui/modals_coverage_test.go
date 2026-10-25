@@ -162,29 +162,36 @@ func TestFilterCycleWithNoOptions(t *testing.T) {
 }
 
 func TestFilterModalKeys(t *testing.T) {
-	t.Run("shift+tab goes back a field", func(t *testing.T) {
+	t.Run("k goes back a field and j forward with wrap", func(t *testing.T) {
 		m := newTestModel(t)
 		m.filterOpen = true
 		m.filterFieldIdx = 0
 
-		next, _ := pressKeys(t, m, "shift+tab")
-		// With five fields, from the first one shift+tab wraps to the last.
+		next, _ := pressKeys(t, m, "k")
+		// With five fields, from the first one k wraps to the last.
 		want := filterFieldCount - 1
 		if next.filterFieldIdx != want {
-			t.Errorf("shift+tab from 0 left the field at %d, want %d",
+			t.Errorf("k from 0 left the field at %d, want %d",
 				next.filterFieldIdx, want)
 		}
 
-		// And tab from the last one goes back to the first.
+		// And j from the last one goes back to the first.
+		next, _ = pressKeys(t, next, "j")
+		if next.filterFieldIdx != 0 {
+			t.Errorf("j from the last left the field at %d, want 0", next.filterFieldIdx)
+		}
+
+		// Tab no longer moves fields.
 		next, _ = pressKeys(t, next, "tab")
 		if next.filterFieldIdx != 0 {
-			t.Errorf("tab from the last left the field at %d, want 0", next.filterFieldIdx)
+			t.Errorf("tab moved the field cursor to %d", next.filterFieldIdx)
 		}
 	})
 
 	t.Run("backspace trims the search and does nothing when empty", func(t *testing.T) {
 		m := newTestModel(t)
 		m.filterOpen = true
+		m.filterFieldActive = true
 		m.filterSearch = "api"
 		m.filterOptionIdx = 2
 

@@ -36,6 +36,12 @@ type Model struct {
 	filterActive   bool
 	filterText     string
 
+	// Search by title/description (opened with "/")
+	searchOpen   bool   // the prompt is being edited
+	searchInput  string // live text while the prompt is open
+	searchQuery  string // committed query applied to the listing
+	searchBefore string // query committed before the prompt opened (esc restores it)
+
 	// Kanban state
 	kanbanCol int // column index in kanban
 	kanbanRow int // row index within column
@@ -55,7 +61,8 @@ type Model struct {
 	// Project modal (create/edit project)
 	projectModalOpen      bool
 	projectModalEdit      bool
-	projectModalField     int // 0=name, 1=workflow, 2=list_order
+	projectModalField     int  // 0=name, 1=workflow, 2=list_order
+	projectModalActive    bool // the field under the cursor is being edited
 	projectNameInput      string
 	projectWorkflowInput  string
 	projectListOrderInput string
@@ -90,7 +97,8 @@ type Model struct {
 
 	// Off-day form
 	offdayFormOpen   bool
-	offdayFormField  int // 0=start, 1=end, 2=note
+	offdayFormField  int  // 0=start, 1=end, 2=note
+	offdayFormActive bool // the field under the cursor is being edited
 	offdayStartInput string
 	offdayEndInput   string
 	offdayNoteInput  string
@@ -121,10 +129,11 @@ type Model struct {
 	helpOpen bool
 
 	// Filter modal
-	filterOpen      bool
-	filterFieldIdx  int    // 0=project, 1=status, 2=assignee, 3=priority, 4=tag
-	filterSearch    string // fuzzy search of the active field
-	filterOptionIdx int    // option cursor of the active field
+	filterOpen        bool
+	filterFieldIdx    int    // 0=project, 1=status, 2=assignee, 3=priority, 4=tag
+	filterFieldActive bool   // the field under the cursor is being edited
+	filterSearch      string // fuzzy search of the active field
+	filterOptionIdx   int    // option cursor of the active field
 
 	// Ask AI picker (opened with "a" on a focused task)
 	askAIOpen           bool
@@ -143,7 +152,8 @@ type Model struct {
 
 	// New task modal
 	newTaskOpen            bool
-	newTaskFieldIdx        int // 0=priority, 1=title, 2=description, 3=assignee, 4=tags
+	newTaskFieldIdx        int  // 0=priority, 1=title, 2=description, 3=assignee, 4=tags
+	newTaskFieldActive     bool // the field under the cursor is being edited
 	newTaskPriority        int
 	newTaskTitle           string
 	newTaskAssignee        string
@@ -380,6 +390,9 @@ func (m *Model) taskMatchesFilter(t model.Task) bool {
 		return false
 	}
 	if m.filterTag != "" && !model.HasTag(t.Tags, m.filterTag) {
+		return false
+	}
+	if m.searchQuery != "" && !taskMatchesSearch(t, m.searchQuery) {
 		return false
 	}
 	return matchesPriority(m.filterPriority, t.Priority)
@@ -644,7 +657,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.descEditOpen {
 			return m.handleDescEditKey(msg)
 		}
-		if goesToNewTaskTextarea(m.newTaskOpen, m.newTaskFieldIdx) {
+		if goesToNewTaskTextarea(m.newTaskOpen, m.newTaskFieldActive, m.newTaskFieldIdx) {
 			var cmd tea.Cmd
 			m.newTaskTextarea, cmd = m.newTaskTextarea.Update(msg)
 			return m, cmd
@@ -667,8 +680,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // Note on the edge: the description field is the ONLY one carrying an
 // embedded textarea, because it is the only multiline one. The other fields
 // are one-line and are typed by hand.
-func goesToNewTaskTextarea(newTaskOpen bool, fieldIdx int) bool {
-	return newTaskOpen && fieldIdx == newTaskFieldDescription
+func goesToNewTaskTextarea(newTaskOpen, fieldActive bool, fieldIdx int) bool {
+	return newTaskOpen && fieldActive && fieldIdx == newTaskFieldDescription
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -722,6 +735,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleFilterModalKey(key)
 	}
 
+	// Search prompt (opened with "/")
+	if m.searchOpen {
+		return m.handleSearchKey(msg)
+	}
+
 	// Assignee / off-day modal (form above the list)
 	if m.offdayFormOpen {
 		return m.handleOffdayFormKey(key)
@@ -755,7 +773,7 @@ func (m Model) handleDashboardKey(key string) (tea.Model, tea.Cmd) {
 	case "tab", "j", "down":
 		// Cycle through visible projects
 		m.dashProjectIdx = cycleIndex(m.dashProjectIdx, len(m.dashProjectList()), 1)
-	case "k", "up":
+	case "shift+tab", "k", "up":
 		m.dashProjectIdx = cycleIndex(m.dashProjectIdx, len(m.dashProjectList()), -1)
 	case "i":
 		// New project: the Dashboard holds the global config
@@ -795,6 +813,11 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "tab":
 		// Switch project by cycling the Project filter, as in the Dashboard.
 		m.cycleProjectFilter(1)
+		m.cursor = 0
+		return m, nil
+	case "shift+tab":
+		// Same cycle, backwards.
+		m.cycleProjectFilter(-1)
 		m.cursor = 0
 		return m, nil
 	case "j", "down":
@@ -856,9 +879,12 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 			t := tasks[m.cursor]
 			return m, m.openMoveProject(&t)
 		}
-	case "/":
+	case "f":
 		// Open filter modal
 		return m, m.openFilterModal()
+	case "/":
+		// Open the search prompt by title/description
+		return m, m.openSearch()
 	case "ctrl+p":
 		if inRange(m.cursor, len(tasks)) {
 			t := tasks[m.cursor]
@@ -877,14 +903,22 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 
 	// Open the filters before the empty-columns cut, so that it works even if
 	// the board has nothing.
-	if key == "/" {
+	if key == "f" {
 		return m, m.openFilterModal()
+	}
+	if key == "/" {
+		return m, m.openSearch()
 	}
 
 	// Tab changes project by cycling the Project filter (like the Dashboard).
 	// The columns are navigated with h/l or ←/→, which already did the same.
 	if key == "tab" {
 		m.cycleProjectFilter(1)
+		m.clampKanbanCursor()
+		return m, nil
+	}
+	if key == "shift+tab" {
+		m.cycleProjectFilter(-1)
 		m.clampKanbanCursor()
 		return m, nil
 	}
@@ -1072,9 +1106,18 @@ func (m Model) uniqueAssignees() []string {
 // uniqueTags returns the tags in use across all tasks, without repeats and
 // sorted alphabetically. It is the option source of the tag filter.
 func (m Model) uniqueTags() []string {
+	return m.tagsForProject("")
+}
+
+// tagsForProject returns the tags in use in a project, without repeats and
+// sorted alphabetically. The empty project means "all projects", the union.
+func (m Model) tagsForProject(project string) []string {
 	seen := make(map[string]bool)
 	var result []string
 	for _, t := range m.tasks {
+		if project != "" && t.ProjectName != project {
+			continue
+		}
 		for _, tag := range t.Tags {
 			if !seen[tag] {
 				seen[tag] = true

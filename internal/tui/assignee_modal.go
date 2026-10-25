@@ -59,6 +59,7 @@ func (m *Model) openAssigneeModal() {
 func (m *Model) openOffdayForm() tea.Cmd {
 	m.offdayFormOpen = true
 	m.offdayFormField = 0
+	m.offdayFormActive = false
 	m.offdayStartInput = ""
 	m.offdayEndInput = ""
 	m.offdayNoteInput = ""
@@ -131,29 +132,46 @@ func (m Model) handleAssigneeModalKey(key string) (tea.Model, tea.Cmd) {
 }
 
 // handleOffdayFormKey processes the keys of the off-day creation form.
+// offdayFormFieldCount is the number of fields of the off-day form.
+const offdayFormFieldCount = 3
+
+// handleOffdayFormKey processes the off-day form's keys. With no field
+// entered, jk/↑↓ move the field cursor and Enter enters the field under it.
+// Inside a field, Enter leaves it for the next one and Ctrl+S saves.
 func (m Model) handleOffdayFormKey(key string) (tea.Model, tea.Cmd) {
-	const numFields = 3
+	if !m.offdayFormActive {
+		switch key {
+		case "esc":
+			m.offdayFormOpen = false
+			return m, nil
+		case "ctrl+s":
+			return m.offdayFormSubmit()
+		case "j", "down":
+			m.offdayFormField = (m.offdayFormField + 1) % offdayFormFieldCount
+			return m, nil
+		case "k", "up":
+			m.offdayFormField = (m.offdayFormField + offdayFormFieldCount - 1) % offdayFormFieldCount
+			return m, nil
+		case "enter":
+			m.offdayFormActive = true
+			return m, nil
+		}
+		return m, nil
+	}
 
 	switch key {
 	case "esc":
-		m.offdayFormOpen = false
+		// Esc leaves the field and returns to the field cursor.
+		m.offdayFormActive = false
 		return m, nil
-	case "tab":
-		m.offdayFormField = (m.offdayFormField + 1) % numFields
-		return m, nil
-	case "shift+tab":
-		m.offdayFormField = (m.offdayFormField + numFields - 1) % numFields
-		return m, nil
+	case "ctrl+s":
+		return m.offdayFormSubmit()
 	case "enter":
-		name := m.currentAssignee()
-		if name == "" {
-			return m, m.setToast("No assignee selected", "error")
-		}
-		if m.offdayStartInput == "" {
-			return m, m.setToast("Start date is required (YYYY-MM-DD)", "error")
-		}
-		m.offdayFormOpen = false
-		return m, m.addOffDayCmd(name, m.offdayStartInput, m.offdayEndInput, m.offdayNoteInput)
+		m.offdayFormActive = false
+		m.offdayFormField = (m.offdayFormField + 1) % offdayFormFieldCount
+		return m, nil
+	case "tab", "shift+tab":
+		return m, nil
 	}
 
 	var target *string
@@ -167,6 +185,19 @@ func (m Model) handleOffdayFormKey(key string) (tea.Model, tea.Cmd) {
 	}
 	editTextInput(target, key)
 	return m, nil
+}
+
+// offdayFormSubmit validates and persists the new off-day.
+func (m Model) offdayFormSubmit() (tea.Model, tea.Cmd) {
+	name := m.currentAssignee()
+	if name == "" {
+		return m, m.setToast("No assignee selected", "error")
+	}
+	if m.offdayStartInput == "" {
+		return m, m.setToast("Start date is required (YYYY-MM-DD)", "error")
+	}
+	m.offdayFormOpen = false
+	return m, m.addOffDayCmd(name, m.offdayStartInput, m.offdayEndInput, m.offdayNoteInput)
 }
 
 // addOffDayCmd persists an off-day and emits offdaySavedMsg with the result.
@@ -196,6 +227,7 @@ func (m Model) handleOffdaySaved(msg offdaySavedMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		if msg.action == "add" {
 			m.offdayFormOpen = true
+			m.offdayFormActive = false
 		}
 		return m, m.setToast(msg.err.Error(), "error")
 	}
@@ -310,24 +342,27 @@ func (m *Model) renderAssigneeDetail(content string) string {
 
 // renderOffdayForm draws the creation form over the assignee modal.
 func (m *Model) renderOffdayForm(content string) string {
+	startActive := m.offdayFormActive && m.offdayFormField == 0
 	start := m.offdayStartInput
-	if m.offdayFormField == 0 {
+	if startActive {
 		start += "_"
 	}
+	endActive := m.offdayFormActive && m.offdayFormField == 1
 	end := m.offdayEndInput
-	if m.offdayFormField == 1 {
+	if endActive {
 		end += "_"
 	}
+	noteActive := m.offdayFormActive && m.offdayFormField == 2
 	note := m.offdayNoteInput
-	if m.offdayFormField == 2 {
+	if noteActive {
 		note += "_"
 	}
 
 	lines := []string{
 		fmt.Sprintf("  Person: %s", m.currentAssignee()),
-		fmt.Sprintf("  Start:  %s", start),
-		fmt.Sprintf("  End:    %s", end),
-		fmt.Sprintf("  Note:   %s", note),
+		"  " + fieldMarker(m.offdayFormActive, m.offdayFormField == 0) + fmt.Sprintf("Start:  %s", start),
+		"  " + fieldMarker(m.offdayFormActive, m.offdayFormField == 1) + fmt.Sprintf("End:    %s", end),
+		"  " + fieldMarker(m.offdayFormActive, m.offdayFormField == 2) + fmt.Sprintf("Note:   %s", note),
 		styleDim.Render("  End/Note optional · dates YYYY-MM-DD"),
 	}
 

@@ -234,6 +234,7 @@ func TestNewTaskTagsBackspace(t *testing.T) {
 			next, _ := press(m, "i")
 			m2 := next
 			m2.newTaskFieldIdx = newTaskFieldTags
+			m2.newTaskFieldActive = true
 			m2.newTaskTagInput = tt.input
 			m2.newTaskTags = append([]string(nil), tt.tags...)
 			m2.newTaskTagSuggIdx = 2

@@ -232,12 +232,12 @@ func TestGanttProjectFilterIsViewOnly(t *testing.T) {
 	}
 }
 
-func TestGanttSlashOpensFilters(t *testing.T) {
+func TestGanttFOpensFilters(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "3")
-	m, _ = press(m, "/")
+	m, _ = press(m, "f")
 	if !m.filterOpen {
-		t.Error("'/' in the Gantt should open the filter modal")
+		t.Error("'f' in the Gantt should open the filter modal")
 	}
 	// Esc closes it.
 	m, _ = press(m, "esc")
@@ -246,12 +246,12 @@ func TestGanttSlashOpensFilters(t *testing.T) {
 	}
 }
 
-func TestKanbanSlashOpensFilters(t *testing.T) {
+func TestKanbanFOpensFilters(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "2")
-	m, _ = press(m, "/")
+	m, _ = press(m, "f")
 	if !m.filterOpen {
-		t.Error("'/' in the Kanban should open the filter modal")
+		t.Error("'f' in the Kanban should open the filter modal")
 	}
 }
 

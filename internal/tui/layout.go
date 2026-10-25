@@ -739,3 +739,28 @@ func truncate(s string, limit int) string {
 func singleLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
+
+// fitModalLines gives a modal body a semi-fixed height: the preferred maximum,
+// or what the terminal can hold after the box borders when it is smaller. The
+// missing rows are padded and the excess is dropped, so the modal keeps its
+// size while its content changes (the filter preview, for instance).
+func fitModalLines(lines []string, maxLines, terminalHeight int) []string {
+	target := min(maxLines, max(terminalHeight-2, 3))
+	target = max(target, 1)
+	if len(lines) > target {
+		return lines[:target]
+	}
+	for len(lines) < target {
+		lines = append(lines, "")
+	}
+	return lines
+}
+
+// fieldMarker is the prefix of a form row: the triangle marks the field under
+// the cursor while no field is entered, and it disappears once one is.
+func fieldMarker(active, current bool) string {
+	if active || !current {
+		return "  "
+	}
+	return "▸ "
+}

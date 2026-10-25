@@ -44,7 +44,9 @@ func TestProjectModalEditRoundTrip(t *testing.T) {
 	// the real path for renaming.
 	renamed := opened
 	renamed.projectNameInput = ""
-	renamed, _ = pressKeys(t, opened, "backspace", "backspace", "backspace",
+	// Enter the Name field before typing.
+	entered, _ := pressKeys(t, opened, "enter")
+	renamed, _ = pressKeys(t, entered, "backspace", "backspace", "backspace",
 		"backspace", "backspace", "backspace")
 	for _, k := range []string{"z", "e", "t", "a"} {
 		renamed, _ = pressKeys(t, renamed, k)
@@ -53,12 +55,12 @@ func TestProjectModalEditRoundTrip(t *testing.T) {
 		t.Fatalf("typing by hand left %q, want zeta", renamed.projectNameInput)
 	}
 
-	saved, cmd := pressKeys(t, renamed, "enter")
+	saved, cmd := pressKeys(t, renamed, "ctrl+s")
 	if saved.projectModalOpen {
-		t.Error("enter did not close the modal")
+		t.Error("ctrl+s did not close the modal")
 	}
 	if cmd == nil {
-		t.Fatal("enter did not launch the save")
+		t.Fatal("ctrl+s did not launch the save")
 	}
 
 	msg := mustMsg(t, cmd)

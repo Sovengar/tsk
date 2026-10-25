@@ -52,7 +52,7 @@ func keybindsForView(v viewKind) []keybind {
 	switch v {
 	case viewDashboard:
 		viewKeys = []keybind{
-			{"Tab", "cycle projects"},
+			{"Tab/⇧Tab", "cycle projects"},
 			{"i", "Insert new project"},
 			{"e", "edit project"},
 			{"d", "archive project"},
@@ -62,35 +62,38 @@ func keybindsForView(v viewKind) []keybind {
 		}
 	case viewList:
 		viewKeys = []keybind{
-			{"Tab", "cycle projects"},
+			{"Tab/⇧Tab", "cycle projects"},
 			{"Enter", "detail"},
 			{"i", "insert task"},
 			{"m", "statuses"},
 			{"M", "move project"},
 			{"e/E", "edit/editor"},
-			{"/", "filters"},
+			{"f", "filters"},
+			{"/", "search"},
 			{"Ctrl+p", "priority"},
 			{"n/p  N/P", "page nav"},
 			{"a", "ask AI"},
 		}
 	case viewKanban:
 		viewKeys = []keybind{
-			{"Tab", "cycle projects"},
+			{"Tab/⇧Tab", "cycle projects"},
 			{"m", "statuses"},
 			{"M", "move project"},
 			{"i", "insert task"},
 			{"Enter", "detail"},
 			{"e/E", "edit/editor"},
 			{"Ctrl+p", "priority"},
-			{"/", "filters"},
+			{"f", "filters"},
+			{"/", "search"},
 			{"a", "ask AI"},
 		}
 	case viewGantt:
 		viewKeys = []keybind{
-			{"Tab", "cycle projects"},
+			{"Tab/⇧Tab", "cycle projects"},
 			{"g/G", "first/last"},
 			{"Enter", "detail"},
-			{"/", "filters"},
+			{"f", "filters"},
+			{"/", "search"},
 		}
 	}
 	return append(common, viewKeys...)
@@ -132,6 +135,12 @@ func handleGlobalKeys(m *Model, msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if m.filterActive {
 			m.filterActive = false
 			m.filterText = ""
+			return m, nil, true
+		}
+		if m.searchQuery != "" {
+			m.searchQuery = ""
+			m.searchBefore = ""
+			m.invalidateFilterCache()
 			return m, nil, true
 		}
 	case "?":

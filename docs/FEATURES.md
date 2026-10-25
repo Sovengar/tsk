@@ -38,12 +38,14 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 ## TUI keys
 
 - **View switching** — `1`/`2`/`3`/`4` switch between List, Kanban, Gantt, Dashboard.
-- **Navigation** — `hjkl` or arrows move the cursor; `Tab` cycles projects.
+- **Navigation** — `hjkl` or arrows move the cursor; `Tab`/`Shift+Tab` cycle projects forwards/backwards.
 - **Task actions** — `m` opens the status overlay (the next workflow status first, then the already-passed ones, `cancelled` last); `M` moves the task to another project and then asks for its status; `D` hard-deletes the opened task (with confirmation); `Ctrl+p` cycle priority.
-- **Ask AI** — `a` on a focused task opens the harness picker and hands the task to the selected harness: the prompt tells the harness to read the task (`tsk show <id>`) and update it as it goes (`tsk move <id> <status>`), listing the project's valid statuses (List, Kanban, Detail).
+- **Ask AI** — `a` on a focused task opens the harness picker and hands the task to the selected harness: the prompt tells the harness to read the task (`tsk show <id>`) and update it as it goes (`tsk move <id> <status>`), listing the project's valid statuses (List, Kanban, Detail). `↑↓/jk` move the value of the focused field, `h/l` or `←/→` move the focus between harness, model and effort, `Tab`/`Shift+Tab` cycle the effort, `/` or `Enter` on the model opens the model picker (typing filters it, `↑↓` choose, `Enter`/`Esc` close it), `Enter` on the harness or the effort hands off and `Esc` closes.
 - **Insert** — `i` creates a project (Dashboard) or task (List/Kanban).
 - **Edit** — `e` opens inline description editor; `E` opens external editor.
-- **Filters** — `/` opens the filter modal; `Esc` clears active filter.
+- **Filters** — `f` opens the filter modal; `Esc` clears active filter. With no field entered, `↑↓/jk` move the cursor and the right pane previews the field's options; the modal keeps a semi-fixed height that only shrinks when the terminal is too short; `Enter` enters the field, and inside it `↑↓/jk` move the value, `←→` cycle it and `Enter` applies and moves to the next field.
+- **Search** — `/` searches tasks by title and description; `Enter` keeps the query, `Esc` restores or clears it.
+- **Forms** — New task, Project and Off-day open with no field entered: `↑↓/jk` move the field cursor, `Enter` enters a field, `Enter` inside leaves it and moves to the next one, `Esc` leaves it backwards, and `Ctrl+S` saves or confirms. `Esc` with no field entered closes the overlay. The Ask AI picker is not a form: its arrows always move the value of the focused field.
 - **Pagination** — `n`/`p` next/previous page, `N`/`P` first/last page (List).
 - **Gantt scroll** — `h`/`l` scroll days, `g`/`G` jump to first/last task.
 - **Dashboard extras** — `A` toggle archived, `d` archive, `r` restore, `e` edit project, `m` assignees.
@@ -52,7 +54,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 ## Modals and detail
 
 - **Task detail** — metadata, description, comments; opened with `Enter`; `m` opens the status overlay, `M` moves it to another project, `d` deletes the selected comment, `D` hard-deletes the task.
-- **Filter modal** — filter by project, status, assignee, priority, tag; fuzzy search; `Ctrl+R` resets.
+- **Filter modal** — filter by project, status, assignee, priority, tag; the tag options are the tags in use in the selected project (the union when the project is `all`), and a tag filter that no longer exists in the new project is cleared on a project switch; fuzzy search; `Ctrl+R` resets.
 - **New task modal** — priority, title, description, assignee with autocomplete, tags with suggestions; `Ctrl+S` creates.
 - **Project modal** — name, workflow, list order; `Tab` cycles fields.
 - **Assignee modal** — people roster with task counts; `Enter` opens detail with active tasks and off-days.

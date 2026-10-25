@@ -169,17 +169,17 @@ func TestOpenProjectModalPrefillsDefaults(t *testing.T) {
 	}
 
 	// The modal has 3 fields: name -> workflow -> list_order -> name.
-	m, _ = press(m, "tab")
+	m, _ = press(m, "j")
 	if m.projectModalField != 1 {
-		t.Errorf("field after tab = %d, want 1", m.projectModalField)
+		t.Errorf("field after j = %d, want 1", m.projectModalField)
 	}
-	m, _ = press(m, "tab")
+	m, _ = press(m, "j")
 	if m.projectModalField != 2 {
-		t.Errorf("field after second tab = %d, want 2", m.projectModalField)
+		t.Errorf("field after second j = %d, want 2", m.projectModalField)
 	}
-	m, _ = press(m, "tab")
+	m, _ = press(m, "j")
 	if m.projectModalField != 0 {
-		t.Errorf("field after third tab = %d, want 0 (wrap)", m.projectModalField)
+		t.Errorf("field after third j = %d, want 0 (wrap)", m.projectModalField)
 	}
 }
 

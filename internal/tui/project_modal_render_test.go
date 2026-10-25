@@ -27,6 +27,7 @@ func newProjectModel(t *testing.T, field int) *Model {
 	m.projectModalOpen = true
 	m.projectModalEdit = false
 	m.projectModalField = field
+	m.projectModalActive = true
 	m.projectNameInput = "new"
 	m.projectWorkflowInput = ""
 	m.projectListOrderInput = ""
@@ -63,15 +64,16 @@ func TestProjectModalCursorFollowsFocusedField(t *testing.T) {
 	}
 }
 
-// Moving the focus with tab walks the three fields and returns to the first.
+// Moving the field cursor with j walks the three fields and returns to the first.
 func TestProjectModalFieldCycles(t *testing.T) {
 	from := []int{0, 1, 2}
 	want := []int{1, 2, 0}
 	for i, f := range from {
 		m := newProjectModel(t, f)
-		next, _ := press(m, "tab")
+		m.projectModalActive = false
+		next, _ := press(m, "j")
 		if next.projectModalField != want[i] {
-			t.Errorf("tab from field %d goes to %d, want %d", f, next.projectModalField, want[i])
+			t.Errorf("j from field %d goes to %d, want %d", f, next.projectModalField, want[i])
 		}
 	}
 }

@@ -27,24 +27,26 @@ func TestGoesToNewTaskTextarea(t *testing.T) {
 	cases := []struct {
 		name        string
 		newTaskOpen bool
+		active      bool
 		field       int
 		want        bool
 	}{
-		{"form open on the description", true, newTaskFieldDescription, true},
-		{"form open on the title", true, newTaskFieldTitle, false},
-		{"form open on the assignee", true, newTaskFieldAssignee, false},
-		{"form open on the tags", true, newTaskFieldTags, false},
-		{"form open on the priority", true, newTaskFieldPriority, false},
-		{"form closed on the description", false, newTaskFieldDescription, false},
-		{"form closed on the title", false, newTaskFieldTitle, false},
+		{"form open and entered on the description", true, true, newTaskFieldDescription, true},
+		{"form open, cursor on the description", true, false, newTaskFieldDescription, false},
+		{"form open and entered on the title", true, true, newTaskFieldTitle, false},
+		{"form open and entered on the assignee", true, true, newTaskFieldAssignee, false},
+		{"form open and entered on the tags", true, true, newTaskFieldTags, false},
+		{"form open and entered on the priority", true, true, newTaskFieldPriority, false},
+		{"form closed on the description", false, true, newTaskFieldDescription, false},
+		{"form closed on the title", false, false, newTaskFieldTitle, false},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := goesToNewTaskTextarea(c.newTaskOpen, c.field)
+			got := goesToNewTaskTextarea(c.newTaskOpen, c.active, c.field)
 			if got != c.want {
-				t.Errorf("goesToNewTaskTextarea(%v, field %d) = %v, want %v",
-					c.newTaskOpen, c.field, got, c.want)
+				t.Errorf("goesToNewTaskTextarea(%v, active %v, field %d) = %v, want %v",
+					c.newTaskOpen, c.active, c.field, got, c.want)
 			}
 		})
 	}

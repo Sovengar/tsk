@@ -166,15 +166,16 @@ func TestNewTaskMoveFieldCompletesAssigneeSuggestion(t *testing.T) {
 	m := modelWithPeopleAndTags(t, []string{"@ann", "@carol"}, nil)
 	m.newTaskOpen = true
 	m.newTaskFieldIdx = newTaskFieldAssignee
+	m.newTaskFieldActive = true
 	m.newTaskAssignee = "a"
 	m.newTaskAssigneeSuggIdx = 0
 	if len(m.assigneeSuggestions()) == 0 {
 		t.Fatal("fixture: with no suggestions there is nothing to complete")
 	}
 
-	m, _ = ntKey(m, "tab")
+	m, _ = ntKey(m, "enter")
 	if m.newTaskAssignee == "" {
-		t.Error("tabbing with an active suggestion must complete the assignee")
+		t.Error("leaving with an active suggestion must complete the assignee")
 	}
 	if m.newTaskAssigneeSuggIdx != -1 {
 		t.Errorf("suggIdx after completing = %d, want -1", m.newTaskAssigneeSuggIdx)
@@ -189,10 +190,11 @@ func TestNewTaskMoveFieldCompletesAssigneeSuggestion(t *testing.T) {
 func TestNewTaskMoveFieldIgnoresStaleSuggestionIndex(t *testing.T) {
 	m := openNewTask(t)
 	m.newTaskFieldIdx = newTaskFieldAssignee
+	m.newTaskFieldActive = true
 	m.newTaskAssignee = "typed"
 	m.newTaskAssigneeSuggIdx = 99 // beyond the suggestion list
 
-	m, _ = ntKey(m, "tab")
+	m, _ = ntKey(m, "enter")
 	if m.newTaskAssignee != "typed" {
 		t.Errorf("assignee = %q, want the typed value intact", m.newTaskAssignee)
 	}
@@ -206,10 +208,11 @@ func TestNewTaskMoveFieldIgnoresStaleSuggestionIndex(t *testing.T) {
 func TestNewTaskSuggestionOnlyCompletesOnAssigneeField(t *testing.T) {
 	m := openNewTask(t)
 	m.newTaskFieldIdx = newTaskFieldTags
+	m.newTaskFieldActive = true
 	m.newTaskAssignee = "intact"
 	m.newTaskAssigneeSuggIdx = 0
 
-	m, _ = ntKey(m, "tab")
+	m, _ = ntKey(m, "enter")
 	if m.newTaskAssignee != "intact" {
 		t.Errorf("assignee = %q, want intact outside the Assignee field", m.newTaskAssignee)
 	}
@@ -274,12 +277,13 @@ func msgTypes(msgs []tea.Msg) []string {
 }
 
 // enter on the Assignee field with an active suggestion completes the
-// selection and does NOT submit the form: the dropdown beats the validation.
+// selection, leaves the field and does NOT submit the form.
 func TestNewTaskAssigneeEnterCompletesSuggestion(t *testing.T) {
 	m := modelWithPeopleAndTags(t, []string{"@ann", "@carol"}, nil)
 	m.newTaskOpen = true
 	m.newTaskProject = "api"
 	m.newTaskFieldIdx = newTaskFieldAssignee
+	m.newTaskFieldActive = true
 	m.newTaskAssignee = "a"
 	m.newTaskAssigneeSuggIdx = 0
 	suggs := m.assigneeSuggestions()
@@ -298,20 +302,25 @@ func TestNewTaskAssigneeEnterCompletesSuggestion(t *testing.T) {
 	if m.newTaskAssigneeSuggIdx != -1 {
 		t.Errorf("suggIdx = %d, want -1 after completing", m.newTaskAssigneeSuggIdx)
 	}
+	if m.newTaskFieldActive || m.newTaskFieldIdx != newTaskFieldTags {
+		t.Errorf("enter must leave Assignee for Tags, got field %d active %v",
+			m.newTaskFieldIdx, m.newTaskFieldActive)
+	}
 }
 
-// enter with an index exactly equal to the list's size falls into the submit,
-// not into an out-of-range indexing. It is the exact edge of `< len(suggs)`.
+// ctrl+s with an index exactly equal to the list's size submits instead of
+// indexing out of range. It is the exact edge of `< len(suggs)`.
 func TestNewTaskAssigneeEnterAtExactListLength(t *testing.T) {
 	m := modelWithPeopleAndTags(t, []string{"@ann", "@carol"}, nil)
 	m.newTaskOpen = true
 	m.newTaskProject = "api"
 	m.newTaskFieldIdx = newTaskFieldAssignee
+	m.newTaskFieldActive = true
 	m.newTaskTitle = "exact edge"
 	m.newTaskAssignee = "a"
 	m.newTaskAssigneeSuggIdx = len(m.assigneeSuggestions()) // one past the last
 
-	_, cmd := ntKey(m, "enter")
+	_, cmd := ntKey(m, "ctrl+s")
 	mustRun(t, cmd)
 
 	tasks, _ := m.database.ListTasks("api", "", "")
@@ -457,6 +466,7 @@ func TestNewTaskPriorityArrowsStopAtEdges(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := openNewTask(t)
 			m.newTaskFieldIdx = newTaskFieldPriority
+			m.newTaskFieldActive = true
 			m.newTaskPriority = tt.from
 
 			m, _ = ntKey(m, tt.key)
@@ -482,6 +492,7 @@ func TestNewTaskPriorityDigits(t *testing.T) {
 	} {
 		m := openNewTask(t)
 		m.newTaskFieldIdx = newTaskFieldPriority
+		m.newTaskFieldActive = true
 
 		m, _ = ntKey(m, digit)
 		if m.newTaskPriority != want {
@@ -495,6 +506,7 @@ func TestNewTaskPriorityDigits(t *testing.T) {
 func TestNewTaskPriorityDigitFourIsOutOfRange(t *testing.T) {
 	m := openNewTask(t)
 	m.newTaskFieldIdx = newTaskFieldPriority
+	m.newTaskFieldActive = true
 	m, _ = ntKey(m, "4")
 
 	if m.newTaskPriority <= model.PriorityHigh {
@@ -516,6 +528,7 @@ func TestNewTaskPrintableKeyJumpsToTitle(t *testing.T) {
 	for _, ch := range []string{"a", "Z", "!", "9", "-"} {
 		m := openNewTask(t)
 		m.newTaskFieldIdx = newTaskFieldPriority
+		m.newTaskFieldActive = true
 
 		m, _ = ntKey(m, ch)
 		if m.newTaskFieldIdx != newTaskFieldTitle {
@@ -553,6 +566,7 @@ func TestNewTaskAssigneeSuggestionWrapAround(t *testing.T) {
 	m := modelWithPeopleAndTags(t, []string{"@ann", "@carol", "@david"}, nil)
 	m.newTaskOpen = true
 	m.newTaskFieldIdx = newTaskFieldAssignee
+	m.newTaskFieldActive = true
 	m.newTaskAssignee = "a"
 	m.newTaskAssigneeSuggIdx = -1
 
@@ -584,6 +598,7 @@ func TestNewTaskAssigneeSuggestionWrapAround(t *testing.T) {
 func TestNewTaskAssigneeSuggestionArrowsWithNoSuggestions(t *testing.T) {
 	m := openNewTask(t) // assignee "Me" suggests nothing
 	m.newTaskFieldIdx = newTaskFieldAssignee
+	m.newTaskFieldActive = true
 	if got := m.assigneeSuggestions(); len(got) != 0 {
 		t.Fatalf("fixture: 0 suggestions expected, got %d (%v)", len(got), got)
 	}
@@ -603,6 +618,7 @@ func TestNewTaskTagSuggestionWrapAround(t *testing.T) {
 	m := modelWithPeopleAndTags(t, nil, []string{"alpha", "beta", "gamma"})
 	m.newTaskOpen = true
 	m.newTaskFieldIdx = newTaskFieldTags
+	m.newTaskFieldActive = true
 	m.newTaskTagInput = "a"
 	m.newTaskTagSuggIdx = -1
 
@@ -627,6 +643,7 @@ func TestNewTaskTagSuggestionWrapAround(t *testing.T) {
 func TestNewTaskTagSuggestionArrowsWithNoSuggestions(t *testing.T) {
 	m := openNewTask(t)
 	m.newTaskFieldIdx = newTaskFieldTags
+	m.newTaskFieldActive = true
 	m.newTaskTagInput = "qqqq" // matches no tag
 	if got := m.tagFieldSuggestions(); len(got) != 0 {
 		t.Fatalf("fixture: 0 suggestions expected, got %d (%v)", len(got), got)
@@ -645,6 +662,7 @@ func TestNewTaskTagEnterCompletesSuggestion(t *testing.T) {
 	m := modelWithPeopleAndTags(t, nil, []string{"backend", "frontend"})
 	m.newTaskOpen = true
 	m.newTaskFieldIdx = newTaskFieldTags
+	m.newTaskFieldActive = true
 	m.newTaskTagInput = "e"
 	m.newTaskTagSuggIdx = 0
 	if len(m.tagFieldSuggestions()) == 0 {
@@ -668,6 +686,7 @@ func TestNewTaskTagEnterCompletesSuggestion(t *testing.T) {
 func TestNewTaskTagEnterCommitsTypedText(t *testing.T) {
 	m := openNewTask(t)
 	m.newTaskFieldIdx = newTaskFieldTags
+	m.newTaskFieldActive = true
 	m.newTaskTagInput = "new"
 	m.newTaskTagSuggIdx = -1
 
@@ -681,6 +700,7 @@ func TestNewTaskTagEnterCommitsTypedText(t *testing.T) {
 func TestNewTaskTagCommaCommitsTypedText(t *testing.T) {
 	m := openNewTask(t)
 	m.newTaskFieldIdx = newTaskFieldTags
+	m.newTaskFieldActive = true
 	m.newTaskTagInput = "comma"
 
 	m, _ = ntKey(m, ",")
@@ -695,6 +715,7 @@ func TestNewTaskTagEnterIgnoresStaleSuggestionIndex(t *testing.T) {
 	m := modelWithPeopleAndTags(t, nil, []string{"alpha", "beta"})
 	m.newTaskOpen = true
 	m.newTaskFieldIdx = newTaskFieldTags
+	m.newTaskFieldActive = true
 	m.newTaskTagInput = "zzz"
 	m.newTaskTagSuggIdx = 99
 
@@ -708,6 +729,7 @@ func TestNewTaskTagEnterIgnoresStaleSuggestionIndex(t *testing.T) {
 func TestNewTaskTagBackspaceRemovesLastTagWhenInputEmpty(t *testing.T) {
 	m := openNewTask(t)
 	m.newTaskFieldIdx = newTaskFieldTags
+	m.newTaskFieldActive = true
 	m.newTaskTags = []string{"one", "two"}
 	m.newTaskTagInput = ""
 
@@ -721,6 +743,7 @@ func TestNewTaskTagBackspaceRemovesLastTagWhenInputEmpty(t *testing.T) {
 func TestNewTaskTagBackspaceEditsNonEmptyInput(t *testing.T) {
 	m := openNewTask(t)
 	m.newTaskFieldIdx = newTaskFieldTags
+	m.newTaskFieldActive = true
 	m.newTaskTags = []string{"one"}
 	m.newTaskTagInput = "abc"
 
@@ -739,6 +762,7 @@ func TestNewTaskTagBackspaceEditsNonEmptyInput(t *testing.T) {
 func TestNewTaskTagBackspaceWithNoTagsIsSafe(t *testing.T) {
 	m := openNewTask(t)
 	m.newTaskFieldIdx = newTaskFieldTags
+	m.newTaskFieldActive = true
 	m.newTaskTags = nil
 	m.newTaskTagInput = ""
 
@@ -756,6 +780,7 @@ func TestNewTaskTypingResetsSuggestionIndex(t *testing.T) {
 		m := modelWithPeopleAndTags(t, []string{"@ann", "@carol"}, nil)
 		m.newTaskOpen = true
 		m.newTaskFieldIdx = newTaskFieldAssignee
+		m.newTaskFieldActive = true
 		m.newTaskAssignee = "a"
 		m.newTaskAssigneeSuggIdx = 1
 
@@ -772,6 +797,7 @@ func TestNewTaskTypingResetsSuggestionIndex(t *testing.T) {
 		m := modelWithPeopleAndTags(t, nil, []string{"alpha"})
 		m.newTaskOpen = true
 		m.newTaskFieldIdx = newTaskFieldTags
+		m.newTaskFieldActive = true
 		m.newTaskTagInput = "a"
 		m.newTaskTagSuggIdx = 0
 		if len(m.tagFieldSuggestions()) == 0 {
@@ -992,6 +1018,7 @@ func TestRenderNewTaskModalSections(t *testing.T) {
 	t.Run("priority focused", func(t *testing.T) {
 		m := openNewTask(t)
 		m.newTaskFieldIdx = newTaskFieldPriority
+		m.newTaskFieldActive = true
 		got := ansi.Strip(m.renderNewTaskModal(""))
 
 		if !strings.Contains(got, "▸ Priority") {
@@ -1007,7 +1034,7 @@ func TestRenderNewTaskModalSections(t *testing.T) {
 		m.newTaskFieldIdx = newTaskFieldTitle
 		got := ansi.Strip(m.renderNewTaskModal(""))
 
-		if !strings.Contains(got, "(empty · Tab to edit)") {
+		if !strings.Contains(got, "(empty · Enter to edit)") {
 			t.Errorf("want the description placeholder:\n%s", got)
 		}
 	})
@@ -1015,10 +1042,11 @@ func TestRenderNewTaskModalSections(t *testing.T) {
 	t.Run("focused empty description does not show the placeholder", func(t *testing.T) {
 		m := openNewTask(t)
 		m.newTaskFieldIdx = newTaskFieldDescription
+		m.newTaskFieldActive = true
 		got := ansi.Strip(m.renderNewTaskModal(""))
 
-		if strings.Contains(got, "(empty · Tab to edit)") {
-			t.Errorf("with focus on the description it must not ask to tab:\n%s", got)
+		if strings.Contains(got, "(empty · Enter to edit)") {
+			t.Errorf("with focus on the description it must not ask to enter it:\n%s", got)
 		}
 		if !strings.Contains(got, "▸ Description") {
 			t.Errorf("want the focused Description section:\n%s", got)
@@ -1050,6 +1078,7 @@ func TestRenderNewTaskModalSections(t *testing.T) {
 		m := openNewTask(t)
 
 		m.newTaskFieldIdx = newTaskFieldTitle
+		m.newTaskFieldActive = true
 		withCursor := ansi.Strip(m.renderNewTaskModal(""))
 
 		m.newTaskFieldIdx = newTaskFieldPriority
@@ -1068,6 +1097,7 @@ func TestRenderNewTaskModalSections(t *testing.T) {
 		m.newTaskOpen = true
 		m.newTaskProject = "api"
 		m.newTaskFieldIdx = newTaskFieldAssignee
+		m.newTaskFieldActive = true
 		m.newTaskAssignee = ""
 
 		got := ansi.Strip(m.renderNewTaskModal(""))
@@ -1093,6 +1123,7 @@ func TestRenderNewTaskModalSections(t *testing.T) {
 		m.newTaskTagInput = "a" // matches, so the dropdown has content
 
 		m.newTaskFieldIdx = newTaskFieldTags
+		m.newTaskFieldActive = true
 		got := ansi.Strip(m.renderNewTaskModal(""))
 		if !strings.Contains(got, "▸ Tags") {
 			t.Errorf("want the focused Tags row:\n%s", got)
@@ -1178,13 +1209,14 @@ func TestNewTaskSyncFocusFollowsActiveField(t *testing.T) {
 	}
 }
 
-// Tab from Tags confirms the half-typed tag instead of losing it.
+// Leaving Tags with Enter confirms the half-typed tag instead of losing it.
 func TestNewTaskMoveFieldCommitsPendingTag(t *testing.T) {
 	m := openNewTask(t)
 	m.newTaskFieldIdx = newTaskFieldTags
+	m.newTaskFieldActive = true
 	m.newTaskTagInput = "pending"
 
-	m, _ = ntKey(m, "tab")
+	m, _ = ntKey(m, "enter")
 
 	if len(m.newTaskTags) != 1 || m.newTaskTags[0] != "pending" {
 		t.Errorf("tags = %v, want [pending]", m.newTaskTags)

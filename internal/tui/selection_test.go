@@ -448,10 +448,10 @@ func TestHandleOffdayFormKeyFieldNavigation(t *testing.T) {
 		key  string
 		want int
 	}{
-		{"tab advances", 0, "tab", 1},
-		{"tab wraps around", 2, "tab", 0},
-		{"shift+tab goes back", 1, "shift+tab", 0},
-		{"shift+tab wraps around", 0, "shift+tab", 2},
+		{"j advances", 0, "j", 1},
+		{"j wraps around", 2, "j", 0},
+		{"k goes back", 1, "k", 0},
+		{"k wraps around", 0, "k", 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -482,6 +482,7 @@ func TestHandleOffdayFormKeyWritesIntoTheActiveField(t *testing.T) {
 			m := newTestModel(t)
 			m.offdayFormOpen = true
 			m.offdayFormField = tt.field
+			m.offdayFormActive = true
 
 			got, _ := m.handleOffdayFormKey(tt.key)
 			if v := tt.check(got.(Model)); v != "a" {
@@ -507,7 +508,7 @@ func TestHandleOffdayFormKeyValidations(t *testing.T) {
 		m.assigneeIdx = -1
 		m.offdayStartInput = "2026-07-28"
 
-		got, cmd := m.handleOffdayFormKey("enter")
+		got, cmd := m.handleOffdayFormKey("ctrl+s")
 		if cmd == nil {
 			t.Error("it should emit an error toast")
 		}
@@ -522,7 +523,7 @@ func TestHandleOffdayFormKeyValidations(t *testing.T) {
 		m.assigneeIdx = 0
 		m.offdayStartInput = ""
 
-		got, cmd := m.handleOffdayFormKey("enter")
+		got, cmd := m.handleOffdayFormKey("ctrl+s")
 		if cmd == nil {
 			t.Error("it should emit an error toast")
 		}
@@ -541,10 +542,10 @@ func TestHandleProjectModalKeyFieldNavigation(t *testing.T) {
 		key  string
 		want int
 	}{
-		{"tab advances", 0, "tab", 1},
-		{"tab wraps around", 2, "tab", 0},
-		{"shift+tab goes back", 1, "shift+tab", 0},
-		{"shift+tab wraps around", 0, "shift+tab", 2},
+		{"j advances", 0, "j", 1},
+		{"j wraps around", 2, "j", 0},
+		{"k goes back", 1, "k", 0},
+		{"k wraps around", 0, "k", 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -574,6 +575,7 @@ func TestHandleProjectModalKeyWritesIntoTheActiveField(t *testing.T) {
 			m := newTestModel(t)
 			m.projectModalOpen = true
 			m.projectModalField = tt.field
+			m.projectModalActive = true
 			m.projectNameInput = ""
 			m.projectWorkflowInput = ""
 			m.projectListOrderInput = ""
@@ -601,7 +603,7 @@ func TestHandleProjectModalKeyEnter(t *testing.T) {
 		m.projectModalOpen = true
 		m.projectNameInput = "   "
 
-		got, cmd := m.handleProjectModalKey("enter")
+		got, cmd := m.handleProjectModalKey("ctrl+s")
 		if cmd == nil {
 			t.Error("it should emit an error toast")
 		}
@@ -618,7 +620,7 @@ func TestHandleProjectModalKeyEnter(t *testing.T) {
 		m.projectWorkflowInput = "backlog,todo,done"
 		m.projectListOrderInput = ""
 
-		got, cmd := m.handleProjectModalKey("enter")
+		got, cmd := m.handleProjectModalKey("ctrl+s")
 		if cmd == nil {
 			t.Fatal("it should return the save cmd")
 		}
@@ -790,6 +792,7 @@ func TestRenderOffdayFormMarksTheActiveField(t *testing.T) {
 			m.assigneeIdx = 0
 			m.offdayFormOpen = true
 			m.offdayFormField = tt.field
+			m.offdayFormActive = true
 			m.offdayStartInput = "2026-07-28"
 			m.offdayEndInput = "2026-08-01"
 			m.offdayNoteInput = "note"

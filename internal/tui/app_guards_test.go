@@ -75,19 +75,19 @@ func TestListActionKeysActWithValidCursor(t *testing.T) {
 // The toast takes one line, so adding it instead of subtracting it changes how
 // many task rows fit in the box.
 //
-// At a height of 19 the difference falls right on the edge: with toast 3 task
-// rows are painted, without toast 4. The numbers are literals, not derived: if
+// At a height of 19 the difference falls right on the edge: with toast 2 task
+// rows are painted, without toast 3. The numbers are literals, not derived: if
 // someone changes the layout's height split the test has to be updated by hand,
-// which is exactly what is wanted. (The List dropped s/d/x for m/M, so its 14
-// actions fit in two rows of keybindsPerRow again: the bar lost a row and the
-// edge shifted back up.)
+// which is exactly what is wanted. (The List separated f and /, so its 15
+// actions take three rows of keybindsPerRow and the bar gained a row, which
+// moved the edge down by one.)
 func TestViewBudgetCountsToastLine(t *testing.T) {
 	for _, tt := range []struct {
 		toast string
 		want  int
 	}{
-		{"saved", 3},
-		{"", 4},
+		{"saved", 2},
+		{"", 3},
 	} {
 		t.Run("toast="+tt.toast, func(t *testing.T) {
 			m := newTestModel(t)

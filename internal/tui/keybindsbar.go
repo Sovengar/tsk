@@ -168,9 +168,10 @@ func (s KeybindsBar) renderOverlay() []string {
 		return s.renderRows(filterKeybinds())
 	case overlayProject:
 		return s.renderRows([]keybind{
-			{"Enter", "save"},
-			{"Esc", "cancel"},
-			{"Tab", "next field"},
+			{"↑↓/jk", "field"},
+			{"Enter", "enter / next"},
+			{"Ctrl+S", "save"},
+			{"Esc", "back"},
 		})
 	case overlayConfirm:
 		return s.renderRows([]keybind{
@@ -201,15 +202,17 @@ func (s KeybindsBar) renderOverlay() []string {
 		})
 	case overlayOffdayForm:
 		return s.renderRows([]keybind{
-			{"Enter", "save"},
-			{"Tab", "next field"},
-			{"Esc", "cancel"},
+			{"↑↓/jk", "field"},
+			{"Enter", "enter / next"},
+			{"Ctrl+S", "save"},
+			{"Esc", "back"},
 		})
 	case overlayAskAI:
 		return s.renderRows([]keybind{
-			{"↑↓/j/k", "move"},
-			{"/", "model search"},
+			{"↑↓/jk", "value"},
+			{"h/l ←→", "field"},
 			{"Tab", "effort"},
+			{"/ Enter", "models"},
 			{"Enter", "handoff"},
 			{"Esc", "close"},
 		})

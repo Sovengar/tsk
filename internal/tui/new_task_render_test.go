@@ -24,6 +24,7 @@ func newTaskRender(t *testing.T, field int) string {
 	next, _ := press(m, "i") // open the form
 	next.width = 120
 	next.newTaskFieldIdx = field
+	next.newTaskFieldActive = true
 	next.newTaskTitle = "my title"
 	next.newTaskAssignee = "@john"
 	return ansi.Strip(next.renderNewTaskModal(""))

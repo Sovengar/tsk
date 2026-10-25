@@ -69,9 +69,9 @@ func TestAddOffdayFromModal(t *testing.T) {
 	m.offdayStartInput = "2026-09-01"
 	m.offdayEndInput = "2026-09-05"
 
-	m, cmd := press(m, "enter")
+	m, cmd := press(m, "ctrl+s")
 	if cmd == nil {
-		t.Fatal("enter must emit the create command")
+		t.Fatal("ctrl+s must emit the create command")
 	}
 	saved, ok := mustMsg(t, cmd).(offdaySavedMsg)
 	if !ok || saved.err != nil {
@@ -104,9 +104,9 @@ func TestAddOffdayInvalidDateKeepsFormOpen(t *testing.T) {
 	m.openOffdayForm()
 	m.offdayStartInput = "not-a-date"
 
-	m, cmd := press(m, "enter")
+	m, cmd := press(m, "ctrl+s")
 	if cmd == nil {
-		t.Fatal("enter must emit the create command")
+		t.Fatal("ctrl+s must emit the create command")
 	}
 	saved, ok := mustMsg(t, cmd).(offdaySavedMsg)
 	if !ok || saved.err == nil {

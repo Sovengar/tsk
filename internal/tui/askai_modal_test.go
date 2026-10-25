@@ -244,7 +244,7 @@ func TestAskAISelectLaunches(t *testing.T) {
 
 	m, cmd := press(m, "enter")
 	if m.askAIOpen {
-		t.Error("selecting a harness must close the picker")
+		t.Error("enter on the harness must close the picker and hand off")
 	}
 	msg := mustMsg(t, cmd)
 	if _, ok := msg.(askLaunchedMsg); !ok {
@@ -273,10 +273,12 @@ func TestAskAISelectsModelAndThinkingPerTask(t *testing.T) {
 	t.Cleanup(func() { loadAskAIOptions = origOptions })
 	m := askModel(t, askConfig("opencode"))
 	m, _ = press(m, "a")
-	for _, key := range []string{"/", "down", "enter", "tab"} {
+	// Focus the model (l), open its picker (enter), move it (j), close it
+	// (enter), cycle the effort (Tab) and hand off (ctrl+s).
+	for _, key := range []string{"l", "enter", "j", "enter", "tab"} {
 		m, _ = press(m, key)
 	}
-	_, cmd := press(m, "enter")
+	_, cmd := press(m, "ctrl+s")
 	if _, ok := mustMsg(t, cmd).(askLaunchedMsg); !ok {
 		t.Fatal("model/thinking selection must launch the handoff")
 	}
@@ -304,7 +306,7 @@ func TestAskAILaunchErrorToast(t *testing.T) {
 	m := askModel(t, askConfig("opencode"))
 	m, _ = press(m, "a")
 
-	m, cmd := press(m, "enter")
+	m, cmd := press(m, "ctrl+s")
 	msg := mustMsg(t, cmd)
 	updated, toastCmd := m.Update(msg)
 
@@ -351,19 +353,30 @@ func TestAskAISelectionPrefixMarksCursor(t *testing.T) {
 	m := askModel(t, askConfig("aaa", "bbb"))
 	m, _ = press(m, "a")
 
-	raw := m.renderAskAIModal("base")
-	out := ansi.Strip(raw)
+	out := ansi.Strip(m.renderAskAIModal("base"))
 	if !strings.Contains(out, "> aaa") {
 		t.Errorf("the cursor row must carry the selection prefix:\n%s", out)
 	}
 	if strings.Contains(out, "> bbb") {
 		t.Errorf("a non-selected row must not carry the selection prefix:\n%s", out)
 	}
-	// The cursor row is the styled one: without this the style branch's
-	// negation is invisible once the ANSI codes are stripped.
-	selected := "> aaa" + askAISeparator + m.askAIModel + askAISeparator + m.askAIThinking
-	if !strings.Contains(raw, styleSelected.Render(selected)) {
-		t.Error("the cursor row must be rendered with the selected style")
+	// Only the focused field carries the cursor style.
+	row := m.askAISelectedRow()
+	if !strings.Contains(row, styleSelected.Render("aaa")) {
+		t.Error("the focused field must be highlighted")
+	}
+	if m.askAIModel != "" && strings.Contains(row, styleSelected.Render(m.askAIModel)) {
+		t.Error("a field without the focus must not be highlighted")
+	}
+
+	// Moving the focus highlights the model instead of the harness.
+	m.askAIFocus = askAIFieldModel
+	row = m.askAISelectedRow()
+	if strings.Contains(row, styleSelected.Render("aaa")) {
+		t.Error("the harness must lose the highlight when the focus leaves it")
+	}
+	if m.askAIModel != "" && !strings.Contains(row, styleSelected.Render(m.askAIModel)) {
+		t.Error("the model must take the highlight when it gets the focus")
 	}
 }
 
@@ -429,7 +442,7 @@ func TestAskAIViewRendersOverlayAndTitle(t *testing.T) {
 	if !strings.Contains(out, "Keybinds · Ask AI") {
 		t.Errorf("view does not switch the keybinds bar to Ask AI:\n%s", out)
 	}
-	for _, want := range []string{"model search", "effort", "handoff", "close"} {
+	for _, want := range []string{"value", "field", "effort", "models", "handoff", "close"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Ask AI keybinds are missing %q:\n%s", want, out)
 		}
@@ -483,5 +496,175 @@ func TestAskAIFromKanban(t *testing.T) {
 	m, _ = press(m, "a")
 	if !m.askAIOpen {
 		t.Error("a from the kanban must open the picker")
+	}
+}
+
+// stubAskAIOptions makes the model and effort options deterministic.
+func stubAskAIOptions(t *testing.T, models, thinking []string) {
+	t.Helper()
+	orig := loadAskAIOptions
+	loadAskAIOptions = func(string) harness.ModelOptions {
+		return harness.ModelOptions{Models: models, Thinking: thinking}
+	}
+	t.Cleanup(func() { loadAskAIOptions = orig })
+}
+
+// The arrows move the value of the focused field, never the focus itself.
+func TestAskAIArrowsMoveTheFocusedValue(t *testing.T) {
+	stubAskAIOptions(t, []string{"model-a", "model-b"}, []string{"low", "high"})
+	m := askModel(t, askConfig("aaa", "bbb"))
+
+	m, _ = pressKeys(t, m, "a", "j")
+	if m.askAIIndex != 1 {
+		t.Fatalf("j left the harness index at %d, want 1", m.askAIIndex)
+	}
+	if m.askAIFocus != askAIFieldHarness {
+		t.Fatalf("j moved the focus away from the harness: %d", m.askAIFocus)
+	}
+	m, _ = press(m, "k")
+	if m.askAIIndex != 0 {
+		t.Errorf("k left the harness index at %d, want 0", m.askAIIndex)
+	}
+
+	m.askAIFocus = askAIFieldModel
+	m, _ = pressKeys(t, m, "down", "up")
+	if m.askAIModel != "model-a" {
+		t.Errorf("down/up left the model at %q, want model-a", m.askAIModel)
+	}
+
+	m.askAIFocus = askAIFieldThinking
+	m, _ = pressKeys(t, m, "down", "up")
+	if m.askAIThinking != "low" {
+		t.Errorf("down/up left the effort at %q, want low", m.askAIThinking)
+	}
+}
+
+// h/l and ←/→ move the focus between harness, model and effort, wrapping.
+func TestAskAIFocusMovesWithHL(t *testing.T) {
+	m := askModel(t, askConfig("aaa"))
+	m, _ = press(m, "a")
+
+	m, _ = press(m, "l")
+	if m.askAIFocus != askAIFieldModel {
+		t.Fatalf("l left the focus at %d, want the model", m.askAIFocus)
+	}
+	m, _ = press(m, "right")
+	if m.askAIFocus != askAIFieldThinking {
+		t.Errorf("right left the focus at %d, want the effort", m.askAIFocus)
+	}
+	m, _ = press(m, "l")
+	if m.askAIFocus != askAIFieldHarness {
+		t.Errorf("l from the effort must wrap to the harness, got %d", m.askAIFocus)
+	}
+	m, _ = press(m, "left")
+	if m.askAIFocus != askAIFieldThinking {
+		t.Errorf("left from the harness must wrap to the effort, got %d", m.askAIFocus)
+	}
+	m, _ = press(m, "h")
+	if m.askAIFocus != askAIFieldModel {
+		t.Errorf("h left the focus at %d, want the model", m.askAIFocus)
+	}
+}
+
+// Enter on the model opens the model picker; on any other field it hands off.
+func TestAskAIEnterOnModelOpensThePicker(t *testing.T) {
+	stubAskAIOptions(t, []string{"model-a"}, nil)
+	m := askModel(t, askConfig("aaa"))
+
+	m, _ = pressKeys(t, m, "a", "l", "enter")
+	if !m.askAISearchOpen {
+		t.Fatal("enter on the model must open the model picker")
+	}
+	if !m.askAIOpen {
+		t.Error("opening the model picker must keep the harness picker open")
+	}
+	m, _ = press(m, "enter")
+	if m.askAISearchOpen {
+		t.Error("enter in the model picker must close it")
+	}
+	if !m.askAIOpen {
+		t.Error("closing the model picker must keep the harness picker open")
+	}
+}
+
+// The model picker opens with /, filters by typing and closes with Esc.
+func TestAskAIModelPickerKeys(t *testing.T) {
+	stubAskAIOptions(t, []string{"model-a", "model-b"}, nil)
+	m := askModel(t, askConfig("aaa"))
+
+	m, _ = pressKeys(t, m, "a", "/")
+	if !m.askAISearchOpen {
+		t.Fatal("/ must open the model picker")
+	}
+	m, _ = pressKeys(t, m, "b", "j")
+	if m.askAISearch != "b" {
+		t.Errorf("typing did not filter the picker: %q", m.askAISearch)
+	}
+	if m.askAIModel != "model-b" {
+		t.Errorf("the arrow on the filtered picker left model %q, want model-b", m.askAIModel)
+	}
+	m, _ = press(m, "backspace")
+	if m.askAISearch != "" {
+		t.Errorf("backspace left the filter at %q", m.askAISearch)
+	}
+	m, _ = press(m, "up")
+	if m.askAIModel != "model-a" {
+		t.Errorf("up left model %q, want model-a", m.askAIModel)
+	}
+	m, _ = press(m, "esc")
+	if m.askAISearchOpen {
+		t.Error("esc must close the model picker")
+	}
+}
+
+// With no models the picker stays closed instead of opening on an empty list.
+func TestAskAIModelPickerStaysClosedWithoutModels(t *testing.T) {
+	stubAskAIOptions(t, nil, nil)
+	m := askModel(t, askConfig("aaa"))
+
+	m, _ = pressKeys(t, m, "a", "/")
+	if m.askAISearchOpen {
+		t.Error("/ must not open an empty model picker")
+	}
+	m, _ = pressKeys(t, m, "l", "enter")
+	if m.askAISearchOpen {
+		t.Error("enter on the model must not open an empty picker")
+	}
+	if !m.askAIOpen {
+		t.Error("the harness picker must stay open")
+	}
+}
+
+// Tab cycles the effort forward and Shift+Tab backwards.
+func TestAskAITabCyclesEffort(t *testing.T) {
+	stubAskAIOptions(t, nil, []string{"low", "high"})
+	m := askModel(t, askConfig("aaa"))
+
+	m, _ = pressKeys(t, m, "a", "tab")
+	if m.askAIThinking != "high" {
+		t.Fatalf("Tab left the effort at %q, want high", m.askAIThinking)
+	}
+	m, _ = press(m, "shift+tab")
+	if m.askAIThinking != "low" {
+		t.Errorf("Shift+Tab left the effort at %q, want low", m.askAIThinking)
+	}
+}
+
+// Enter hands off from the effort field too.
+func TestAskAIEnterOnEffortHandsOff(t *testing.T) {
+	call := stubExecute(t)
+	m := askModel(t, askConfig("opencode"))
+	m.askAIFocus = askAIFieldThinking
+
+	m, cmd := pressKeys(t, m, "a")
+	if cmd != nil {
+		t.Fatal("opening the picker must not run anything")
+	}
+	_, cmd = press(m, "enter")
+	if _, ok := mustMsg(t, cmd).(askLaunchedMsg); !ok {
+		t.Fatal("enter on the effort must hand off")
+	}
+	if call.name != "opencode" {
+		t.Errorf("handoff harness = %q, want opencode", call.name)
 	}
 }

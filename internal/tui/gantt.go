@@ -241,10 +241,17 @@ func (m Model) handleGanttKey(key string) (tea.Model, tea.Cmd) {
 
 	switch key {
 	case "/":
+		return m, m.openSearch()
+	case "f":
 		return m, m.openFilterModal()
 	case "tab":
 		// Switch project by cycling the Project filter, as in the Dashboard.
 		m.cycleProjectFilter(1)
+		m.ganttCursor = 0
+		m.snapGanttCursor()
+	case "shift+tab":
+		// Same cycle, backwards.
+		m.cycleProjectFilter(-1)
 		m.ganttCursor = 0
 		m.snapGanttCursor()
 	case "j", "down":

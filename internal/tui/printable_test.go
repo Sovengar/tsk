@@ -32,15 +32,15 @@ var edgeKeys = []struct {
 	{"DEL (127)", "\x7f", false, 0},
 }
 
-// The filter opens with "/" and types into the field that has the focus,
+// The filter opens with "f" and types into the field that has the focus,
 // which on open is the first one.
 func openFilter(t *testing.T) *Model {
 	t.Helper()
 	m := newTestModel(t)
 	m.currentView = viewList
-	opened, _ := pressKeys(t, m, "/")
-	if !opened.filterOpen {
-		t.Fatal("the filter modal did not open with /")
+	opened, _ := pressKeys(t, m, "f", "enter")
+	if !opened.filterOpen || !opened.filterFieldActive {
+		t.Fatal("the filter modal did not open with f and enter")
 	}
 	return opened
 }

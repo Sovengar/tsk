@@ -64,6 +64,7 @@ func (m *Model) openProjectModal(edit bool) tea.Cmd {
 	m.projectModalOpen = true
 	m.projectModalEdit = edit
 	m.projectModalField = 0
+	m.projectModalActive = false
 	if !edit {
 		m.projectNameInput = ""
 		m.projectWorkflowInput = strings.Join(model.DefaultWorkflow, ",")
@@ -104,30 +105,46 @@ func editTextInput(target *string, key string) {
 	}
 }
 
-// handleProjectModalKey processes project modal keys.
+// projectModalFieldCount is the number of fields of the project form.
+const projectModalFieldCount = 3
+
+// handleProjectModalKey processes the project modal's keys. With no field
+// entered, jk/↑↓ move the field cursor and Enter enters the field under it.
+// Inside a field, Enter leaves it for the next one and Ctrl+S saves.
 func (m Model) handleProjectModalKey(key string) (tea.Model, tea.Cmd) {
-	const numFields = 3
+	if !m.projectModalActive {
+		switch key {
+		case "esc":
+			m.projectModalOpen = false
+			return m, nil
+		case "ctrl+s":
+			return m.projectModalSubmit()
+		case "j", "down":
+			m.projectModalField = (m.projectModalField + 1) % projectModalFieldCount
+			return m, nil
+		case "k", "up":
+			m.projectModalField = (m.projectModalField + projectModalFieldCount - 1) % projectModalFieldCount
+			return m, nil
+		case "enter":
+			m.projectModalActive = true
+			return m, nil
+		}
+		return m, nil
+	}
 
 	switch key {
 	case "esc":
-		m.projectModalOpen = false
+		// Esc leaves the field and returns to the field cursor.
+		m.projectModalActive = false
 		return m, nil
-	case "tab":
-		m.projectModalField = (m.projectModalField + 1) % numFields
-		return m, nil
-	case "shift+tab":
-		m.projectModalField = (m.projectModalField + numFields - 1) % numFields
-		return m, nil
+	case "ctrl+s":
+		return m.projectModalSubmit()
 	case "enter":
-		name := strings.TrimSpace(m.projectNameInput)
-		if name == "" {
-			return m, m.setToast("Project name is required", "error")
-		}
-		original := m.projectEditingName
-		m.projectModalOpen = false
-		return m, m.saveProjectCmd(m.projectModalEdit, original, name,
-			strings.TrimSpace(m.projectWorkflowInput),
-			strings.TrimSpace(m.projectListOrderInput))
+		m.projectModalActive = false
+		m.projectModalField = (m.projectModalField + 1) % projectModalFieldCount
+		return m, nil
+	case "tab", "shift+tab":
+		return m, nil
 	}
 
 	var target *string
@@ -141,6 +158,19 @@ func (m Model) handleProjectModalKey(key string) (tea.Model, tea.Cmd) {
 	}
 	editTextInput(target, key)
 	return m, nil
+}
+
+// projectModalSubmit validates the name and persists the project.
+func (m Model) projectModalSubmit() (tea.Model, tea.Cmd) {
+	name := strings.TrimSpace(m.projectNameInput)
+	if name == "" {
+		return m, m.setToast("Project name is required", "error")
+	}
+	original := m.projectEditingName
+	m.projectModalOpen = false
+	return m, m.saveProjectCmd(m.projectModalEdit, original, name,
+		strings.TrimSpace(m.projectWorkflowInput),
+		strings.TrimSpace(m.projectListOrderInput))
 }
 
 // saveProjectCmd persists the creation or editing of a project.
@@ -295,23 +325,26 @@ func (m *Model) renderProjectModal(content string) string {
 		hint = "(comma-separated; empty = keep current)"
 	}
 
+	nameActive := m.projectModalActive && m.projectModalField == 0
 	name := m.projectNameInput
-	if m.projectModalField == 0 {
+	if nameActive {
 		name += "_"
 	}
+	workflowActive := m.projectModalActive && m.projectModalField == 1
 	workflow := m.projectWorkflowInput
-	if m.projectModalField == 1 {
+	if workflowActive {
 		workflow += "_"
 	}
+	listOrderActive := m.projectModalActive && m.projectModalField == 2
 	listOrder := m.projectListOrderInput
-	if m.projectModalField == 2 {
+	if listOrderActive {
 		listOrder += "_"
 	}
 
 	lines := []string{
-		fmt.Sprintf("  Name:       %s", name),
-		fmt.Sprintf("  Workflow:   %s", workflow),
-		fmt.Sprintf("  List order: %s", listOrder),
+		"  " + fieldMarker(m.projectModalActive, m.projectModalField == 0) + fmt.Sprintf("Name:       %s", name),
+		"  " + fieldMarker(m.projectModalActive, m.projectModalField == 1) + fmt.Sprintf("Workflow:   %s", workflow),
+		"  " + fieldMarker(m.projectModalActive, m.projectModalField == 2) + fmt.Sprintf("List order: %s", listOrder),
 		styleDim.Render("              " + hint),
 	}
 

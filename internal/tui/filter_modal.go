@@ -60,7 +60,9 @@ func (m *Model) filterFieldOptions(field int) []string {
 	case filterFieldPriority:
 		return []string{"all", "none", "low", "med", "high"}
 	case filterFieldTag:
-		return append([]string{"all"}, m.uniqueTags()...)
+		// The tags are a per-project thing too: with one selected, only its own
+		// are offered; in "all projects", the union.
+		return append([]string{"all"}, m.tagsForProject(m.filterProject)...)
 	}
 	return nil
 }
@@ -134,9 +136,10 @@ func (m *Model) filterApplySelection(field int, value string) {
 			m.filterProject = value
 		}
 		projectChanged = true
-		// The status is per-project: if the active filter no longer exists in
-		// the new context (another project, or the intersection in "all"), it is cleared.
+		// The status and the tag are per-project: if the active filter no longer
+		// exists in the new context, it is cleared.
 		m.clearInvalidStatusFilter()
+		m.clearInvalidTagFilter()
 	case filterFieldStatus:
 		if value == "all" {
 			m.filterStatus = ""
@@ -219,6 +222,18 @@ func nextOption(opts []string, current string, dir int) string {
 	return opts[cycleIndex(idx, len(opts), dir)]
 }
 
+// clearInvalidTagFilter clears the tag filter when the tag is no longer in
+// use in the current project's context. "" (all) is always valid.
+func (m *Model) clearInvalidTagFilter() {
+	if m.filterTag == "" {
+		return
+	}
+	if slices.Contains(m.tagsForProject(m.filterProject), m.filterTag) {
+		return
+	}
+	m.filterTag = ""
+}
+
 // clearInvalidStatusFilter clears the status filter when it stopped existing
 // in the current project's context. "" (all) is always valid.
 func (m *Model) clearInvalidStatusFilter() {
@@ -237,20 +252,20 @@ func (m *Model) clearInvalidStatusFilter() {
 // the keybinds bar and the help modal.
 func filterKeybinds() []keybind {
 	return []keybind{
-		{"Tab", "field"},
-		{"↑↓", "option"},
+		{"↑↓/jk", "field"},
 		{"←→", "cycle"},
-		{"Enter", "apply / next"},
+		{"Enter", "enter"},
 		{"Ctrl+R", "reset"},
-		{"Esc", "close"},
+		{"Esc", "back"},
 	}
 }
 
-// openFilterModal opens the modal with focus on the first field and the
-// option cursor synced with the applied value.
+// openFilterModal opens the modal with the cursor on the first field, no
+// field entered, and the option cursor synced with the applied value.
 func (m *Model) openFilterModal() tea.Cmd {
 	m.filterOpen = true
 	m.filterFieldIdx = filterFieldProject
+	m.filterFieldActive = false
 	m.filterSyncOption()
 	return nil
 }
@@ -344,25 +359,53 @@ func (m *Model) resetFilters() {
 	m.filterSyncOption()
 }
 
-// handleFilterModalKey processes the filter modal's keys. Tab/Shift+Tab
-// move the focus, ↑↓ move the option cursor, ←→ cycle the applied value
-// live, typing filters the options, Enter applies and advances, Ctrl+R
-// resets everything and Esc closes.
+// handleFilterModalKey processes the filter modal's keys. With no field
+// entered, jk/↑↓ move the field cursor and Enter enters the field under it.
+// Inside a field, jk/↑↓ move the option cursor, ←→ cycle the applied value
+// live, typing filters the options, Enter applies and leaves for the next
+// field, Ctrl+R resets everything and Esc closes.
 func (m Model) handleFilterModalKey(key string) (tea.Model, tea.Cmd) {
+	if !m.filterFieldActive {
+		return m.handleFilterFieldCursorKey(key)
+	}
+	return m.handleFilterFieldKey(key)
+}
+
+// handleFilterFieldCursorKey navigates the field list without entering any
+// field: the options of the field under the cursor are only previewed.
+func (m Model) handleFilterFieldCursorKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
 		m.filterOpen = false
 		return m, nil
-
-	case "tab":
+	case "j", "down":
 		return m.filterMoveField(1)
-	case "shift+tab":
+	case "k", "up":
 		return m.filterMoveField(-1)
+	case "enter":
+		m.filterFieldActive = true
+		m.filterSyncOption()
+		return m, nil
+	case "ctrl+r":
+		m.resetFilters()
+		return m, nil
+	}
+	return m, nil
+}
 
-	case "up":
+// handleFilterFieldKey edits the field that was entered.
+func (m Model) handleFilterFieldKey(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "esc":
+		// Esc leaves the field and returns to the field cursor.
+		m.filterFieldActive = false
+		m.filterSyncOption()
+		return m, nil
+
+	case "up", "k":
 		m.filterMoveOption(-1)
 		return m, nil
-	case "down":
+	case "down", "j":
 		m.filterMoveOption(1)
 		return m, nil
 
@@ -385,11 +428,8 @@ func (m Model) handleFilterModalKey(key string) (tea.Model, tea.Cmd) {
 		opts := m.filterVisibleOptions()
 		m.filterOptionIdx = clampTo(m.filterOptionIdx, len(opts))
 		m.filterApplySelection(m.filterFieldIdx, opts[m.filterOptionIdx])
-		// In the last field, Enter closes; in the rest, it advances.
-		if m.filterFieldIdx == filterFieldTag {
-			m.filterOpen = false
-			return m, nil
-		}
+		// Enter leaves the field and parks the cursor on the next one.
+		m.filterFieldActive = false
 		return m.filterMoveField(1)
 
 	case "backspace":
@@ -417,6 +457,36 @@ func (m *Model) renderFilterModal(content string) string {
 
 	fields := []int{filterFieldProject, filterFieldStatus, filterFieldAssignee, filterFieldPriority, filterFieldTag}
 
+	baseWidth := 54
+	if !m.filterFieldActive {
+		baseWidth = 80
+	}
+	totalWidth := modalWidthFor(baseWidth, w)
+	innerWidth := modalInnerWidth(totalWidth)
+
+	var lines []string
+	if m.filterFieldActive {
+		lines = m.renderFilterActiveField(fields)
+	} else {
+		lines = m.renderFilterFieldList(fields, innerWidth)
+	}
+	for i := range lines {
+		lines[i] = truncateLines(lines[i], innerWidth)
+	}
+	lines = fitModalLines(lines, filterModalMaxBodyLines, m.height)
+	title := fmt.Sprintf(" Filters · %d tasks ", len(m.filteredTasks()))
+	return overlayModal(content, renderModalBox(title, lines, totalWidth), totalWidth, w)
+}
+
+// filterModalMaxBodyLines is the semi-fixed height of the filter modal body
+// (borders excluded): the tallest state fits, and the shorter ones are padded
+// so the box does not jump while the cursor moves between fields.
+const filterModalMaxBodyLines = 13
+
+// renderFilterActiveField draws the fields with the entered one expanded in
+// place: its search input and the list of options, with the applied value (●)
+// and the cursor (▸).
+func (m *Model) renderFilterActiveField(fields []int) []string {
 	lines := []string{""}
 	for _, field := range fields {
 		focused := field == m.filterFieldIdx
@@ -462,12 +532,70 @@ func (m *Model) renderFilterModal(content string) string {
 			lines = append(lines, styleDim.Render(fmt.Sprintf("      %d/%d", m.filterOptionIdx+1, len(opts))))
 		}
 	}
+	return lines
+}
 
-	totalWidth := modalWidthFor(54, w)
-	innerWidth := modalInnerWidth(totalWidth)
-	for i := range lines {
-		lines[i] = truncateLines(lines[i], innerWidth)
+// filterLeftColumn is the width of the fields column in the two-pane view.
+const filterLeftColumn = 28
+
+// renderFilterFieldList draws the two panes of the closed-field view: the
+// fields on the left and, on the right, a preview of what the field under the
+// cursor holds. Entering the field replaces this view with the inline list.
+func (m *Model) renderFilterFieldList(fields []int, innerWidth int) []string {
+	left := []string{styleColumnHeader.Render("Fields")}
+	for _, field := range fields {
+		label := cellWidth(filterFieldLabel(field), 10)
+		current := m.filterCurrentValue(field)
+		if field == m.filterFieldIdx {
+			left = append(left, "  ▸ "+styleTitle.Render(label)+" "+styleTitle.Render(current))
+		} else {
+			left = append(left, "    "+styleStatusDesc.Render(label)+" "+styleStatusKey.Render(current))
+		}
 	}
-	title := fmt.Sprintf(" Filters · %d tasks ", len(m.filteredTasks()))
-	return overlayModal(content, renderModalBox(title, lines, totalWidth), totalWidth, w)
+
+	right := append([]string{styleColumnHeader.Render("Preview")}, m.filterPreviewLines()...)
+
+	rows := max(len(left), len(right))
+	lines := make([]string, 0, rows)
+	leftWidth := min(filterLeftColumn, innerWidth)
+	for i := range rows {
+		leftLine, rightLine := "", ""
+		if i < len(left) {
+			leftLine = left[i]
+		}
+		if i < len(right) {
+			rightLine = right[i]
+		}
+		lines = append(lines, cellWidth(leftLine, leftWidth)+"  "+rightLine)
+	}
+	return lines
+}
+
+// filterPreviewLines lists the options of the field under the cursor, with the
+// applied value marked. It is read-only: the cursor stays on the fields.
+func (m *Model) filterPreviewLines() []string {
+	opts := m.filterFieldOptions(m.filterFieldIdx)
+	current := m.filterCurrentValue(m.filterFieldIdx)
+	idx := 0
+	for i, opt := range opts {
+		if opt == current {
+			idx = i
+			break
+		}
+	}
+
+	window := filterMaxVisibleOptions + 2
+	start, end := visibleRange(idx, len(opts), window)
+	lines := make([]string, 0, end-start+1)
+	for i := start; i < end; i++ {
+		if i == idx {
+			lines = append(lines, styleStatusKey.Render("● "+opts[i]))
+			continue
+		}
+		lines = append(lines, "  "+opts[i])
+	}
+	if len(opts) > window {
+		lines = append(lines, styleDim.Render(fmt.Sprintf("%d/%d", idx+1, len(opts))))
+	}
+	return lines
 }

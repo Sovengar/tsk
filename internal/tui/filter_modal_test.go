@@ -149,7 +149,7 @@ func TestFilterStatusOptionsAllProjectsIsIntersection(t *testing.T) {
 // TestFilterModalOpenResetsSearchAndCursor verifies the initial state on open.
 func TestFilterModalOpenResetsSearchAndCursor(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "/")
+	m, _ = press(m, "f")
 
 	if !m.filterOpen {
 		t.Fatal("/ must open the filter modal")
@@ -163,12 +163,16 @@ func TestFilterModalOpenResetsSearchAndCursor(t *testing.T) {
 	if m.filterOptionIdx != 0 {
 		t.Errorf("initial cursor = %d, want 0 (all)", m.filterOptionIdx)
 	}
+	if m.filterFieldActive {
+		t.Error("a field was entered on open, want no field selected")
+	}
 }
 
-// TestFilterModalCursorNavigation verifies ↑↓ over the list of options.
+// TestFilterModalCursorNavigation verifies ↑↓ over the list of options once
+// the field was entered.
 func TestFilterModalCursorNavigation(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "/")
+	m, _ = pressKeys(t, m, "f", "enter")
 
 	m, _ = press(m, "down")
 	if m.filterOptionIdx != 1 {
@@ -189,7 +193,7 @@ func TestFilterModalCursorNavigation(t *testing.T) {
 // and Enter applies the first match and advances the field.
 func TestFilterModalFuzzySearchApplies(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "/")
+	m, _ = pressKeys(t, m, "f", "enter")
 
 	m, _ = press(m, "w") // filters Project to [web, all]
 	opts := m.filterVisibleOptions()
@@ -205,19 +209,27 @@ func TestFilterModalFuzzySearchApplies(t *testing.T) {
 	}
 }
 
-// TestFilterModalEnterLastFieldCloses verifies that Enter on Tag closes the modal.
-func TestFilterModalEnterLastFieldCloses(t *testing.T) {
+// TestFilterModalEnterLastFieldWraps verifies that Enter inside the last
+// field applies the value, leaves the field and parks the cursor on the first
+// one, keeping the modal open.
+func TestFilterModalEnterLastFieldWraps(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "/")
-	for i := 0; i < 4; i++ {
-		m, _ = press(m, "tab")
+	m, _ = press(m, "f")
+	for range 4 {
+		m, _ = press(m, "j")
 	}
 	if m.filterFieldIdx != filterFieldTag {
 		t.Fatalf("field = %d, want tag", m.filterFieldIdx)
 	}
-	m, _ = press(m, "enter")
-	if m.filterOpen {
-		t.Error("Enter on the last field must close the modal")
+	m, _ = pressKeys(t, m, "enter", "enter")
+	if !m.filterOpen {
+		t.Error("Enter inside the last field must not close the modal")
+	}
+	if m.filterFieldActive {
+		t.Error("Enter inside the last field must leave the field")
+	}
+	if m.filterFieldIdx != filterFieldProject {
+		t.Errorf("after the last field the cursor went to %d, want project", m.filterFieldIdx)
 	}
 }
 
@@ -231,7 +243,7 @@ func TestFilterModalReset(t *testing.T) {
 	m.filterPriority = 3
 	m.filterTag = "bug"
 
-	m, _ = press(m, "/")
+	m, _ = press(m, "f")
 	m, _ = send(m, ctrlR())
 
 	if m.filterProject != "" || m.filterAssignee != "" || m.filterTag != "" {
@@ -249,7 +261,7 @@ func TestFilterModalReset(t *testing.T) {
 // TestFilterModalCycleRemainsLive verifies that ←→ keeps applying live.
 func TestFilterModalCycleRemainsLive(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "/")
+	m, _ = pressKeys(t, m, "f", "enter")
 	m, _ = press(m, "right") // all -> api
 	if m.filterProject != "api" {
 		t.Errorf("project = %q, want api", m.filterProject)
@@ -260,7 +272,7 @@ func TestFilterModalCycleRemainsLive(t *testing.T) {
 // live count and does not overflow the terminal width.
 func TestFilterModalRenders(t *testing.T) {
 	m := newTestModel(t)
-	m, _ = press(m, "/")
+	m, _ = press(m, "f")
 
 	out := ansi.Strip(m.View().Content)
 	for _, want := range []string{"Filters", "Project", "Status", "Assignee", "Priority", "Tag"} {

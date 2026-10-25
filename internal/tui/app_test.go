@@ -402,15 +402,16 @@ func TestListPriorityFilter(t *testing.T) {
 	}
 
 	// Open filter modal
-	m, _ = press(m, "/")
+	m, _ = press(m, "f")
 	if !m.filterOpen {
-		t.Fatal("/ should open filter modal")
+		t.Fatal("f should open filter modal")
 	}
 
-	// Navigate to priority field (index 3): Tab x3
-	m, _ = press(m, "tab")
-	m, _ = press(m, "tab")
-	m, _ = press(m, "tab")
+	// Navigate to priority field (index 3): j x3, then enter it.
+	m, _ = press(m, "j")
+	m, _ = press(m, "j")
+	m, _ = press(m, "j")
+	m, _ = press(m, "enter")
 	if m.filterFieldIdx != filterFieldPriority {
 		t.Fatalf("field idx = %d, want %d", m.filterFieldIdx, filterFieldPriority)
 	}
@@ -448,11 +449,12 @@ func TestListAssigneeFilter(t *testing.T) {
 	m, _ = press(m, "1") // list view
 
 	// Open filter modal
-	m, _ = press(m, "/")
+	m, _ = press(m, "f")
 
-	// Navigate to assignee field (index 2): Tab x2
-	m, _ = press(m, "tab")
-	m, _ = press(m, "tab")
+	// Navigate to assignee field (index 2): j x2, then enter it.
+	m, _ = press(m, "j")
+	m, _ = press(m, "j")
+	m, _ = press(m, "enter")
 	if m.filterFieldIdx != filterFieldAssignee {
 		t.Fatalf("field idx = %d, want %d", m.filterFieldIdx, filterFieldAssignee)
 	}
@@ -470,8 +472,8 @@ func TestListAssigneeFilter(t *testing.T) {
 		}
 	}
 
-	// closes the modal
-	_, _ = press(m, "enter")
+	// leaves the field and closes the modal
+	_, _ = press(m, "esc")
 }
 
 // --- Kanban navigation ---

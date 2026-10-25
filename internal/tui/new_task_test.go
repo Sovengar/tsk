@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"tsk/internal/model"
 )
@@ -39,9 +38,9 @@ func TestNewTaskOpenDefaults(t *testing.T) {
 	}
 }
 
-// TestNewTaskTabNavigation verifies that Tab/Shift+Tab walk the fields in
-// order and wrap around without getting lost.
-func TestNewTaskTabNavigation(t *testing.T) {
+// TestNewTaskFieldCursorNavigation verifies that j/k (and arrows) walk the
+// fields in order and wrap around, and that Tab no longer moves them.
+func TestNewTaskFieldCursorNavigation(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
 
@@ -53,15 +52,24 @@ func TestNewTaskTabNavigation(t *testing.T) {
 		newTaskFieldPriority,
 	}
 	for _, want := range order {
-		m, _ = press(m, "tab")
+		m, _ = press(m, "j")
 		if m.newTaskFieldIdx != want {
-			t.Fatalf("after tab: field = %d, want %d", m.newTaskFieldIdx, want)
+			t.Fatalf("after j: field = %d, want %d", m.newTaskFieldIdx, want)
 		}
 	}
 
-	m, _ = send(m, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+	m, _ = press(m, "k")
 	if m.newTaskFieldIdx != newTaskFieldTags {
-		t.Errorf("shift+tab from priority: field = %d, want tags", m.newTaskFieldIdx)
+		t.Errorf("k from priority: field = %d, want tags", m.newTaskFieldIdx)
+	}
+	m, _ = press(m, "up")
+	if m.newTaskFieldIdx != newTaskFieldAssignee {
+		t.Errorf("up from tags: field = %d, want assignee", m.newTaskFieldIdx)
+	}
+
+	m, _ = press(m, "tab")
+	if m.newTaskFieldIdx != newTaskFieldAssignee {
+		t.Errorf("tab moved the field cursor to %d", m.newTaskFieldIdx)
 	}
 }
 
@@ -69,6 +77,7 @@ func TestNewTaskTabNavigation(t *testing.T) {
 func TestNewTaskPriorityKeys(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
+	m, _ = pressKeys(t, m, "enter") // enter Priority
 
 	m, _ = press(m, "3")
 	if m.newTaskPriority != 3 {
@@ -93,6 +102,7 @@ func TestNewTaskPriorityKeys(t *testing.T) {
 func TestNewTaskTypingOnPriorityJumpsToTitle(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
+	m, _ = press(m, "enter") // enter Priority
 
 	m, _ = press(m, "H")
 	if m.newTaskFieldIdx != newTaskFieldTitle {
@@ -108,11 +118,13 @@ func TestNewTaskRequiresTitle(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
 
-	m, _ = press(m, "enter") // priority -> title
-	if m.newTaskFieldIdx != newTaskFieldTitle {
-		t.Fatalf("enter on priority must advance to Title, got %d", m.newTaskFieldIdx)
+	m, _ = press(m, "j")     // cursor: title
+	m, _ = press(m, "enter") // enter Title
+	if m.newTaskFieldIdx != newTaskFieldTitle || !m.newTaskFieldActive {
+		t.Fatalf("j + enter must enter Title, got field %d active %v",
+			m.newTaskFieldIdx, m.newTaskFieldActive)
 	}
-	m, _ = press(m, "enter") // submit without a title
+	m, _ = press(m, "ctrl+s") // submit without a title
 	if !m.newTaskOpen {
 		t.Fatal("the modal must not close without a title")
 	}
@@ -126,7 +138,7 @@ func TestNewTaskRequiresTitle(t *testing.T) {
 func TestNewTaskSubmitsFromTitle(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
-	m, _ = press(m, "tab") // title
+	m, _ = pressKeys(t, m, "j", "enter") // title
 
 	for _, ch := range []string{"B", "u", "g"} {
 		m, _ = press(m, ch)
@@ -135,9 +147,9 @@ func TestNewTaskSubmitsFromTitle(t *testing.T) {
 		t.Fatalf("title = %q, want Bug", m.newTaskTitle)
 	}
 
-	m, cmd := press(m, "enter")
+	m, cmd := press(m, "ctrl+s")
 	if m.newTaskOpen {
-		t.Error("Enter on Title must close the modal")
+		t.Error("Ctrl+S on Title must close the modal")
 	}
 	if cmd == nil {
 		t.Error("the creation cmd was expected")
@@ -148,15 +160,16 @@ func TestNewTaskSubmitsFromTitle(t *testing.T) {
 }
 
 // TestNewTaskDescriptionUsesInlineEditor verifies that the description is
-// edited with the embedded textarea and that Enter inserts a break instead of creating.
+// edited with the embedded textarea and that Enter leaves the field instead of
+// creating the task.
 func TestNewTaskDescriptionUsesInlineEditor(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
-	m, _ = press(m, "tab") // title
-	m, _ = press(m, "tab") // description
+	m, _ = pressKeys(t, m, "j", "j", "enter") // description
 
-	if m.newTaskFieldIdx != newTaskFieldDescription {
-		t.Fatalf("field = %d, want description", m.newTaskFieldIdx)
+	if m.newTaskFieldIdx != newTaskFieldDescription || !m.newTaskFieldActive {
+		t.Fatalf("field = %d active %v, want description entered",
+			m.newTaskFieldIdx, m.newTaskFieldActive)
 	}
 
 	m, _ = press(m, "h")
@@ -168,8 +181,14 @@ func TestNewTaskDescriptionUsesInlineEditor(t *testing.T) {
 	if !m.newTaskOpen {
 		t.Fatal("Enter on Description must not create")
 	}
-	if !strings.Contains(m.newTaskTextarea.Value(), "\n") {
-		t.Errorf("Enter must insert a line break, got %q", m.newTaskTextarea.Value())
+	if m.newTaskFieldActive {
+		t.Error("Enter on Description must leave the field")
+	}
+	if m.newTaskFieldIdx != newTaskFieldAssignee {
+		t.Errorf("enter must park the cursor on the next field, got %d", m.newTaskFieldIdx)
+	}
+	if strings.Contains(m.newTaskTextarea.Value(), "\n") {
+		t.Errorf("Enter must not insert a line break, got %q", m.newTaskTextarea.Value())
 	}
 }
 
@@ -178,9 +197,7 @@ func TestNewTaskDescriptionUsesInlineEditor(t *testing.T) {
 func TestNewTaskAssigneeAutocomplete(t *testing.T) {
 	m := newTestModel(t)
 	m, _ = press(m, "i")
-	m, _ = press(m, "tab") // title
-	m, _ = press(m, "tab") // description
-	m, _ = press(m, "tab") // assignee
+	m, _ = pressKeys(t, m, "j", "j", "j", "enter") // assignee
 
 	// Clear the default "Me".
 	m, _ = press(m, "backspace")
@@ -207,6 +224,10 @@ func TestNewTaskAssigneeAutocomplete(t *testing.T) {
 	if !m.newTaskOpen {
 		t.Error("Enter on a suggestion must complete, not create")
 	}
+	if m.newTaskFieldActive || m.newTaskFieldIdx != newTaskFieldTags {
+		t.Errorf("Enter must leave Assignee for Tags, got field %d active %v",
+			m.newTaskFieldIdx, m.newTaskFieldActive)
+	}
 	// With the full name left, it must not repeat itself as a suggestion.
 	if got := m.assigneeSuggestions(); len(got) != 0 {
 		t.Errorf("an exact match must not be suggested: %v", got)
@@ -217,10 +238,11 @@ func TestNewTaskAssigneeAutocomplete(t *testing.T) {
 func goNewTaskTags(t *testing.T, m *Model) *Model {
 	t.Helper()
 	m, _ = press(m, "i")
-	for i := 0; i < 4; i++ {
-		m, _ = press(m, "tab")
+	for range 4 {
+		m, _ = press(m, "j")
 	}
-	if m.newTaskFieldIdx != newTaskFieldTags {
+	m, _ = press(m, "enter")
+	if m.newTaskFieldIdx != newTaskFieldTags || !m.newTaskFieldActive {
 		t.Fatalf("field = %d, want tags", m.newTaskFieldIdx)
 	}
 	return m
@@ -242,7 +264,15 @@ func TestNewTaskTagsAddAndRemove(t *testing.T) {
 	if m.newTaskTagInput != "" {
 		t.Errorf("input = %q, want empty after commit", m.newTaskTagInput)
 	}
+	if m.newTaskFieldActive {
+		t.Error("Enter on Tags must leave the field")
+	}
 
+	// Back into Tags to keep editing (the cursor wrapped to Priority).
+	for range 4 {
+		m, _ = press(m, "j")
+	}
+	m, _ = press(m, "enter")
 	m, _ = press(m, "f")
 	m, _ = press(m, ",")
 	if len(m.newTaskTags) != 2 || m.newTaskTags[1] != "f" {
@@ -255,14 +285,14 @@ func TestNewTaskTagsAddAndRemove(t *testing.T) {
 	}
 }
 
-// TestNewTaskTagsCommitOnTab verifies that leaving the field does not lose the
-// half-typed tag.
-func TestNewTaskTagsCommitOnTab(t *testing.T) {
+// TestNewTaskTagsCommitOnLeave verifies that leaving the field does not lose
+// the half-typed tag.
+func TestNewTaskTagsCommitOnLeave(t *testing.T) {
 	m := newTestModel(t)
 	m = goNewTaskTags(t, m)
 
 	m, _ = press(m, "x")
-	m, _ = press(m, "tab") // tags -> priority
+	m, _ = press(m, "enter") // tags -> priority
 	if len(m.newTaskTags) != 1 || m.newTaskTags[0] != "x" {
 		t.Errorf("tags = %v, want [x] after leaving the field", m.newTaskTags)
 	}

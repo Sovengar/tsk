@@ -193,6 +193,10 @@ func (m *Model) renderFilterBar() string {
 		parts = append(parts, styleFilterDim.Render("Priority: ")+styleStatusKey.Render("all"))
 	}
 
+	if searchPart := m.renderSearchPart(); searchPart != "" {
+		parts = append(parts, searchPart)
+	}
+
 	return "  " + strings.Join(parts, "    ")
 }
 

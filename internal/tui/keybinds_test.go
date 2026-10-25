@@ -22,13 +22,13 @@ func TestKeybindsBarRenderOverlay(t *testing.T) {
 		{overlayTag, []string{"toggle tag", "suggestion", "close"}, nil},
 		{overlayNewTask, keysOf(newTaskKeybinds()), []string{"toggle tag"}},
 		{overlayFilter, keysOf(filterKeybinds()), []string{"toggle tag"}},
-		{overlayProject, []string{"save", "cancel"}, []string{"toggle tag"}},
+		{overlayProject, []string{"save", "back"}, []string{"toggle tag"}},
 		{overlayConfirm, []string{"confirm", "cancel"}, nil},
 		{overlayDescEdit, []string{"save", "copy", "paste", "cancel"}, nil},
 		{overlayAssignee, []string{"open", "add off-day", "close"}, nil},
 		{overlayAssigneeDetail, []string{"add off-day", "delete off-day", "back"}, []string{"toggle tag"}},
-		{overlayOffdayForm, []string{"save", "next field", "cancel"}, []string{"toggle tag"}},
-		{overlayAskAI, []string{"move", "handoff", "close"}, []string{"toggle tag"}},
+		{overlayOffdayForm, []string{"save", "enter / next", "back"}, []string{"toggle tag"}},
+		{overlayAskAI, []string{"value", "field", "effort", "models", "handoff", "close"}, []string{"toggle tag"}},
 		{overlayNone, nil, []string{"confirm", "toggle tag"}},
 	}
 	for _, tt := range tests {

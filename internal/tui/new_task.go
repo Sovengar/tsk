@@ -36,13 +36,13 @@ const cursorGlyph = "▏"
 // the keybinds bar and the help modal.
 func newTaskKeybinds() []keybind {
 	return []keybind{
+		{"↑↓/jk", "field"},
+		{"Enter", "enter / next"},
 		{"Ctrl+S", "create"},
-		{"Tab", "next field"},
-		{"Enter", "next / add tag"},
-		{",", "add tag"},
-		{"↑↓", "suggestions"},
 		{"←→/1-4", "priority"},
-		{"Esc", "cancel"},
+		{"↑↓", "suggestions"},
+		{",", "add tag"},
+		{"Esc", "back"},
 	}
 }
 
@@ -125,8 +125,9 @@ func (m *Model) newTaskSyncFocus() tea.Cmd {
 	return nil
 }
 
-// newTaskMoveField completes the active suggestion (if we are on Assignee) and
-// moves the focus forward/backward between fields, respecting the textarea's focus.
+// newTaskMoveField completes the active suggestion (if we are on Assignee),
+// commits the pending tag (if we are on Tags) and moves the field cursor
+// forward/backward, blurring the textarea when it is left behind.
 func (m Model) newTaskMoveField(delta int) (tea.Model, tea.Cmd) {
 	if m.newTaskFieldIdx == newTaskFieldAssignee && m.newTaskAssigneeSuggIdx >= 0 {
 		suggs := m.assigneeSuggestions()
@@ -135,8 +136,15 @@ func (m Model) newTaskMoveField(delta int) (tea.Model, tea.Cmd) {
 		}
 		m.newTaskAssigneeSuggIdx = -1
 	}
-	// On leaving Tags, the half-typed tag is not lost.
+	// On leaving Tags the highlighted suggestion wins, and the half-typed
+	// tag is not lost.
 	if m.newTaskFieldIdx == newTaskFieldTags {
+		if m.newTaskTagSuggIdx >= 0 {
+			suggs := m.tagFieldSuggestions()
+			if inRange(m.newTaskTagSuggIdx, len(suggs)) {
+				m.newTaskTagInput = suggs[m.newTaskTagSuggIdx]
+			}
+		}
 		m.newTaskCommitTag()
 	}
 	m.newTaskFieldIdx = (m.newTaskFieldIdx + delta + newTaskFieldCount) % newTaskFieldCount
@@ -151,8 +159,9 @@ func (m Model) newTaskSubmit() (tea.Model, tea.Cmd) {
 	if title == "" {
 		m.newTaskErr = "Title is required"
 		m.newTaskFieldIdx = newTaskFieldTitle
-		m.newTaskTextarea.Blur()
-		return m, nil
+		m.newTaskFieldActive = true
+		cmd := m.newTaskSyncFocus()
+		return m, cmd
 	}
 
 	if m.newTaskFieldIdx == newTaskFieldAssignee && m.newTaskAssigneeSuggIdx >= 0 {
@@ -224,24 +233,78 @@ func (m Model) handleNewTaskPaste(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleNewTaskKey processes the task form's keys.
-//
-// Navigation: Tab/Shift+Tab move the focus. Ctrl+S creates from any field.
-// Enter advances on Priority, creates on Title, inserts a break in Description
-// and complete-or-create on Assignee; on Assignee, ↑↓ walk the suggestions.
+// handleNewTaskKey processes the task form's keys. With no field entered,
+// ↑↓/jk move the field cursor and Enter enters the field under it. Inside a
+// field, Enter leaves it and parks the cursor on the next one. Ctrl+S creates
+// the task from any state; on Assignee, ↑↓ walk the suggestions.
 func (m Model) handleNewTaskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
+	if !m.newTaskFieldActive {
+		return m.handleNewTaskCursorKey(msg.String())
+	}
+	return m.handleNewTaskFieldKey(msg)
+}
 
+// handleNewTaskCursorKey navigates the field list without entering any field.
+func (m Model) handleNewTaskCursorKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
 		m.newTaskClose()
 		return m, nil
 	case "ctrl+s":
 		return m.newTaskSubmit()
-	case "tab":
-		return m.newTaskMoveField(1)
-	case "shift+tab":
-		return m.newTaskMoveField(-1)
+	case "j", "down":
+		return m.newTaskMoveCursor(1)
+	case "k", "up":
+		return m.newTaskMoveCursor(-1)
+	case "enter":
+		m.newTaskFieldActive = true
+		cmd := m.newTaskSyncFocus()
+		return m, cmd
+	}
+	return m, nil
+}
+
+// newTaskMoveCursor moves the field cursor, keeping every field closed.
+func (m Model) newTaskMoveCursor(delta int) (tea.Model, tea.Cmd) {
+	m.newTaskFieldIdx = (m.newTaskFieldIdx + delta + newTaskFieldCount) % newTaskFieldCount
+	m.newTaskAssigneeSuggIdx = -1
+	m.newTaskTagSuggIdx = -1
+	m.newTaskTextarea.Blur()
+	return m, nil
+}
+
+// newTaskLeaveField commits the pending value of the entered field, closes it
+// and parks the cursor on the next one.
+func (m Model) newTaskLeaveField() (tea.Model, tea.Cmd) {
+	m.newTaskFieldActive = false
+	return m.newTaskMoveField(1)
+}
+
+// handleNewTaskFieldKey edits the field that was entered. Enter leaves the
+// field and advances; Ctrl+S creates the task.
+func (m Model) handleNewTaskFieldKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+
+	switch key {
+	case "esc":
+		// Esc leaves the field without closing the form. The pending tag is
+		// committed so the typed text is not lost; the suggestion highlight
+		// is discarded.
+		m.newTaskFieldActive = false
+		m.newTaskAssigneeSuggIdx = -1
+		m.newTaskTagSuggIdx = -1
+		if m.newTaskFieldIdx == newTaskFieldTags {
+			m.newTaskCommitTag()
+		}
+		m.newTaskTextarea.Blur()
+		return m, nil
+	case "ctrl+s":
+		return m.newTaskSubmit()
+	case "tab", "shift+tab":
+		// Tabs no longer move fields: Enter enters and leaves them.
+		return m, nil
+	case "enter":
+		return m.newTaskLeaveField()
 	}
 
 	switch m.newTaskFieldIdx {
@@ -257,8 +320,6 @@ func (m Model) handleNewTaskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case "1", "2", "3", "4":
 			m.newTaskPriority = int(key[0] - '0')
-		case "enter":
-			return m.newTaskMoveField(1)
 		default:
 			// Typing a letter over the selector jumps to the title and inserts it.
 			if len(key) == 1 && key[0] >= 33 {
@@ -269,9 +330,6 @@ func (m Model) handleNewTaskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case newTaskFieldTitle:
-		if key == "enter" {
-			return m.newTaskSubmit()
-		}
 		editTextInput(&m.newTaskTitle, key)
 		m.newTaskErr = ""
 
@@ -288,16 +346,6 @@ func (m Model) handleNewTaskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "down":
 			m.newTaskAssigneeSuggIdx = cycleIndex(m.newTaskAssigneeSuggIdx, len(m.assigneeSuggestions()), 1)
 			return m, nil
-		case "enter":
-			if m.newTaskAssigneeSuggIdx >= 0 {
-				suggs := m.assigneeSuggestions()
-				if inRange(m.newTaskAssigneeSuggIdx, len(suggs)) {
-					m.newTaskAssignee = suggs[m.newTaskAssigneeSuggIdx]
-					m.newTaskAssigneeSuggIdx = -1
-					return m, nil
-				}
-			}
-			return m.newTaskSubmit()
 		default:
 			editTextInput(&m.newTaskAssignee, key)
 			m.newTaskAssigneeSuggIdx = -1
@@ -311,7 +359,7 @@ func (m Model) handleNewTaskKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "down":
 			m.newTaskTagSuggIdx = cycleIndex(m.newTaskTagSuggIdx, len(m.tagFieldSuggestions()), 1)
 			return m, nil
-		case "enter", ",":
+		case ",":
 			if m.newTaskTagSuggIdx >= 0 {
 				suggs := m.tagFieldSuggestions()
 				if inRange(m.newTaskTagSuggIdx, len(suggs)) {
@@ -450,36 +498,40 @@ func (m *Model) renderNewTaskModal(content string) string {
 	w := m.width
 	lines := []string{""}
 
-	lines = append(lines, newTaskRow("Priority", m.renderNewTaskPriority(), m.newTaskFieldIdx == newTaskFieldPriority))
+	priorityFocused := m.newTaskFieldActive && m.newTaskFieldIdx == newTaskFieldPriority
+	lines = append(lines, newTaskRow("Priority", m.renderNewTaskPriority(), priorityFocused))
 
+	titleFocused := m.newTaskFieldActive && m.newTaskFieldIdx == newTaskFieldTitle
 	titleInput := m.newTaskTitle
-	if m.newTaskFieldIdx == newTaskFieldTitle {
+	if titleFocused {
 		titleInput += styleTitle.Render(cursorGlyph)
 	}
-	lines = append(lines, newTaskRow("Title", titleInput, m.newTaskFieldIdx == newTaskFieldTitle))
+	lines = append(lines, newTaskRow("Title", titleInput, titleFocused))
 	if m.newTaskErr != "" {
 		lines = append(lines, styleError.Render("    ⚠ "+m.newTaskErr))
 	}
 
-	lines = append(lines, newTaskSection("Description", m.newTaskFieldIdx == newTaskFieldDescription))
-	if strings.TrimSpace(m.newTaskTextarea.Value()) == "" && m.newTaskFieldIdx != newTaskFieldDescription {
-		lines = append(lines, styleDim.Render("    (empty · Tab to edit)"))
+	descriptionFocused := m.newTaskFieldActive && m.newTaskFieldIdx == newTaskFieldDescription
+	lines = append(lines, newTaskSection("Description", descriptionFocused))
+	if strings.TrimSpace(m.newTaskTextarea.Value()) == "" && !descriptionFocused {
+		lines = append(lines, styleDim.Render("    (empty · Enter to edit)"))
 	} else {
 		for _, dl := range strings.Split(m.newTaskTextarea.View(), "\n") {
 			lines = append(lines, "    "+dl)
 		}
 	}
 
+	assigneeFocused := m.newTaskFieldActive && m.newTaskFieldIdx == newTaskFieldAssignee
 	assigneeInput := m.newTaskAssignee
-	if m.newTaskFieldIdx == newTaskFieldAssignee {
+	if assigneeFocused {
 		assigneeInput += styleTitle.Render(cursorGlyph)
 	}
-	lines = append(lines, newTaskRow("Assignee", assigneeInput, m.newTaskFieldIdx == newTaskFieldAssignee))
-	if m.newTaskFieldIdx == newTaskFieldAssignee {
+	lines = append(lines, newTaskRow("Assignee", assigneeInput, assigneeFocused))
+	if assigneeFocused {
 		lines = append(lines, m.renderNewTaskAssigneeSuggestions()...)
 	}
 
-	tagsFocused := m.newTaskFieldIdx == newTaskFieldTags
+	tagsFocused := m.newTaskFieldActive && m.newTaskFieldIdx == newTaskFieldTags
 	lines = append(lines, newTaskOptionalRow("Tags", m.renderNewTaskTags(), tagsFocused))
 	if tagsFocused {
 		lines = append(lines, m.renderTagFieldSuggestions()...)

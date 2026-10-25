@@ -80,6 +80,7 @@ func TestFilterCurrentValueUnknownFallsBack(t *testing.T) {
 func TestFilterInputShowsCurrentValueOrSearch(t *testing.T) {
 	m := newTestModel(t)
 	m.filterOpen = true
+	m.filterFieldActive = true
 	m.filterFieldIdx = filterFieldProject
 	m.filterProject = "api"
 
@@ -113,6 +114,7 @@ func TestFilterOptionsFooter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestModel(t)
 			m.filterOpen = true
+			m.filterFieldActive = true
 			m.filterFieldIdx = filterFieldTag
 			for i := range tt.tags {
 				mustCreateTaskWithTags(t, m.database, "api", "task", "", "@john", 1, "todo",
@@ -153,6 +155,7 @@ func TestFilterOptionsFooter(t *testing.T) {
 func TestFilterMarksAppliedAndCursorSeparately(t *testing.T) {
 	m := newTestModel(t)
 	m.filterOpen = true
+	m.filterFieldActive = true
 	m.filterFieldIdx = filterFieldProject
 	m.filterProject = "" // applied: "all", which is the first option
 	m.filterOptionIdx = 1
@@ -178,5 +181,85 @@ func mustCreateTaskWithTags(t *testing.T, database *db.DB, projectName, title, d
 	t.Helper()
 	if _, err := database.CreateTaskFull(projectName, title, description, assignee, priority, status, 0, tags); err != nil {
 		t.Fatalf("CreateTaskFull(%q): %v", title, err)
+	}
+}
+
+// With no field entered, the right pane previews the options of the field
+// under the cursor. Entering the field replaces the two panes with the inline
+// list.
+func TestFilterPreviewPane(t *testing.T) {
+	m := newTestModel(t)
+	m.filterOpen = true
+	m.filterFieldActive = false
+	m.filterFieldIdx = filterFieldProject
+
+	out := ansi.Strip(filterRender(t, m))
+	for _, want := range []string{"Fields", "Preview", "all", "api", "web"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the preview pane does not show %q:\n%s", want, out)
+		}
+	}
+
+	// Moving the cursor previews another field.
+	m.filterFieldIdx = filterFieldAssignee
+	out = ansi.Strip(filterRender(t, m))
+	for _, want := range []string{"@john", "@margo"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the preview of Assignee does not show %q:\n%s", want, out)
+		}
+	}
+
+	// Entered, the field expands inline and the preview is gone.
+	m.filterFieldActive = true
+	out = ansi.Strip(filterRender(t, m))
+	if strings.Contains(out, "Preview") {
+		t.Errorf("the preview pane is still visible with an entered field:\n%s", out)
+	}
+	if !strings.Contains(out, "▸") {
+		t.Errorf("the entered field has no option cursor:\n%s", out)
+	}
+}
+
+// The filter modal keeps a semi-fixed height: every field, previewed or
+// entered, paints the same number of body lines, and a short terminal caps it.
+func TestFilterModalSemiFixedHeight(t *testing.T) {
+	m := newTestModel(t)
+	m.width = 120
+	m.height = 30
+	m.filterOpen = true
+
+	measure := func() int {
+		return strings.Count(m.renderFilterModal(""), "\n") + 1
+	}
+
+	want := 0
+	for _, field := range []int{
+		filterFieldProject, filterFieldStatus, filterFieldAssignee,
+		filterFieldPriority, filterFieldTag,
+	} {
+		m.filterFieldActive = false
+		m.filterFieldIdx = field
+		got := measure()
+		if want == 0 {
+			want = got
+		}
+		if got != want {
+			t.Errorf("field %d without entering: %d lines, want the fixed %d", field, got, want)
+		}
+
+		m.filterFieldActive = true
+		m.filterSyncOption()
+		got = measure()
+		if got != want {
+			t.Errorf("field %d entered: %d lines, want the fixed %d", field, got, want)
+		}
+	}
+
+	// A terminal shorter than the maximum reduces the modal to what fits.
+	m.height = 8
+	m.filterFieldActive = false
+	m.filterFieldIdx = filterFieldProject
+	if got := measure(); got > 8 {
+		t.Errorf("on a 8-line terminal the modal takes %d lines", got)
 	}
 }
