@@ -178,6 +178,7 @@ func TestPasteGoesToTheDescriptionEditorFirst(t *testing.T) {
 	m := newTestModel(t)
 	// The editor really opens and on top of it the form opens: with both
 	// mounted at once, the paste has to decide which one it goes to.
+	m = openTaskDetail(t, m)
 	withEditor, _ := pressKeys(t, m, "e")
 	if !withEditor.descEditOpen {
 		t.Fatal("e did not open the description editor")

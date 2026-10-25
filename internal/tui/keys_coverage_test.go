@@ -195,13 +195,13 @@ func TestKanbanKeys(t *testing.T) {
 		}
 	})
 
-	t.Run("e opens the inline description editor", func(t *testing.T) {
+	t.Run("e does nothing in the board", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 
 		next, _ := pressKeys(t, m, "e")
-		if !next.descEditOpen {
-			t.Error("e did not open the description editor")
+		if next.descEditOpen || next.detailOpen {
+			t.Error("e in the board must do nothing")
 		}
 	})
 
@@ -215,12 +215,12 @@ func TestKanbanKeys(t *testing.T) {
 		}
 	})
 
-	t.Run("E opens the external editor", func(t *testing.T) {
+	t.Run("E does nothing in the board", func(t *testing.T) {
 		m := newKanbanModel(t, 3)
 		m.currentView = viewKanban
 
-		if _, cmd := pressKeys(t, m, "E"); cmd == nil {
-			t.Error("E did not launch any command")
+		if _, cmd := pressKeys(t, m, "E"); cmd != nil {
+			t.Error("E in the board must not launch any command")
 		}
 	})
 

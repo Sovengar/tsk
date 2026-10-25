@@ -146,7 +146,7 @@ A malformed config does not break anything: defaults are applied.
 ```bash
 make check   # golangci-lint + go vet + go test -race + go build ./... (never installs)
 make test    # go vet + go test -race -count=1 ./...
-make lint    # golangci-lint v2.13.2 (pinned, via go run)
+make lint    # golangci-lint latest (via go run)
 make build   # compiles to bin/tsk (local repo artifact)
 make install # installs to ~/.local/bin/tsk ($(PREFIX) by default)
 ```

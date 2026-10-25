@@ -26,7 +26,7 @@ test:
 	go test -race -count=1 ./...
 
 lint:
-	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2 run
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run
 
 # One-shot local gate: build + lint + test.
 # `check` never installs anything: `build` compiles into the repo-local bin/

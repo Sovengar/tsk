@@ -856,6 +856,7 @@ func TestPreviewBarSetWidth(t *testing.T) {
 // reachable state.
 func TestResizeDescEditorFollowsTerminal(t *testing.T) {
 	m := newTestModel(t)
+	m = openTaskDetail(t, m)
 	m, _ = press(m, "e")
 	if !m.descEditOpen {
 		t.Fatal("could not open the inline editor")

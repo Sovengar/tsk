@@ -745,3 +745,31 @@ func TestStatusOverlayEnterAppliesMoveTask(t *testing.T) {
 		t.Errorf("status = %q, want todo", got.Status)
 	}
 }
+
+// Opened from the detail, the overlay lands over the detail's padded lines
+// (the blank ones that centre it vertically). Those lines are empty, so the
+// modal's first row must be padded up to the same column as the rest; without
+// it the top border sticks to the left edge and the box looks split.
+func TestStatusOverDetailKeepsTheBoxAligned(t *testing.T) {
+	m := newTestModel(t)
+	task := taskByStatus(t, m, "doing")
+	m.detailOpen = true
+	m.detailTask = task
+	m.currentView = viewList
+
+	next, _ := press(m, "m")
+	out := ansi.Strip(next.View().Content)
+
+	totalWidth := modalWidthFor(40, next.width)
+	wantCol := (next.width - totalWidth) / 2
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, "╭ Status") {
+			continue
+		}
+		if got := ansi.StringWidth(line[:strings.Index(line, "╭")]); got != wantCol {
+			t.Errorf("the status box starts at column %d, want %d:\n%s", got, wantCol, line)
+		}
+		return
+	}
+	t.Fatalf("the status modal is missing from the render:\n%s", out)
+}

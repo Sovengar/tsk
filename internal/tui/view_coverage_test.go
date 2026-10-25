@@ -231,19 +231,20 @@ func TestDashboardSaysNoneWhenNoProjectMatches(t *testing.T) {
 	}
 }
 
-// The external editor is opened with the comment key and with the new-task
-// key, and both leave the state as it was if there is no task to apply it to.
+// The external editor is only reachable from the detail: in the List, "E"
+// does nothing even with a task selected.
 func TestExternalEditorNeedsATask(t *testing.T) {
 	m := newTestModel(t)
-	m.filteredT = nil
-	m.cursor = 99
 
 	next, cmd := press(m, "E")
-	if next.currentView != m.currentView {
-		t.Error("with no task selected, E changed the view")
+	if cmd != nil {
+		t.Error("E in the list must not launch a command")
 	}
-	if cmd == nil {
-		t.Log("with no task there is no command, which is expected")
+	if next.detailOpen || next.descEditOpen {
+		t.Error("E in the list must not open anything")
+	}
+	if next.currentView != m.currentView {
+		t.Error("E in the list changed the view")
 	}
 }
 

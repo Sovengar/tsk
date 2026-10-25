@@ -846,12 +846,6 @@ func (m Model) handleListKey(key string) (tea.Model, tea.Cmd) {
 	case "P":
 		// Go to the first page: cursor to the first element.
 		m.cursor = 0
-	case "e":
-		// Edit the description inline, from the TUI itself.
-		return m, m.openDescEditor()
-	case "E":
-		// Full external editor (write in nvim).
-		return m, m.editSelectedTask()
 	case "i":
 		// New task
 		return m, m.newTask()
@@ -959,12 +953,6 @@ func (m Model) handleKanbanKey(key string) (tea.Model, tea.Cmd) {
 			t := colTasks[m.kanbanRow]
 			return m, m.openMoveProject(&t)
 		}
-	case "e":
-		// Edit the description inline, from the TUI itself.
-		return m, m.openDescEditor()
-	case "E":
-		// Full external editor (write in nvim).
-		return m, m.editSelectedTask()
 	case "i":
 		// New task
 		return m, m.newTask()

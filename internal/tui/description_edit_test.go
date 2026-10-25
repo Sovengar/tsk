@@ -26,18 +26,37 @@ func send(m *Model, msg tea.Msg) (*Model, tea.Cmd) {
 	}
 }
 
-// TestDescEditorOpensInList verifies that "e" opens the inline editor (not nvim)
-// preloaded with the description of the selected task.
-func TestDescEditorOpensInList(t *testing.T) {
+// openDetail opens the task detail of the focused task, the only place from
+// which the description keys work.
+func openTaskDetail(t *testing.T, m *Model) *Model {
+	t.Helper()
+	m, _ = press(m, "enter")
+	if !m.detailOpen {
+		t.Fatal("enter must open the detail")
+	}
+	return m
+}
+
+// TestDescEditorOnlyInDetail verifies that "e" does nothing in the List and
+// that, from the detail, it opens the inline editor (not nvim) preloaded with
+// the task description.
+func TestDescEditorOnlyInDetail(t *testing.T) {
 	m := newTestModel(t)
-	want := m.tasks[0]
+
+	m, _ = press(m, "e")
+	if m.descEditOpen || m.detailOpen {
+		t.Fatal("e in the list must do nothing")
+	}
+
+	m = openTaskDetail(t, m)
+	want := *m.detailTask
 
 	m, _ = press(m, "e")
 	if !m.descEditOpen {
 		t.Fatal("e must open the inline description editor")
 	}
 	if !m.detailOpen {
-		t.Error("the editor integrates into the detail: the detail must open")
+		t.Error("the editor integrates into the detail: the detail must stay open")
 	}
 	if m.descEditTaskID != want.ID {
 		t.Errorf("taskID = %d, want %d", m.descEditTaskID, want.ID)
@@ -54,6 +73,7 @@ func TestDescEditorOpensInList(t *testing.T) {
 // instead of saving.
 func TestDescEditorTypingAndNewline(t *testing.T) {
 	m := newTestModel(t)
+	m = openTaskDetail(t, m)
 	m, _ = press(m, "e")
 
 	base := m.descEditTextarea.Value()
@@ -76,6 +96,7 @@ func TestDescEditorEscCancels(t *testing.T) {
 	m := newTestModel(t)
 	task := m.tasks[0]
 
+	m = openTaskDetail(t, m)
 	m, _ = press(m, "e")
 	m, _ = press(m, "!")
 	m, _ = press(m, "esc")
@@ -83,8 +104,8 @@ func TestDescEditorEscCancels(t *testing.T) {
 	if m.descEditOpen {
 		t.Fatal("Esc must close the editor")
 	}
-	if m.detailOpen {
-		t.Error("when editing from the list, Esc must go back to the list (close the detail)")
+	if !m.detailOpen {
+		t.Error("editing from the detail, Esc must keep the detail open")
 	}
 	got, err := m.database.GetTask(task.ID)
 	if err != nil {
@@ -100,6 +121,7 @@ func TestDescEditorCtrlSSaves(t *testing.T) {
 	m := newTestModel(t)
 	task := m.tasks[0]
 
+	m = openTaskDetail(t, m)
 	m, _ = press(m, "e")
 	m.descEditTextarea.SetValue("new description")
 	m, cmd := send(m, ctrlS())
@@ -156,21 +178,21 @@ func TestDescEditorFromDetailKeepsDetail(t *testing.T) {
 	}
 }
 
-// TestExternalEditorKeyUppercase verifies that "E" still opens the external
-// editor (closing the detail in that case).
+// TestExternalEditorKeyUppercase verifies that "E" only opens the external
+// editor from the detail (closing it in that case).
 func TestExternalEditorKeyUppercase(t *testing.T) {
 	m := newTestModel(t)
 
 	m, cmd := press(m, "E")
-	if cmd == nil {
-		t.Fatal("E must return the external editor's cmd")
+	if cmd != nil || m.detailOpen {
+		t.Fatal("E in the list must do nothing")
 	}
 	if m.descEditOpen {
 		t.Error("E must not open the inline editor")
 	}
 
 	// From the detail: E closes the detail and launches the external editor.
-	m, _ = press(m, "enter")
+	m = openTaskDetail(t, m)
 	m, cmd = press(m, "E")
 	if cmd == nil {
 		t.Fatal("E in the detail must return the external editor's cmd")
@@ -187,6 +209,7 @@ func TestExternalEditorKeyUppercase(t *testing.T) {
 // there is a selection (and returns no cmd if there is none).
 func TestDescEditorCtrlCCopiesSelection(t *testing.T) {
 	m := newTestModel(t)
+	m = openTaskDetail(t, m)
 	m, _ = press(m, "e")
 	m.descEditTextarea.SetValue("hello world")
 
@@ -206,7 +229,8 @@ func TestDescEditorCtrlCCopiesSelection(t *testing.T) {
 // box of the detail (title and metadata visible) without overflowing the width.
 func TestDescEditorRendersInDetail(t *testing.T) {
 	m := newTestModel(t)
-	task := m.tasks[0]
+	m = openTaskDetail(t, m)
+	task := *m.detailTask
 	m, _ = press(m, "e")
 
 	out := ansi.Strip(m.View().Content)

@@ -65,9 +65,8 @@ func keybindsForView(v viewKind) []keybind {
 			{"Tab/⇧Tab", "cycle projects"},
 			{"Enter", "detail"},
 			{"i", "insert task"},
-			{"m", "statuses"},
+			{"m", "Move status"},
 			{"M", "move project"},
-			{"e/E", "edit/editor"},
 			{"f", "filters"},
 			{"/", "search"},
 			{"Ctrl+p", "priority"},
@@ -77,11 +76,10 @@ func keybindsForView(v viewKind) []keybind {
 	case viewKanban:
 		viewKeys = []keybind{
 			{"Tab/⇧Tab", "cycle projects"},
-			{"m", "statuses"},
+			{"m", "Move status"},
 			{"M", "move project"},
 			{"i", "insert task"},
 			{"Enter", "detail"},
-			{"e/E", "edit/editor"},
 			{"Ctrl+p", "priority"},
 			{"f", "filters"},
 			{"/", "search"},

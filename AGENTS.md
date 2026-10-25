@@ -69,7 +69,7 @@ stuck pending and blocks every PR that skips it).
 The gate. `Mutation` is a job of this file: two jobs, `Lint` ∥ `Test`, plus the
 mutation job on PRs. All on `ubuntu-24.04`.
 
-- **`Lint`** — `make lint` (golangci-lint **v2.13.2** pinned in the `Makefile`).
+- **`Lint`** — `make lint` (golangci-lint **latest**, resolved by the `Makefile`).
 - **`Test`** — `go test -race -count=1 -covermode=atomic -coverprofile=coverage.out
   ./...` (the whole suite, no `-short`), then **`Coverage gate`** →
   `scripts/diff-coverage.sh`: the PR's **diff at 100%** and the **total against

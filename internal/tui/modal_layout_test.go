@@ -153,3 +153,16 @@ func TestOverlayModalWiderThanScreen(t *testing.T) {
 		t.Errorf("background remained inside a modal that covers it entirely: %.40q", out)
 	}
 }
+
+// A background line shorter than the modal's start column is padded, not left
+// bare: without the padding the modal piece lands at column 0 and the box comes
+// out split from the rest of its rows.
+func TestOverlayLinePadsShortBackground(t *testing.T) {
+	const startX = 10
+	modal := "XY"
+
+	out := ansi.Strip(OverlayLine("abc", modal, startX))
+	if want := "abc" + strings.Repeat(" ", startX-3) + modal; out != want {
+		t.Errorf("OverlayLine = %q, want %q", out, want)
+	}
+}

@@ -31,11 +31,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-          # The Makefile is part of the cache key: GOLANGCI_LINT_VERSION lives there.
+          # The Makefile is part of the cache key: it holds the linter version.
           cache-dependency-path: |
             go.sum
             Makefile
-      # Same path as `make lint` locally: golangci-lint v2.13.2 via the Makefile.
+      # Same path as `make lint` locally: golangci-lint @latest via the Makefile.
       - name: Lint
         run: make lint
 

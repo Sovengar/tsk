@@ -113,13 +113,13 @@ func TestFuzzyScoreBeatsName(t *testing.T) {
 func TestFuzzyZeroCapMeansNoCap(t *testing.T) {
 	items := []string{"@ann", "@bxa", "@cxa"}
 
-	for _, max := range []int{0, 1, 5} {
-		got := fuzzyFilter(items, "a", max)
+	for _, limit := range []int{0, 1, 5} {
+		got := fuzzyFilter(items, "a", limit)
 		if len(got) == 0 {
-			t.Errorf("with cap %d and one match it comes out empty", max)
+			t.Errorf("with cap %d and one match it comes out empty", limit)
 		}
 		if len(got) > len(items) {
-			t.Errorf("with cap %d, %d elements of %d come out", max, len(got), len(items))
+			t.Errorf("with cap %d, %d elements of %d come out", limit, len(got), len(items))
 		}
 	}
 
