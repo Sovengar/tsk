@@ -386,9 +386,14 @@ func (m *Model) commonWorkflow() []string {
 // demands an exact match. It is shared by List, Kanban and Gantt so that the
 // filter header is consistent across all views.
 func (m *Model) taskMatchesFilter(t model.Task) bool {
-	if !matchesStatus(m.filterStatus, t.Status, t.IsActive()) {
-		return false
-	}
+	return matchesStatus(m.filterStatus, t.Status, t.IsActive()) && m.taskMatchesOtherFilters(t)
+}
+
+// taskMatchesOtherFilters applies every filter except the status one. The
+// Kanban status strip uses it to count the tasks a status really has even when
+// the status filter is hiding that status: saying "(0, hidden)" for a status
+// with cards was a lie.
+func (m *Model) taskMatchesOtherFilters(t model.Task) bool {
 	if m.filterProject != "" && t.ProjectName != m.filterProject {
 		return false
 	}
@@ -402,6 +407,18 @@ func (m *Model) taskMatchesFilter(t model.Task) bool {
 		return false
 	}
 	return matchesPriority(m.filterPriority, t.Priority)
+}
+
+// tasksInStatusIgnoringStatusFilter counts the tasks of a status applying
+// every filter but the status one.
+func (m *Model) tasksInStatusIgnoringStatusFilter(status string) int {
+	n := 0
+	for _, t := range m.tasks {
+		if t.Status == status && m.taskMatchesOtherFilters(t) {
+			n++
+		}
+	}
+	return n
 }
 
 // filteredTasks returns the filtered tasks.
@@ -1084,12 +1101,12 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		if m.detailTask == nil {
 			return m, nil
 		}
-	case "q":
-		return m, tea.Quit
 		m.confirmOpen = true
 		m.confirmAction = "delete-task"
 		m.confirmTaskID = m.detailTask.ID
 		m.confirmProject = m.detailTask.Title
+	case "q":
+		return m, tea.Quit
 	}
 	return m, nil
 }

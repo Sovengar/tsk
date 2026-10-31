@@ -24,9 +24,6 @@ func (db *DB) CreateTaskFull(projectName, title, description, assignee string, p
 	if err != nil {
 		return nil, err
 	}
-	if p.Archived {
-		return nil, fmt.Errorf("project %q is archived", projectName)
-	}
 
 	if status == "" {
 		status = p.Workflow[0] // first status of the workflow
@@ -40,6 +37,10 @@ func (db *DB) CreateTaskFull(projectName, title, description, assignee string, p
 	tags = model.NormalizeTags(tags)
 
 	now := time.Now().UTC().Format(time.RFC3339)
+	// An archived project is revived by the AFTER INSERT trigger from migration
+	// 013, in the same statement as the insert: either both land or neither
+	// does. Adding a task to an archived project is an explicit target, so the
+	// project comes back with its pre-existing tasks.
 	result, err := db.conn.Exec(
 		`INSERT INTO tasks (project_id, title, description, status, priority, assignee, estimate, tags, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -214,6 +215,9 @@ func (db *DB) MoveTaskToProject(id, projectID int64, newStatus string) (*model.T
 		completedAt = "datetime('now')"
 	}
 
+	// Landing in an archived project revives it, same rule as CreateTaskFull:
+	// the AFTER UPDATE OF project_id trigger from migration 013 does it in the
+	// same statement as the move.
 	query := fmt.Sprintf(`UPDATE tasks SET project_id = ?, status = ?, updated_at = ?, completed_at = %s WHERE id = ?`, completedAt)
 	if _, err := db.conn.Exec(query, projectID, newStatus, now, id); err != nil {
 		return nil, err

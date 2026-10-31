@@ -1215,9 +1215,8 @@ func cmdUpdate(args []string) {
 		if err != nil {
 			outputError(err.Error())
 		}
-		if target.Archived {
-			outputError(fmt.Sprintf("project %q is archived", projectName))
-		}
+		// Moving into an archived project revives it (same rule as tsk add);
+		// the DB layer does it atomically with the move.
 		if task.Status != model.CancelledStatus && !model.HasStatus(target.Workflow, task.Status) {
 			outputError(fmt.Sprintf("status %q not in project workflow %v", task.Status, target.Workflow))
 		}

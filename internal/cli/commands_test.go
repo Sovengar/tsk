@@ -183,8 +183,7 @@ func TestProjectUpdate(t *testing.T) {
 	wantError(t, "project", "update", "api-v2", "--workflow", "no,duplicates,no")
 }
 
-func TestProjectArchiveLifecycle(t *testing.T) {
-	withTempDB(t)
+func TestProjectArchiveLifecycle(t *testing.T) {	withTempDB(t)
 	seed(t, "api")
 	runJSON(t, "project", "archive", "api")
 
@@ -202,6 +201,30 @@ func TestProjectArchiveLifecycle(t *testing.T) {
 	}
 	wantError(t, "project", "archive", "nope")
 	wantError(t, "project", "unarchive", "nope")
+}
+
+// TestAddTaskToArchivedProjectRevives pins the new contract of tsk add: adding a
+// task to an archived project revives it and the task lands in it, while the
+// plain archive/unarchive pair keeps working.
+func TestAddTaskToArchivedProjectRevives(t *testing.T) {
+	withTempDB(t)
+	seed(t, "api")
+	runJSON(t, "project", "archive", "api")
+
+	id := addTask(t, "api", "revive")
+
+	archived := runJSON(t, "project", "list", "--archived", "--json")["projects"].([]any)
+	if len(archived) != 0 {
+		t.Errorf("archived list = %v, want api revived", archived)
+	}
+	active := runJSON(t, "project", "list", "--json")["projects"].([]any)
+	if len(active) != 1 || active[0].(map[string]any)["name"] != "api" {
+		t.Errorf("active list = %v, want api", active)
+	}
+	listed := runJSON(t, "list", "--project", "api", "--json")["tasks"].([]any)
+	if len(listed) != 1 || listed[0].(map[string]any)["id"] != float64(id) {
+		t.Errorf("tasks = %v, want the new task %d", listed, id)
+	}
 }
 
 func TestProjectRemove(t *testing.T) {

@@ -944,13 +944,131 @@ func TestUnarchiveProjectRestores(t *testing.T) {
 	}
 }
 
-func TestCreateTaskOnArchivedProjectFails(t *testing.T) {
+// TestCreateTaskOnArchivedProjectRevives pins the behaviour change: creating a
+// task in an archived project un-archives it instead of failing, and the tasks
+// it already had come back with it.
+func TestCreateTaskOnArchivedProjectRevives(t *testing.T) {
+	db := newTestDB(t)
+	mustCreateProject(t, db, "api", nil)
+	mustCreateTask(t, db, "api", "old", "", "", 0, "")
+	mustArchiveProject(t, db, "api")
+
+	created, err := db.CreateTask("api", "new", "", "", 0, "")
+	if err != nil {
+		t.Fatalf("CreateTask on an archived project: %v", err)
+	}
+	if created.Status != "backlog" {
+		t.Errorf("status = %q, want the project's first workflow status", created.Status)
+	}
+
+	active, _ := db.ListProjects()
+	if len(active) != 1 || active[0].Name != "api" || active[0].Archived {
+		t.Errorf("active projects = %v, want api revived", active)
+	}
+	archived, _ := db.ListArchivedProjects()
+	if len(archived) != 0 {
+		t.Errorf("archived projects = %v, want none", archived)
+	}
+
+	tasks, _ := db.ListTasks("api", "", "")
+	if len(tasks) != 2 {
+		t.Fatalf("tasks = %d, want the old one and the new one", len(tasks))
+	}
+	if tasks[0].Title != "old" || tasks[1].Title != "new" {
+		t.Errorf("tasks = %v, want [old new]", tasks)
+	}
+}
+
+// TestCreateTaskOnArchivedProjectKeepsItArchivedWhenTheInsertFails pins the
+// atomicity: the revive and the insert share one transaction, so a rejected
+// insert rolls the revive back.
+func TestCreateTaskOnArchivedProjectKeepsItArchivedWhenTheInsertFails(t *testing.T) {
 	db := newTestDB(t)
 	mustCreateProject(t, db, "api", nil)
 	mustArchiveProject(t, db, "api")
 
-	if _, err := db.CreateTask("api", "t", "", "", 0, ""); err == nil {
-		t.Error("expected error creating task on archived project")
+	if _, err := db.conn.Exec(`
+		CREATE TRIGGER reject_insert BEFORE INSERT ON tasks
+		BEGIN SELECT RAISE(ABORT, 'insert rejected'); END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.CreateTask("api", "new", "", "", 0, ""); err == nil {
+		t.Fatal("expected the insert to fail")
+	}
+
+	archived, _ := db.ListArchivedProjects()
+	if len(archived) != 1 || archived[0].Name != "api" {
+		t.Errorf("archived projects = %v, want api still archived", archived)
+	}
+	if projects, _ := db.ListProjects(); len(projects) != 0 {
+		t.Errorf("active projects = %v, want none", projects)
+	}
+}
+
+// TestMoveTaskToArchivedProjectRevives covers the move path: the same rule as
+// creation, also atomic.
+func TestMoveTaskToArchivedProjectRevives(t *testing.T) {
+	db := newTestDB(t)
+	mustCreateProject(t, db, "api", nil)
+	mustCreateProject(t, db, "web", nil)
+	mustCreateTask(t, db, "api", "old", "", "", 0, "")
+	mustArchiveProject(t, db, "web")
+	web, err := db.GetProject("web")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	moved, err := db.MoveTaskToProject(1, web.ID, "backlog")
+	if err != nil {
+		t.Fatalf("MoveTaskToProject into an archived project: %v", err)
+	}
+	if moved.ProjectName != "web" {
+		t.Errorf("project = %q, want web", moved.ProjectName)
+	}
+
+	active, _ := db.ListProjects()
+	if len(active) != 2 {
+		t.Errorf("active projects = %v, want api and web", active)
+	}
+	archived, _ := db.ListArchivedProjects()
+	if len(archived) != 0 {
+		t.Errorf("archived projects = %v, want none", archived)
+	}
+	tasks, _ := db.ListTasks("web", "", "")
+	if len(tasks) != 1 || tasks[0].ID != 1 {
+		t.Errorf("web tasks = %v, want the moved task", tasks)
+	}
+}
+
+// TestMoveTaskToArchivedProjectKeepsItArchivedWhenTheMoveFails is the atomic
+// counterpart for the move path.
+func TestMoveTaskToArchivedProjectKeepsItArchivedWhenTheMoveFails(t *testing.T) {
+	db := newTestDB(t)
+	mustCreateProject(t, db, "api", nil)
+	mustCreateProject(t, db, "web", nil)
+	mustCreateTask(t, db, "api", "old", "", "", 0, "")
+	mustArchiveProject(t, db, "web")
+	web, err := db.GetProject("web")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.conn.Exec(`
+		CREATE TRIGGER reject_move BEFORE UPDATE OF project_id ON tasks
+		BEGIN SELECT RAISE(ABORT, 'move rejected'); END;
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.MoveTaskToProject(1, web.ID, "backlog"); err == nil {
+		t.Fatal("expected the move to fail")
+	}
+
+	archived, _ := db.ListArchivedProjects()
+	if len(archived) != 1 || archived[0].Name != "web" {
+		t.Errorf("archived projects = %v, want web still archived", archived)
 	}
 }
 

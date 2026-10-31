@@ -51,7 +51,7 @@ func TestKanbanLastColumnReachesInnerEdge(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := newKanbanModel(t, 3)
+			m := newKanbanBoardModel(t, []string{"todo", "doing", "done"})
 			m.width = tt.width
 
 			runes := boardRow(t, ansi.Strip(m.renderKanban(30)))
@@ -76,7 +76,7 @@ func TestKanbanLastColumnReachesInnerEdge(t *testing.T) {
 // Between columns there is kanbanGap of gap, neither more nor less. With
 // three columns there are two gaps.
 func TestKanbanGapBetweenColumns(t *testing.T) {
-	m := newKanbanModelWithWorkflow(t, 1, []string{"todo", "doing", "done"})
+	m := newKanbanBoardModel(t, []string{"todo", "doing", "done"})
 	m.width = 240
 
 	runes := boardRow(t, ansi.Strip(m.renderKanban(30)))
@@ -317,6 +317,19 @@ func newKanbanModelWithWorkflow(t *testing.T, tasks int, workflow []string) *Mod
 	m.filterProject = "only"
 	m.currentView = viewKanban
 	m.width = 240
+	m.clampKanbanCursor()
+	return m
+}
+
+// newKanbanBoardModel creates one card in every status of the workflow, so
+// that the board shows all of them: an empty column is hidden.
+func newKanbanBoardModel(t *testing.T, workflow []string) *Model {
+	t.Helper()
+	m := newKanbanModelWithWorkflow(t, 0, workflow)
+	for i, status := range workflow {
+		mustCreateTask(t, m.database, "only", fmt.Sprintf("task %d", i), "", "@john", 1, status)
+	}
+	reloadTasks(t, m)
 	m.clampKanbanCursor()
 	return m
 }

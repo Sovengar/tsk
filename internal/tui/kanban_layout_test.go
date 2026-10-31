@@ -136,24 +136,24 @@ func TestKanbanMaxCards(t *testing.T) {
 		height int
 		want   int
 	}{
-		{"large terminal", 40, (40 - kanbanBoardChrome - filterHeaderRows + 1) / kanbanCardRows},
-		{"just enough for 1 card", kanbanBoardChrome + filterHeaderRows + kanbanCardRows, 1},
+		{"large terminal", 40, (40 - kanbanFixedRows + 1) / kanbanCardRows},
+		{"just enough for 1 card", kanbanFixedRows + kanbanCardRows, 1},
 		// The round-up counts the last one even if only its top part fits:
 		// with 5 content rows 2 cards fit and the second one is truncated.
-		{"the last card is counted even if truncated", kanbanBoardChrome + filterHeaderRows + 2*kanbanCardRows - 1, 2},
-		{"for exactly 2 cards", kanbanBoardChrome + filterHeaderRows + 2*kanbanCardRows, 2},
-		{"medium terminal", 20, (20 - kanbanBoardChrome - filterHeaderRows + 1) / kanbanCardRows},
+		{"the last card is counted even if truncated", kanbanFixedRows + 2*kanbanCardRows - 1, 2},
+		{"for exactly 2 cards", kanbanFixedRows + 2*kanbanCardRows, 2},
+		{"medium terminal", 20, (20 - kanbanFixedRows + 1) / kanbanCardRows},
 		{"minimum height gives 1", 0, 1},
 		{"negative height gives 1", -5, 1},
 		// The rounding: with 4 content rows 1 card fits, not 2. It is the
 		// edge where adding one row too many to the budget would change the
 		// result, so it pins down that the columns are what they are.
-		{"with 4 content rows 1 card fits", kanbanBoardChrome + filterHeaderRows + 4, 1},
-		{"with 5 content rows 2 cards fit", kanbanBoardChrome + filterHeaderRows + 5, 2},
-		{"with 2 content rows 1 fits", kanbanBoardChrome + filterHeaderRows + 2, 1},
-		{"with 1 content row 1 fits", kanbanBoardChrome + filterHeaderRows + 1, 1},
-		{"with 0 content rows 1 fits", kanbanBoardChrome + filterHeaderRows, 1},
-		{"with negative content 1 fits", kanbanBoardChrome + filterHeaderRows - 1, 1},
+		{"with 4 content rows 1 card fits", kanbanFixedRows + 4, 1},
+		{"with 5 content rows 2 cards fit", kanbanFixedRows + 5, 2},
+		{"with 2 content rows 1 fits", kanbanFixedRows + 2, 1},
+		{"with 1 content row 1 fits", kanbanFixedRows + 1, 1},
+		{"with 0 content rows 1 fits", kanbanFixedRows, 1},
+		{"with negative content 1 fits", kanbanFixedRows - 1, 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

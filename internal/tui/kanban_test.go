@@ -76,26 +76,75 @@ func TestKanbanColumnWidthsTooNarrow(t *testing.T) {
 }
 
 // TestKanbanTerminalColumnFilteredByStatus verifies that the status filter
-// controls the done column: with the default "all active" it stays empty; with
-// "all" the terminal ones show up again.
+// controls the done column: with the default "all active" it has no tasks, so
+// it is hidden; with "all" the terminal cards show up and the column returns.
 func TestKanbanTerminalColumnFilteredByStatus(t *testing.T) {
 	m := newTestModel(t)
 	markFirstDone(t, m)
 	m, _ = press(m, "2")
 
-	done := kanbanColumnIndex(m, "done")
-	if done < 0 {
-		t.Fatal("there is no done column")
-	}
-
-	if n := len(m.kanbanColumns()[done].tasks); n != 0 {
-		t.Errorf("with all active the done column must be empty, it has %d", n)
+	if kanbanColumnIndex(m, "done") >= 0 {
+		t.Error("with all active the empty done column must not be on the board")
 	}
 
 	m.filterApplySelection(filterFieldStatus, "all")
 
+	done := kanbanColumnIndex(m, "done")
+	if done < 0 {
+		t.Fatal("with all the done column must show its task")
+	}
 	if n := len(m.kanbanColumns()[done].tasks); n != 1 {
 		t.Errorf("with all the done column must show 1 task, it has %d", n)
+	}
+}
+
+// TestKanbanStatusStripShowsHiddenStatuses verifies that the strip above the
+// board keeps listing the statuses whose empty column the board hides.
+func TestKanbanStatusStripShowsHiddenStatuses(t *testing.T) {
+	m := newTestModel(t)
+	markFirstDone(t, m)
+	m, _ = press(m, "2")
+
+	strip := ansi.Strip(m.renderKanban(m.height))
+	if !strings.Contains(strip, "done (1, hidden)") {
+		t.Errorf("the strip does not mark done as hidden with its real count:\n%s", strip)
+	}
+	if !strings.Contains(strip, "cancelled (0, hidden)") {
+		t.Errorf("the strip does not list cancelled as hidden:\n%s", strip)
+	}
+}
+
+// TestKanbanStatusStripCountsRealTasksWhenStatusFiltered verifies that a
+// status hidden by the status filter still shows the tasks it really has, not
+// a zero that would be a lie.
+func TestKanbanStatusStripCountsRealTasksWhenStatusFiltered(t *testing.T) {
+	m := newTestModel(t)
+	m, _ = press(m, "2")
+	m.filterApplySelection(filterFieldStatus, "doing")
+
+	strip := ansi.Strip(m.renderKanban(m.height))
+	for _, want := range []string{
+		"backlog (1, hidden)",
+		"todo (1, hidden)",
+		"reviewing (1, hidden)",
+	} {
+		if !strings.Contains(strip, want) {
+			t.Errorf("the strip does not show %q:\n%s", want, strip)
+		}
+	}
+}
+
+// TestKanbanStatusStripCountsVisibleTasks verifies that a status with cards is
+// listed with its count and without the hidden mark.
+func TestKanbanStatusStripCountsVisibleTasks(t *testing.T) {
+	m := newKanbanModel(t, 3)
+
+	strip := ansi.Strip(m.renderKanban(m.height))
+	if !strings.Contains(strip, "todo (3)") {
+		t.Errorf("the strip does not count the todo cards:\n%s", strip)
+	}
+	if strings.Contains(strip, "todo (3, hidden)") {
+		t.Errorf("the strip marks a visible status as hidden:\n%s", strip)
 	}
 }
 
@@ -271,5 +320,23 @@ func TestRenderKanbanRespectsHeight(t *testing.T) {
 		if w := ansi.StringWidth(line); w > m.width {
 			t.Errorf("line %d measures %d, exceeds the width %d", i, w, m.width)
 		}
+	}
+}
+
+// TestRenderKanbanWithoutVisibleColumns verifies that a board whose columns
+// are all empty does not render an empty frame: it says so, and the strip
+// still lists the hidden statuses.
+func TestRenderKanbanWithoutVisibleColumns(t *testing.T) {
+	m := newKanbanModel(t, 0)
+	if cols := m.kanbanColumns(); len(cols) != 0 {
+		t.Fatalf("the fixture left %d visible columns, want 0", len(cols))
+	}
+
+	out := ansi.Strip(m.renderKanban(m.height))
+	if !strings.Contains(out, "No tasks in the current filters.") {
+		t.Errorf("the empty board does not say it has no tasks:\n%s", out)
+	}
+	if !strings.Contains(out, "todo (0, hidden)") {
+		t.Errorf("the strip does not list the hidden statuses:\n%s", out)
 	}
 }

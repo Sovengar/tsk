@@ -159,6 +159,23 @@ func TestNewTaskSubmitsFromTitle(t *testing.T) {
 	}
 }
 
+// TestNewTaskSubmitAnnouncesProjectRevive verifies the toast when the target
+// project is archived: creating a task revives it, so the message says so.
+func TestNewTaskSubmitAnnouncesProjectRevive(t *testing.T) {
+	m := newTestModel(t)
+	m.archivedProjects = []model.Project{{Name: "api"}}
+	m, _ = press(m, "i")
+	m.newTaskTitle = "Reviver"
+
+	m, cmd := press(m, "ctrl+s")
+	if cmd == nil {
+		t.Fatal("the creation cmd was expected")
+	}
+	if m.toast != "Task created · project revived" {
+		t.Errorf("toast = %q, want the revive notice", m.toast)
+	}
+}
+
 // TestNewTaskDescriptionUsesInlineEditor verifies that the description is
 // edited with the embedded textarea and that Enter leaves the field instead of
 // creating the task.

@@ -465,3 +465,24 @@ func TestKanbanColumnArrowsWithASingleColumn(t *testing.T) {
 		t.Errorf("the row was reset to %d without changing column", next2.kanbanRow)
 	}
 }
+
+// Pressing D on an open task only asks for confirmation: the hard delete
+// waits for the confirm key and carries the task to delete.
+func TestDetailDeleteAsksConfirmation(t *testing.T) {
+	m := newTestModel(t)
+	m.detailOpen = true
+	m.detailTask = &m.tasks[0]
+	id := m.detailTask.ID
+
+	next, cmd := press(m, "D")
+	if cmd != nil {
+		t.Errorf("D launched an action before confirming")
+	}
+	if !next.confirmOpen || next.confirmAction != "delete-task" {
+		t.Errorf("D did not open the delete confirmation: open=%v action=%q",
+			next.confirmOpen, next.confirmAction)
+	}
+	if next.confirmTaskID != id {
+		t.Errorf("confirmTaskID = %d, want %d", next.confirmTaskID, id)
+	}
+}

@@ -103,6 +103,28 @@ const schemaV12 = `
 ALTER TABLE projects ADD COLUMN path TEXT NOT NULL DEFAULT '';
 `
 
+// schemaV13 revives an archived project when a task lands in it. It lives in
+// the schema and not in Go so the revive and the write that motivated it are the
+// same statement: a failed insert or move leaves the project archived, with no
+// transaction to hand-roll in every caller. The project's own tasks are never
+// touched, so they come back with it.
+const schemaV13 = `
+CREATE TRIGGER tasks_revive_project_on_insert AFTER INSERT ON tasks
+WHEN (SELECT archived FROM projects WHERE id = NEW.project_id) = 1
+BEGIN
+	UPDATE projects SET archived = 0, archived_at = NULL, updated_at = NEW.created_at
+	WHERE id = NEW.project_id AND archived = 1;
+END;
+
+CREATE TRIGGER tasks_revive_project_on_move AFTER UPDATE OF project_id ON tasks
+WHEN NEW.project_id != OLD.project_id
+ AND (SELECT archived FROM projects WHERE id = NEW.project_id) = 1
+BEGIN
+	UPDATE projects SET archived = 0, archived_at = NULL, updated_at = NEW.updated_at
+	WHERE id = NEW.project_id AND archived = 1;
+END;
+`
+
 // migrations is the ordered list of migrations. `run` allows data
 // migrations in Go (e.g. rewriting JSON); if present, `query` is ignored.
 var migrations = []struct {
@@ -129,6 +151,7 @@ var migrations = []struct {
 	{"010", "", noopMigration},
 	{"011", "", noopMigration},
 	{"012", schemaV12, nil},
+	{"013", schemaV13, nil},
 }
 
 // noopMigration is the run of a reserved slot: it does not touch the schema, it only

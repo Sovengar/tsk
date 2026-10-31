@@ -17,10 +17,19 @@ func TestUpdateProjectMovesTask(t *testing.T) {
 	// unknown project
 	wantError(t, "update", strconv.FormatInt(id, 10), "--project", "nope")
 
-	// archived target rejected
+	// archived target: the move revives the project instead of being rejected
+	idRevive := addTask(t, "api", "reviveme", "--status", "todo")
 	runJSON(t, "project", "archive", "web")
-	wantError(t, "update", strconv.FormatInt(id, 10), "--project", "web")
-	runJSON(t, "project", "unarchive", "web")
+	revived := runJSON(t, "update", strconv.FormatInt(idRevive, 10), "--project", "web")
+	if task := revived["task"].(map[string]any); task["project"] != "web" {
+		t.Errorf("project = %v, want web", task["project"])
+	}
+	if archived := runJSON(t, "project", "list", "--archived", "--json")["projects"].([]any); len(archived) != 0 {
+		t.Errorf("archived list = %v, want web revived", archived)
+	}
+	if active := runJSON(t, "project", "list", "--json")["projects"].([]any); len(active) != 2 {
+		t.Errorf("active list = %v, want api and web", active)
+	}
 
 	// successful move: task already in a status present in web's workflow
 	id2 := addTask(t, "api", "moveme2", "--status", "todo")

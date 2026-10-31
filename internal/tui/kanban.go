@@ -26,6 +26,8 @@ const (
 	kanbanBoardChrome = 6
 	// kanbanCardRows is the height of one card plus its separation.
 	kanbanCardRows = 3
+	// kanbanStatusRows is the height of the status strip above the board.
+	kanbanStatusRows = 1
 )
 
 // kanbanColumn groups a status's tasks to render the board.
@@ -50,11 +52,10 @@ func priorityChar(p int) string {
 	}
 }
 
-// kanbanColumns groups tasks by status following the project's workflow and
-// adds a final column for cancelled when appropriate. It is the only source
-// of truth of the board: the render, the navigation and the preview use it,
-// so the highlight and the selected task never contradict each other.
-func (m *Model) kanbanColumns() []kanbanColumn {
+// kanbanStatuses groups tasks by status following the project's workflow and
+// adds a final status for cancelled when the workflow does not carry it. It
+// keeps the empty statuses so that the status strip can show them as hidden.
+func (m *Model) kanbanStatuses() []kanbanColumn {
 	workflow := m.kanbanWorkflow()
 	cols := make([]kanbanColumn, 0, len(workflow)+1)
 	for _, status := range workflow {
@@ -64,15 +65,79 @@ func (m *Model) kanbanColumns() []kanbanColumn {
 			showPriority: true,
 		})
 	}
-	if cancelled := m.tasksInColumn(model.CancelledStatus); len(cancelled) > 0 {
-		cols = append(cols, kanbanColumn{status: model.CancelledStatus, tasks: cancelled})
+	if !model.HasStatus(workflow, model.CancelledStatus) {
+		cols = append(cols, kanbanColumn{
+			status: model.CancelledStatus,
+			tasks:  m.tasksInColumn(model.CancelledStatus),
+		})
 	}
 	return cols
 }
 
+// kanbanColumns is the visible board: the statuses that have tasks. An empty
+// column only takes space, so it is dropped, and the strip above the board
+// keeps telling that the status exists and how many tasks it has. It is the
+// only source of truth of the board: the render, the navigation and the
+// preview use it, so the highlight and the selected task never contradict
+// each other.
+func (m *Model) kanbanColumns() []kanbanColumn {
+	all := m.kanbanStatuses()
+	cols := make([]kanbanColumn, 0, len(all))
+	for _, col := range all {
+		if len(col.tasks) == 0 {
+			continue
+		}
+		cols = append(cols, col)
+	}
+	return cols
+}
+
+// kanbanStatusStrip lists every status with its task count and marks the ones
+// the board hides, so that an empty column leaving the board does not make its
+// status disappear from the view.
+func (m *Model) kanbanStatusStrip(width int) string {
+	statuses := m.kanbanStatuses()
+	if len(statuses) == 0 {
+		return ""
+	}
+	parts := make([]string, len(statuses))
+	for i, col := range statuses {
+		// The count is the real one, not the one the status filter leaves:
+		// a status hidden by the filter still says how many tasks it holds.
+		n := m.tasksInStatusIgnoringStatusFilter(col.status)
+		if len(col.tasks) == 0 {
+			parts[i] = fmt.Sprintf("%s (%d, hidden)", col.status, n)
+			continue
+		}
+		parts[i] = fmt.Sprintf("%s (%d)", col.status, n)
+	}
+
+	// The strip wraps between statuses instead of cutting them: the indicator
+	// that an empty column is hidden cannot be the first thing to fall off the
+	// right edge.
+	const sep = " → "
+	var lines []string
+	line := ""
+	for _, part := range parts {
+		switch {
+		case line == "":
+			line = part
+		case lipgloss.Width(line)+lipgloss.Width(sep)+lipgloss.Width(part) <= width:
+			line += sep + part
+		default:
+			lines = append(lines, line)
+			line = part
+		}
+	}
+	if line != "" {
+		lines = append(lines, line)
+	}
+	return styleDim.Render(strings.Join(lines, "\n"))
+}
+
 // clampKanbanCursor keeps the cursor inside the current board. The columns
-// change when filtering by status (e.g. "all active" empties done/cancelled),
-// so the index may end up out.
+// change when filtering by status (e.g. "all active" empties done/cancelled and
+// hides them), so the index may end up out.
 func (m *Model) clampKanbanCursor() {
 	cols := m.kanbanColumns()
 	colLens := make([]int, len(cols))
@@ -91,9 +156,14 @@ func (m *Model) renderKanban(maxHeight int) string {
 
 	cols := m.kanbanColumns()
 
+	// The strip above the board may wrap when there are many statuses. Those
+	// extra rows come out of the cards' budget, not out of the board.
+	strip := m.kanbanStatusStrip(w - 2)
+	extraRows := max(lineCount(strip)-kanbanStatusRows, 0)
+
 	// Only the cards that fit in the available height are shown, with the
 	// window scrolled in the active column so the cursor is visible.
-	maxCards := kanbanMaxCards(maxHeight)
+	maxCards := kanbanMaxCards(maxHeight - extraRows)
 
 	windows := make([]columnWindow, len(cols))
 	for i, col := range cols {
@@ -146,9 +216,13 @@ func (m *Model) renderKanban(maxHeight int) string {
 	}
 
 	board := lipgloss.JoinHorizontal(lipgloss.Top, views...)
+	if board == "" {
+		board = styleDim.Render("  No tasks in the current filters.")
+	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left,
 		m.renderFilterHeader(w-2),
+		strip,
 		board,
 	)
 

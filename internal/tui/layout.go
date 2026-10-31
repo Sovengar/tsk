@@ -212,6 +212,10 @@ func clampKanban(col, row int, colLens []int) (int, int) {
 	return col, min(max(row, 0), n-1)
 }
 
+// kanbanFixedRows is the board height that is not cards: the shared filter
+// header, the status strip and the chrome of the board and of its columns.
+const kanbanFixedRows = kanbanBoardChrome + filterHeaderRows + kanbanStatusRows
+
 // kanbanMaxCards is how many cards are drawn in a column with the given height.
 //
 // Each card takes kanbanCardRows rows, and the +1 of the quotient makes the
@@ -226,7 +230,7 @@ func clampKanban(col, row int, colLens []int) (int, int) {
 // it anyway. That floor was a branch no test could distinguish, just like
 // the `if x < N { x = N }` of other parts of the code.
 func kanbanMaxCards(maxHeight int) int {
-	content := maxHeight - kanbanBoardChrome - filterHeaderRows
+	content := maxHeight - kanbanFixedRows
 	return max((content+1)/kanbanCardRows, 1)
 }
 

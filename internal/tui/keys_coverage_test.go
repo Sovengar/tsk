@@ -263,7 +263,7 @@ func TestKanbanKeys(t *testing.T) {
 	})
 
 	t.Run("l changes the column and resets the row", func(t *testing.T) {
-		m := newKanbanModel(t, 3)
+		m := newKanbanBoardModel(t, []string{"todo", "doing", "done"})
 		m.currentView = viewKanban
 		m.kanbanCol = 0
 		m.kanbanRow = 2

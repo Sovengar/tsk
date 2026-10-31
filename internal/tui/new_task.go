@@ -180,10 +180,26 @@ func (m Model) newTaskSubmit() (tea.Model, tea.Cmd) {
 	project := m.newTaskProject
 	priority := m.newTaskPriority
 
+	// Creating a task revives an archived project (the DB layer does it in the
+	// same transaction as the insert), so the toast says so and the project
+	// lists reload to drop it from the archived view.
+	revived := false
+	for _, p := range m.archivedProjects {
+		if p.Name == project {
+			revived = true
+			break
+		}
+	}
+	toast := "Task created"
+	if revived {
+		toast = "Task created · project revived"
+	}
+
 	m.newTaskClose()
 	return m, tea.Batch(
 		m.createTaskCmd(project, title, description, assignee, priority, tags),
-		m.setToast("Task created", "info"),
+		m.setToast(toast, "info"),
+		m.loadProjects(),
 	)
 }
 

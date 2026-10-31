@@ -81,9 +81,12 @@ func (m Model) applyStatus() (tea.Model, tea.Cmd) {
 
 	if projectID > 0 {
 		toast := "→ " + projectName + " · " + choice
+		// A move can revive an archived project (the DB layer does it with the
+		// move), so reload the project lists too: the archived view must not
+		// keep showing it.
 		return m, tea.Batch(m.setToast(toast, "info"), m.taskActionCmd(taskID, func(id int64) (*model.Task, error) {
 			return m.database.MoveTaskToProject(id, projectID, choice)
-		}))
+		}), m.loadProjects())
 	}
 
 	toast := "status → " + choice

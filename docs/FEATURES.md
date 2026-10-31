@@ -9,7 +9,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 | Four TUI views | List, Kanban, Gantt, Dashboard | `1`/`2`/`3`/`4` |
 | Per-project workflow | State sequence defined at project registration | `tsk project add --workflow` |
 | Project handoff path | Working directory stored per project for Ask AI | `tsk project add|update --path` |
-| Kanban by state | One column per workflow state | `2` |
+| Kanban by state | One column per workflow state; empty columns are hidden and a status strip marks the hidden ones | `2` |
 | Capacity Gantt | Per-person queue on business days | `3`; `tsk gantt` |
 | Priority | none/low/medium/high with visual marker | `Ctrl+p`; `--priority` |
 | Assignee | Person assigned to a task | `--assignee`; `m` (Dashboard) |
@@ -32,7 +32,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 
 - **Dashboard** — project overview with status counts, team workload, active tasks; triggered by `4`.
 - **List** — paginated task table with columns (`Prio`, status, assignee, title, tags); the title column stretches to the terminal width and tags drop first when space runs out. No description column (it lives in the detail). Triggered by `1`.
-- **Kanban** — board with one column per workflow state; triggered by `2`.
+- **Kanban** — board with one column per workflow state; a state with no tasks is hidden (the default `all active` filter hides `done` and `cancelled`), and a status strip above the board lists every state with its **real** task count (the status filter does not zero it) and marks the hidden ones as `(hidden)`; triggered by `2`.
 - **Gantt** — capacity projection per person on business days, respecting off-days; triggered by `3`.
 
 ## TUI keys
@@ -48,7 +48,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **Forms** — New task, Project and Off-day open with no field entered: `↑↓/jk` move the field cursor, `Enter` enters a field, `Enter` inside leaves it and moves to the next one, `Esc` leaves it backwards, and `Ctrl+S` saves or confirms. `Esc` with no field entered closes the overlay. The Ask AI picker is not a form: its arrows always move the value of the focused field.
 - **Pagination** — `n`/`p` next/previous page, `N`/`P` first/last page (List).
 - **Gantt scroll** — `h`/`l` scroll days, `g`/`G` jump to first/last task.
-- **Dashboard extras** — `A` toggle archived, `d` archive, `r` restore, `e` edit project, `m` assignees.
+- **Dashboard extras** — `A` toggle archived, `d` archive, `r` restore, `e` edit project, `m` assignees. Creating a task in a project that is archived revives it, so the archived view drops it.
 - **Help** — `?` toggles help overlay; `q` quits.
 
 ## Modals and detail
@@ -67,7 +67,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 
 ## CLI commands
 
-- **Project management** — `tsk project add|list|show|update|remove|archive|unarchive` (`--archived` lists archived ones).
+- **Project management** — `tsk project add|list|show|update|remove|archive|unarchive` (`--archived` lists archived ones). Adding a task to an archived project (`tsk add TITLE --project P`, or `tsk update ID --project P`) revives it: the project becomes active and its pre-existing tasks come back with it. Plain `project unarchive` is unchanged.
 - **Project handoff path** — `--path <dir>` stores the working directory for Ask AI; empty paths use `~` (or configured handoff `cwd`).
 - **Task CRUD** — `tsk add`, `tsk list`, `tsk show`, `tsk update`, `tsk move`, `tsk delete`.
 - **Workflow shortcuts** — `tsk start`, `tsk review`, `tsk done`, `tsk cancel`.

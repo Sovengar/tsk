@@ -72,13 +72,14 @@ func TestEditParsesTags(t *testing.T) {
 }
 
 // TestKanbanColumnsScopedToProject verifies that when filtering by a project the
-// board uses its workflow, not the union of all of them.
+// board uses its workflow, not the union of all of them. The statuses come from
+// kanbanStatuses, because the empty columns are hidden from the board.
 func TestKanbanColumnsScopedToProject(t *testing.T) {
 	m := newTestModel(t)
 
 	statuses := func() map[string]bool {
 		set := map[string]bool{}
-		for _, c := range m.kanbanColumns() {
+		for _, c := range m.kanbanStatuses() {
 			set[c.status] = true
 		}
 		return set
