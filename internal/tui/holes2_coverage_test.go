@@ -57,6 +57,7 @@ func sabotageTasksLeavesRowUnreadable(t *testing.T, m *Model, projectID int64) {
 		status TEXT NOT NULL DEFAULT 'backlog', priority INTEGER NOT NULL DEFAULT 0,
 		assignee TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0,
 		estimate REAL NOT NULL DEFAULT 0, tags TEXT NOT NULL DEFAULT '[]',
+		path TEXT NOT NULL DEFAULT '',
 		created_at TEXT NOT NULL DEFAULT (datetime('now')),
 		updated_at TEXT NOT NULL DEFAULT (datetime('now')), completed_at TEXT)`); err != nil {
 		t.Fatalf("CREATE TABLE tasks: %v", err)

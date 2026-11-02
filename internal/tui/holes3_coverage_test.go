@@ -40,13 +40,14 @@ func sabotageOnlyTheTaskList(t *testing.T, m *Model) {
 		description TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'backlog',
 		priority INTEGER NOT NULL DEFAULT 0, assignee TEXT NOT NULL DEFAULT '',
 		estimate REAL NOT NULL DEFAULT 0, tags TEXT NOT NULL DEFAULT '[]',
+		path TEXT NOT NULL DEFAULT '',
 		created_at TEXT NOT NULL DEFAULT (datetime('now')),
 		updated_at TEXT NOT NULL DEFAULT (datetime('now')), completed_at TEXT)`); err != nil {
 		t.Fatalf("CREATE TABLE tasks: %v", err)
 	}
 	if _, err := conn.Exec(`INSERT INTO tasks
 		SELECT id, project_id, title, description, status, priority, assignee,
-		       estimate, tags, created_at, updated_at, completed_at FROM tasks_healthy`); err != nil {
+		       estimate, tags, path, created_at, updated_at, completed_at FROM tasks_healthy`); err != nil {
 		t.Fatalf("copy the tasks: %v", err)
 	}
 	if _, err := conn.Exec(

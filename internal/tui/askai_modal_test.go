@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 
@@ -13,22 +14,36 @@ import (
 	"tsk/internal/model"
 )
 
-// askConfig builds a config with a usable handoff command and the given
-// declared harnesses.
+// askTestHarnesses is the harness list the next askModel will expose. Tests
+// are not parallel, so the askConfig -> askModel pairing is deterministic.
+var askTestHarnesses []string
+
+// askConfig builds a config with a usable handoff command and the given test
+// harnesses. Harnesses are no longer configured in tsk; the test stubs
+// detection instead.
 func askConfig(harnesses ...string) config.Config {
+	askTestHarnesses = append([]string(nil), harnesses...)
 	cfg := config.Defaults()
 	cfg.Handoff.Command = "true {{prompt_file}}"
-	for _, name := range harnesses {
-		cfg.Harnesses = append(cfg.Harnesses, config.HarnessConfig{Name: name})
-	}
 	return cfg
 }
 
-// askModel is a test model with a custom config and an empty PATH, so only the
-// config-declared harnesses are detected.
+// askModel is a test model with a custom config and a deterministic harness
+// list, independent of the binaries installed on PATH.
 func askModel(t *testing.T, cfg config.Config) *Model {
 	t.Helper()
 	t.Setenv("PATH", t.TempDir())
+	names := append([]string(nil), askTestHarnesses...)
+	orig := detectHarnesses
+	detectHarnesses = func(config.Config) []harness.Harness {
+		sort.Strings(names)
+		out := make([]harness.Harness, 0, len(names))
+		for _, name := range names {
+			out = append(out, harness.Harness{Name: name, Binary: name})
+		}
+		return out
+	}
+	t.Cleanup(func() { detectHarnesses = orig })
 	m := newTestModel(t)
 	m.config = cfg
 	return m
@@ -99,7 +114,7 @@ func TestAskAIRendersHarnessNames(t *testing.T) {
 	if !strings.Contains(out, "opencode") {
 		t.Errorf("picker does not render opencode:\n%s", out)
 	}
-	if !strings.Contains(out, "> opencode"+askAISeparator) {
+	if !strings.Contains(out, "> opencode"+askAIHarnessSeparator) {
 		t.Errorf("picker does not render the selected harness/model/effort row:\n%s", out)
 	}
 	for _, hint := range []string{"(j/k)", "(/: search)", "Tab: cycle effort", "Enter: launch"} {
@@ -133,30 +148,6 @@ func TestAskAIListExcludesUnavailable(t *testing.T) {
 	out := ansi.Strip(m.renderAskAIModal("base"))
 	if strings.Contains(out, "claude") {
 		t.Errorf("picker shows claude though it is not available:\n%s", out)
-	}
-}
-
-func TestAskAIConfigDeclaredUnknownListed(t *testing.T) {
-	m := askModel(t, askConfig("my-tool"))
-	m, _ = press(m, "a")
-
-	if got := askNames(m.askAIList); len(got) != 1 || got[0] != "my-tool" {
-		t.Errorf("picker list = %v, want the config-declared my-tool", got)
-	}
-}
-
-func TestAskAIConfigEntryOverridesDetection(t *testing.T) {
-	cfg := config.Defaults()
-	cfg.Handoff.Command = "true {{prompt_file}}"
-	// A declared entry that is also in the built-in registry: with an empty
-	// PATH detection is silent, so declare it and a second registry name to
-	// prove dedupe is by display name.
-	cfg.Harnesses = []config.HarnessConfig{{Name: "opencode", Binary: "opencode-custom"}}
-	m := askModel(t, cfg)
-	m, _ = press(m, "a")
-
-	if got := askNames(m.askAIList); len(got) != 1 || got[0] != "opencode" {
-		t.Errorf("picker list = %v, want a single opencode entry", got)
 	}
 }
 
@@ -268,14 +259,14 @@ func TestAskAISelectsModelAndThinkingPerTask(t *testing.T) {
 	call := stubExecute(t)
 	origOptions := loadAskAIOptions
 	loadAskAIOptions = func(string) harness.ModelOptions {
-		return harness.ModelOptions{Models: []string{"model-a", "model-b"}, Thinking: []string{"low", "high"}}
+		return harness.ModelOptions{Models: []string{"model-a", "model-b"}, Efforts: []string{"low", "high"}}
 	}
 	t.Cleanup(func() { loadAskAIOptions = origOptions })
 	m := askModel(t, askConfig("opencode"))
 	m, _ = press(m, "a")
-	// Focus the model (l), open its picker (enter), move it (j), close it
+	// Focus the model (l), open its picker (/), move it (j), close it
 	// (enter), cycle the effort (Tab) and hand off (ctrl+s).
-	for _, key := range []string{"l", "enter", "j", "enter", "tab"} {
+	for _, key := range []string{"l", "/", "j", "enter", "tab"} {
 		m, _ = press(m, key)
 	}
 	_, cmd := press(m, "ctrl+s")
@@ -504,7 +495,7 @@ func stubAskAIOptions(t *testing.T, models, thinking []string) {
 	t.Helper()
 	orig := loadAskAIOptions
 	loadAskAIOptions = func(string) harness.ModelOptions {
-		return harness.ModelOptions{Models: models, Thinking: thinking}
+		return harness.ModelOptions{Models: models, Efforts: thinking}
 	}
 	t.Cleanup(func() { loadAskAIOptions = orig })
 }
@@ -527,9 +518,10 @@ func TestAskAIArrowsMoveTheFocusedValue(t *testing.T) {
 	}
 
 	m.askAIFocus = askAIFieldModel
+	m.askAIModel = "model-b"
 	m, _ = pressKeys(t, m, "down", "up")
-	if m.askAIModel != "model-a" {
-		t.Errorf("down/up left the model at %q, want model-a", m.askAIModel)
+	if m.askAIModel != "model-b" {
+		t.Errorf("down/up changed the model to %q; only / may change it", m.askAIModel)
 	}
 
 	m.askAIFocus = askAIFieldThinking
@@ -549,8 +541,12 @@ func TestAskAIFocusMovesWithHL(t *testing.T) {
 		t.Fatalf("l left the focus at %d, want the model", m.askAIFocus)
 	}
 	m, _ = press(m, "right")
+	if m.askAIFocus != askAIFieldModel {
+		t.Errorf("right must be ignored, focus = %d", m.askAIFocus)
+	}
+	m, _ = press(m, "l")
 	if m.askAIFocus != askAIFieldThinking {
-		t.Errorf("right left the focus at %d, want the effort", m.askAIFocus)
+		t.Errorf("l from the model must move to the effort, got %d", m.askAIFocus)
 	}
 	m, _ = press(m, "l")
 	if m.askAIFocus != askAIFieldHarness {
@@ -566,24 +562,17 @@ func TestAskAIFocusMovesWithHL(t *testing.T) {
 	}
 }
 
-// Enter on the model opens the model picker; on any other field it hands off.
-func TestAskAIEnterOnModelOpensThePicker(t *testing.T) {
+// Enter no longer opens the model picker; only / does.
+func TestAskAIEnterOnModelDoesNotOpenModelPicker(t *testing.T) {
 	stubAskAIOptions(t, []string{"model-a"}, nil)
 	m := askModel(t, askConfig("aaa"))
 
 	m, _ = pressKeys(t, m, "a", "l", "enter")
-	if !m.askAISearchOpen {
-		t.Fatal("enter on the model must open the model picker")
-	}
-	if !m.askAIOpen {
-		t.Error("opening the model picker must keep the harness picker open")
-	}
-	m, _ = press(m, "enter")
 	if m.askAISearchOpen {
-		t.Error("enter in the model picker must close it")
+		t.Fatal("enter on the model must not open the model picker")
 	}
-	if !m.askAIOpen {
-		t.Error("closing the model picker must keep the harness picker open")
+	if m.askAIOpen {
+		t.Error("enter on the model must hand off, closing the picker")
 	}
 }
 
@@ -630,8 +619,8 @@ func TestAskAIModelPickerStaysClosedWithoutModels(t *testing.T) {
 	if m.askAISearchOpen {
 		t.Error("enter on the model must not open an empty picker")
 	}
-	if !m.askAIOpen {
-		t.Error("the harness picker must stay open")
+	if m.askAIOpen {
+		t.Error("enter on the model must hand off, closing the picker")
 	}
 }
 

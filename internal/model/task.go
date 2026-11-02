@@ -2,6 +2,8 @@ package model
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -19,6 +21,9 @@ type Task struct {
 	ProjectID   int64    `json:"project_id"`
 	ProjectName string   `json:"project,omitempty"`
 	ProjectPath string   `json:"-"`
+	// Path is the task's own working directory. Empty means "inherit the
+	// project path": the effective directory resolves with ResolveDir.
+	Path        string   `json:"path,omitempty"`
 	Title       string   `json:"title"`
 	Description string   `json:"description"`
 	Status      string   `json:"status"`
@@ -29,6 +34,52 @@ type Task struct {
 	CreatedAt   string   `json:"created_at"`
 	UpdatedAt   string   `json:"updated_at"`
 	CompletedAt string   `json:"completed_at,omitempty"`
+}
+
+// DefaultDirName is the directory under the home that receives the tasks
+// whose project has no working directory.
+const DefaultDirName = "Tasks"
+
+// ResolveDir returns the first non-empty working directory, expanding a
+// leading "~". It returns "" when neither is set.
+func ResolveDir(taskPath, projectPath string) string {
+	if dir := expandHome(taskPath); dir != "" {
+		return dir
+	}
+	return expandHome(projectPath)
+}
+
+// EffectiveDir resolves the working directory of a task: its own path, then
+// the project path, and finally ~/Tasks. It is the single fallback rule shared
+// by the CLI, the TUI and the handoff.
+func EffectiveDir(taskPath, projectPath string) string {
+	if dir := ResolveDir(taskPath, projectPath); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return "."
+	}
+	return filepath.Join(home, DefaultDirName)
+}
+
+// expandHome expands a leading "~" with the user's home. Empty in, empty out.
+func expandHome(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if path != "~" && !strings.HasPrefix(path, "~/") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	if path == "~" {
+		return home
+	}
+	return filepath.Join(home, path[2:])
 }
 
 // PriorityLabel returns the readable label of the priority.

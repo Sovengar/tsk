@@ -1,5 +1,10 @@
 package db
 
+import (
+	"os"
+	"path/filepath"
+)
+
 // schemaV1 is the initial database schema.
 const schemaV1 = `
 CREATE TABLE IF NOT EXISTS _meta (
@@ -125,6 +130,63 @@ BEGIN
 END;
 `
 
+// schemaV14 adds a per-task working directory. The task path overrides the
+// project path; when both are empty the effective directory is ~/Tasks.
+const schemaV14 = `
+ALTER TABLE tasks ADD COLUMN path TEXT NOT NULL DEFAULT '';
+`
+
+// backfillProjectPaths gives every project with no path a real one when its
+// conventional directory exists (~/dev/projects/<name>). Projects with no match
+// keep the empty path and resolve to ~/Tasks at handoff time.
+// migrateV14 adds the task path column and then backfills the project paths.
+// The schema statement and the backfill share one run because a migration with
+// a run function ignores its query field.
+func migrateV14(db *DB) error {
+	if _, err := db.conn.Exec(schemaV14); err != nil {
+		return err
+	}
+	return backfillProjectPaths(db)
+}
+
+func backfillProjectPaths(db *DB) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	base := filepath.Join(home, "dev", "projects")
+
+	rows, err := db.conn.Query(`SELECT name FROM projects WHERE path = ''`)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var names []string
+	for rows.Next() {
+		var name string
+		// A row that cannot be read is skipped: the backfill is opportunistic
+		// and must never block the schema migration.
+		if rows.Scan(&name) == nil {
+			names = append(names, name)
+		}
+	}
+	// The rows are drained, not updated in place: with database/sql an UPDATE
+	// during an open result set may take a second connection, and an in-memory
+	// database gives that connection an empty schema of its own.
+	_ = rows.Close()
+
+	for _, name := range names {
+		candidate := filepath.Join(base, name)
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			// Best effort: a failed update leaves the project with no path, which
+			// resolves to ~/Tasks anyway.
+			_, _ = db.conn.Exec(`UPDATE projects SET path = ? WHERE name = ? AND path = ''`, candidate, name)
+		}
+	}
+	return nil
+}
+
 // migrations is the ordered list of migrations. `run` allows data
 // migrations in Go (e.g. rewriting JSON); if present, `query` is ignored.
 var migrations = []struct {
@@ -152,6 +214,7 @@ var migrations = []struct {
 	{"011", "", noopMigration},
 	{"012", schemaV12, nil},
 	{"013", schemaV13, nil},
+	{"014", "", migrateV14},
 }
 
 // noopMigration is the run of a reserved slot: it does not touch the schema, it only

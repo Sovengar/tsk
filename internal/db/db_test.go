@@ -592,10 +592,11 @@ func TestListTasksOrderByPriorityStatusAssignee(t *testing.T) {
 	mustCreateTask(t, db, "api", "done", "", "@a", 2, "done")
 	mustCreateTask(t, db, "api", "low", "", "@a", 1, "todo")
 
-	// Priority desc, then the literal order of the workflow (backlog > todo >
-	// doing > reviewing > done), then assignee asc.
+	// Two groups: non-backlog first, backlog last. Inside each group priority
+	// desc, then the status order of list_order (todo > doing > reviewing), then
+	// assignee asc.
 	tasks, _ := db.ListTasks("", "", "")
-	want := []string{"backlog-a", "backlog-b", "todo-a", "in-progress", "reviewing", "done", "low"}
+	want := []string{"todo-a", "in-progress", "reviewing", "done", "low", "backlog-a", "backlog-b"}
 	if len(tasks) != len(want) {
 		t.Fatalf("count = %d, want %d", len(tasks), len(want))
 	}

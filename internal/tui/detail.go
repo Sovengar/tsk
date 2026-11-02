@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"tsk/internal/harness"
 	"tsk/internal/model"
 	"tsk/internal/tui/bordered"
 )
@@ -35,6 +36,7 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 		fmt.Sprintf("  Status:     %-20s Project:   %s", t.Status, t.ProjectName),
 		fmt.Sprintf("  Assignee:   %-20s Estimate:  %s", t.Assignee, model.FormatEstimate(t.Estimate)),
 		fmt.Sprintf("  Tags:       %s", tagsDisplay),
+		fmt.Sprintf("  Path:       %s (%s)", m.taskPath(t), taskPathSource(t)),
 		fmt.Sprintf("  Created:    %-20s Updated:   %s", formatTime(t.CreatedAt), formatTime(t.UpdatedAt)),
 		fmt.Sprintf("  Completed:  %s", formatCompleted(t.CompletedAt)),
 	}
@@ -113,6 +115,23 @@ func (m *Model) renderDetail(t *model.Task, maxHeight int) string {
 	content = padVertical(content, h)
 
 	return content
+}
+
+// taskPath returns the effective working directory of a task, with the same
+// fallback the handoff uses: task path, project path, configured dir, ~/Tasks.
+func (m *Model) taskPath(t *model.Task) string {
+	return harness.ResolveWorkingDir(m.config, t.Path, t.ProjectPath)
+}
+
+// taskPathSource names where the effective path comes from.
+func taskPathSource(t *model.Task) string {
+	if t.Path != "" {
+		return "task"
+	}
+	if t.ProjectPath != "" {
+		return "project"
+	}
+	return "default"
 }
 
 // padVertical centers vertically a block of height `target` padded with line

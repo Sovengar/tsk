@@ -3,6 +3,21 @@
 - Status: accepted
 - Date: 2026-10-09
 - Feature: `ask-ai-handoff` (`docs/planning/0001-feature-ask-ai-handoff`)
+- Amended: 2026-11-02
+
+> **Amendment (2026-11-02):** the per-harness `[[harness]]` / `[handoff]`
+> surface and the agent-specific `command` below are superseded. There is now
+> **one** `[handoff]` command for every harness. `ai exec` builds the
+> agent-specific argv; `mux` only presents it. See
+> [`remaining.md`](../planning/2026-11-02-feature-ai-request/remaining.md).
+>
+> ```toml
+> [handoff]
+> command = "mux --container {{container}} --layout tab --working-dir {{working_dir}} --session-id {{session_id}} -- ai exec --harness {{harness}} --model {{model}} --effort {{effort}} --prompt-file {{prompt_file}}"
+> ```
+>
+> Placeholders: `{{harness}}`, `{{working_dir}}`, `{{container}}`, `{{model}}`, `{{effort}}`,
+> `{{session_id}}` (`tsk-<project>-<task>`), `{{prompt_file}}` (required).
 
 ## Context
 

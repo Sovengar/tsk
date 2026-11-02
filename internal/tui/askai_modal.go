@@ -12,7 +12,10 @@ import (
 	"tsk/internal/model"
 )
 
-const askAISeparator = " ⟡ "
+const (
+	askAISeparator        = " ⟡ "
+	askAIHarnessSeparator = "   ⟡   "
+)
 
 // detectHarnesses and executeHandoff are variables so tests can make the picker
 // deterministic and assert the launch without spawning anything.
@@ -52,14 +55,10 @@ func (m *Model) openAskAI(task *model.Task) tea.Cmd {
 }
 
 func configuredAskAIHarnesses(cfg config.Config) []harness.Harness {
-	all := detectHarnesses(cfg)
-	out := make([]harness.Harness, 0, len(all))
-	for _, h := range all {
-		if harness.ValidateCommand(cfg.HandoffFor(h.Name).Command) == nil {
-			out = append(out, h)
-		}
+	if harness.ValidateCommand(cfg.Handoff.Command) != nil {
+		return nil
 	}
-	return out
+	return detectHarnesses(cfg)
 }
 
 func (m *Model) refreshAskAIOptions() {
@@ -70,21 +69,21 @@ func (m *Model) refreshAskAIOptions() {
 		m.askAIThinking = m.config.Handoff.Thinking
 		return
 	}
-	handoff := m.config.HandoffFor(m.askAIList[m.askAIIndex].Name)
+	handoff := m.config.Handoff
 	options := loadAskAIOptions(m.askAIList[m.askAIIndex].Name)
 	options.Models = includeConfiguredOption(options.Models, handoff.Model)
-	options.Thinking = includeConfiguredOption(options.Thinking, handoff.Thinking)
+	options.Efforts = includeConfiguredOption(options.Efforts, handoff.Thinking)
 	m.askAIModels = options.Models
-	m.askAIThinkingLevels = options.Thinking
+	m.askAIThinkingLevels = options.Efforts
 	m.askAIModelIdx = optionIndex(options.Models, handoff.Model)
-	m.askAIThinkingIdx = optionIndex(options.Thinking, handoff.Thinking)
+	m.askAIThinkingIdx = optionIndex(options.Efforts, handoff.Thinking)
 	if len(options.Models) > 0 {
 		m.askAIModel = options.Models[m.askAIModelIdx]
 	} else {
 		m.askAIModel = handoff.Model
 	}
-	if len(options.Thinking) > 0 {
-		m.askAIThinking = options.Thinking[m.askAIThinkingIdx]
+	if len(options.Efforts) > 0 {
+		m.askAIThinking = options.Efforts[m.askAIThinkingIdx]
 	} else {
 		m.askAIThinking = handoff.Thinking
 	}
@@ -131,7 +130,7 @@ func (m Model) handleAskAIKey(key string) (tea.Model, tea.Cmd) {
 	case "h", "left":
 		m.askAIFocus = cycleIndex(m.askAIFocus, askAIFieldCount, -1)
 		return m, nil
-	case "l", "right":
+	case "l":
 		m.askAIFocus = cycleIndex(m.askAIFocus, askAIFieldCount, 1)
 		return m, nil
 	case "tab":
@@ -150,10 +149,6 @@ func (m Model) handleAskAIKey(key string) (tea.Model, tea.Cmd) {
 		m.moveAskAIValue(-1)
 		return m, nil
 	case "enter":
-		if m.askAIFocus == askAIFieldModel {
-			m.openAskAIModels()
-			return m, nil
-		}
 		return m.askAIHandoff()
 	}
 	return m, nil
@@ -201,19 +196,10 @@ func (m *Model) moveAskAIValue(delta int) {
 		m.askAIIndex = cycleIndex(m.askAIIndex, len(m.askAIList), delta)
 		m.refreshAskAIOptions()
 	case askAIFieldModel:
-		m.moveAskAIModelValue(delta)
+		// Model changes happen only in the / picker.
 	case askAIFieldThinking:
 		m.moveAskAIThinking(delta)
 	}
-}
-
-// moveAskAIModelValue moves the chosen model in the full list.
-func (m *Model) moveAskAIModelValue(delta int) {
-	if len(m.askAIModels) == 0 {
-		return
-	}
-	m.askAIModelIdx = cycleIndex(m.askAIModelIdx, len(m.askAIModels), delta)
-	m.askAIModel = m.askAIModels[m.askAIModelIdx]
 }
 
 // askAIClose closes the picker.
@@ -276,7 +262,7 @@ func (m *Model) filteredAskAIModelIndices() []int {
 // carries the task project's workflow so the harness knows its valid statuses.
 func (m *Model) askLaunchCmd(h harness.Harness, task model.Task, modelName, thinking string) tea.Cmd {
 	cfg := m.config
-	handoff := cfg.HandoffFor(h.Name)
+	handoff := cfg.Handoff
 	statuses := m.workflowForProject(task.ProjectName)
 	return func() tea.Msg {
 		var err error
@@ -322,6 +308,7 @@ func (m *Model) renderAskAIModal(content string) string {
 		}
 	}
 	if m.askAISearchOpen {
+		lines = append(lines, "")
 		lines = append(lines, styleSelected.Render("  Model search: "+m.askAISearch+"_"))
 		for _, i := range m.filteredAskAIModelIndices() {
 			line := selectionPrefix(i == m.askAIModelIdx) + m.askAIModels[i]
@@ -354,7 +341,7 @@ func (m *Model) askAISelectedRow() string {
 		return styleSelected.Render(text)
 	}
 	return selectionPrefix(true) + field(name, askAIFieldHarness) +
-		askAISeparator + field(m.askAIModel, askAIFieldModel) +
+		askAIHarnessSeparator + field(m.askAIModel, askAIFieldModel) +
 		askAISeparator + field(m.askAIThinking, askAIFieldThinking)
 }
 
@@ -364,9 +351,8 @@ func (m *Model) askAIModalWidth() int {
 	preferred := 72
 	if inRange(m.askAIIndex, len(m.askAIList)) {
 		row := selectionPrefix(true) + m.askAIList[m.askAIIndex].Name +
-			askAISeparator + m.askAIModel + askAISeparator + m.askAIThinking
+			askAIHarnessSeparator + m.askAIModel + askAISeparator + m.askAIThinking
 		preferred = max(preferred, len(row)+4)
 	}
 	return preferred
 }
-

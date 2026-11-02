@@ -307,7 +307,7 @@ func TestListFilters(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{"todo", []string{"list", "--json"}, []string{"a1", "a2", "w1"}},
+		{"todo", []string{"list", "--json"}, []string{"w1", "a1", "a2"}},
 		{"by project", []string{"list", "--project", "api", "--json"}, []string{"a1", "a2"}},
 		{"by status", []string{"list", "--status", "todo", "--json"}, []string{"w1"}},
 		{"by assignee", []string{"list", "--assignee", "@ann", "--json"}, []string{"a1"}},

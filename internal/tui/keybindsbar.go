@@ -15,6 +15,7 @@ const (
 	overlayNone overlayKind = iota
 	overlayDetail
 	overlayTag
+	overlayPath
 	overlayNewTask
 	overlayFilter
 	overlayProject
@@ -92,6 +93,8 @@ func (s KeybindsBar) title() string {
 		return " Keybinds · Detail "
 	case overlayTag:
 		return " Keybinds · Tags "
+	case overlayPath:
+		return " Keybinds · Task path "
 	case overlayNewTask:
 		return " Keybinds · New task "
 	case overlayFilter:
@@ -161,6 +164,11 @@ func (s KeybindsBar) renderOverlay() []string {
 			{"↑↓", "suggestion"},
 			{"Tab", "complete"},
 			{"Esc", "close"},
+		})
+	case overlayPath:
+		return s.renderRows([]keybind{
+			{"Enter", "save"},
+			{"Esc", "cancel"},
 		})
 	case overlayNewTask:
 		return s.renderRows(newTaskKeybinds())

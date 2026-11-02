@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/BurntSushi/toml"
 )
 
 func TestDefaultsPageSize(t *testing.T) {
@@ -93,112 +91,54 @@ func loadFrom(t *testing.T, content string) Config {
 	return Load()
 }
 
-func TestLoadHarnesses(t *testing.T) {
-	cfg := loadFrom(t, `
-[[harness]]
-name = "opencode"
-
-[[harness]]
-name = "my-tool"
-binary = "my-tool-bin"
-`)
-	if len(cfg.Harnesses) != 2 {
-		t.Fatalf("Harnesses = %+v, want 2 entries", cfg.Harnesses)
-	}
-	if cfg.Harnesses[0].Name != "opencode" || cfg.Harnesses[0].Binary != "" {
-		t.Errorf("first entry = %+v, want name opencode and empty binary", cfg.Harnesses[0])
-	}
-	if cfg.Harnesses[1].Name != "my-tool" || cfg.Harnesses[1].Binary != "my-tool-bin" {
-		t.Errorf("second entry = %+v", cfg.Harnesses[1])
-	}
-}
-
-func TestLoadPerHarnessHandoff(t *testing.T) {
-	cfg := loadFrom(t, `
-[[harness]]
-name = "codex"
-binary = "codex"
-
-[harness.handoff]
-command = "codex {{model_args}} {{prompt_file}}"
-cwd = "/work/codex"
-model = "gpt-5"
-thinking = "high"
-`)
-	handoff := cfg.HandoffFor("codex")
-	if handoff.Command != "codex {{model_args}} {{prompt_file}}" || handoff.CWD != "/work/codex" || handoff.Model != "gpt-5" || handoff.Thinking != "high" {
-		t.Errorf("HandoffFor(codex) = %+v", handoff)
-	}
-}
-
-// A single malformed harness entry must not wipe the whole config: the scalars
-// survive and the bad entry is dropped without taking the valid ones with it.
-func TestLoadMalformedHarnessDoesNotWipeConfig(t *testing.T) {
-	cfg := loadFrom(t, `
-list_page_size = 25
-gantt_weeks = 9
-
-[ai.ask.handoff]
-command = "launch {{prompt_file}}"
-
-[[harness]]
-name = "good"
-
-[[harness]]
-name = 5
-
-[[harness]]
-binary = "nameless"
-`)
-	if cfg.ListPageSize != 25 {
-		t.Errorf("ListPageSize = %d, want 25 (scalars must survive a bad harness entry)", cfg.ListPageSize)
-	}
-	if cfg.GanttWeeks != 9 {
-		t.Errorf("GanttWeeks = %d, want 9", cfg.GanttWeeks)
-	}
-	if cfg.Handoff.Command != "launch {{prompt_file}}" {
-		t.Errorf("Handoff.Command = %q, want it preserved", cfg.Handoff.Command)
-	}
-	if len(cfg.Harnesses) != 1 {
-		t.Fatalf("Harnesses = %+v, want only the valid entry", cfg.Harnesses)
-	}
-	if cfg.Harnesses[0].Name != "good" {
-		t.Errorf("Harnesses[0] = %+v, want name good", cfg.Harnesses[0])
-	}
-}
-
 func TestLoadHandoff(t *testing.T) {
 	cfg := loadFrom(t, `
-[ai.ask.handoff]
-command = "herdr agent start {{harness}}"
-cwd = "/tmp/work"
+[handoff]
+command = "mux -- ai exec --harness {{harness}} --prompt-file {{prompt_file}}"
+working_dir = "/tmp/work"
 prompt = "Run this task: Task #{{id}}: {{title}} ({{project}}). Statuses: {{statuses}}."
+model = "free"
+thinking = "high"
 `)
-	if cfg.Handoff.Command != "herdr agent start {{harness}}" {
+	if cfg.Handoff.Command != "mux -- ai exec --harness {{harness}} --prompt-file {{prompt_file}}" {
 		t.Errorf("Handoff.Command = %q", cfg.Handoff.Command)
 	}
-	if cfg.Handoff.CWD != "/tmp/work" {
-		t.Errorf("Handoff.CWD = %q, want /tmp/work", cfg.Handoff.CWD)
+	if cfg.Handoff.WorkingDir != "/tmp/work" {
+		t.Errorf("Handoff.WorkingDir = %q, want /tmp/work", cfg.Handoff.WorkingDir)
 	}
 	if cfg.Handoff.Prompt != "Run this task: Task #{{id}}: {{title}} ({{project}}). Statuses: {{statuses}}." {
 		t.Errorf("Handoff.Prompt = %q", cfg.Handoff.Prompt)
 	}
+	if cfg.Handoff.Model != "free" || cfg.Handoff.Thinking != "high" {
+		t.Errorf("Handoff defaults = %+v, want free/high", cfg.Handoff)
+	}
+}
+
+// The legacy [ai.ask.handoff] spelling still loads, but the new single
+// [handoff] section is canonical.
+func TestLoadLegacyHandoff(t *testing.T) {
+	cfg := loadFrom(t, `
+[ai.ask.handoff]
+command = "launch {{prompt_file}}"
+working_dir = "/tmp/legacy"
+`)
+	if cfg.Handoff.Command != "launch {{prompt_file}}" || cfg.Handoff.WorkingDir != "/tmp/legacy" {
+		t.Errorf("Handoff = %+v, want legacy command and cwd", cfg.Handoff)
+	}
 }
 
 // A partial ai/ask section (no ask table, or no handoff table under it) must
-// not wipe the tag-decoded value: the nested spelling is only used when it is
-// complete.
+// not wipe the tag-decoded value.
 func TestLoadHandoffPartialSectionsIgnored(t *testing.T) {
 	for _, doc := range []string{"[ai]\nother = 1\n", "[ai.ask]\nother = 2\n"} {
 		cfg := loadFrom(t, doc)
-		if cfg.Handoff.Command != "" || cfg.Handoff.CWD != "" || cfg.Handoff.Prompt != "" {
+		if cfg.Handoff.Command != "" || cfg.Handoff.WorkingDir != "" || cfg.Handoff.Prompt != "" {
 			t.Errorf("Handoff = %+v, want zero value for %q", cfg.Handoff, doc)
 		}
 	}
 }
 
-// The dotted toml tag matches a quoted literal section too, so both spellings
-// of the handoff section work.
+// The dotted toml tag matches a quoted literal section too.
 func TestLoadHandoffQuotedLiteralSection(t *testing.T) {
 	cfg := loadFrom(t, `
 ["ai.ask.handoff"]
@@ -209,12 +149,9 @@ command = "launch {{prompt_file}}"
 	}
 }
 
-func TestLoadNoHarnessesOrHandoff(t *testing.T) {
+func TestLoadNoHandoff(t *testing.T) {
 	cfg := loadFrom(t, "list_page_size = 10\n")
-	if len(cfg.Harnesses) != 0 {
-		t.Errorf("Harnesses = %+v, want none", cfg.Harnesses)
-	}
-	if cfg.Handoff.Command != "" || cfg.Handoff.CWD != "" {
+	if cfg.Handoff.Command != "" || cfg.Handoff.WorkingDir != "" {
 		t.Errorf("Handoff = %+v, want zero value", cfg.Handoff)
 	}
 }
@@ -227,17 +164,19 @@ func TestLoadMalformedFileFallsBack(t *testing.T) {
 	}
 }
 
-// decodeHarnesses is total: a non-array harness table is dropped instead of
-// blowing up.
-func TestDecodeHarnessesDefensive(t *testing.T) {
-	if got := decodeHarnesses(map[string]any{"harness": 5}); got != nil {
-		t.Errorf("non-array harness = %+v, want nil", got)
-	}
-	var raw map[string]any
-	if _, err := toml.Decode("[[harness]]\nname = \"ok\"\n", &raw); err != nil {
-		t.Fatal(err)
-	}
-	if got := decodeHarnesses(raw); len(got) != 1 || got[0].Name != "ok" {
-		t.Errorf("valid entry = %+v, want one entry named ok", got)
+// Unknown/legacy [[harness]] tables are ignored without wiping the handoff.
+func TestLoadIgnoresHarnessTables(t *testing.T) {
+	cfg := loadFrom(t, `
+list_page_size = 25
+
+[handoff]
+command = "launch {{prompt_file}}"
+
+[[harness]]
+name = "pi"
+binary = "pi"
+`)
+	if cfg.ListPageSize != 25 || cfg.Handoff.Command != "launch {{prompt_file}}" {
+		t.Errorf("cfg = %+v, want scalars and handoff intact", cfg)
 	}
 }

@@ -49,7 +49,7 @@ func Run(args []string) bool {
 		cmdGantt(args[1:])
 	case "update":
 		if len(args) < 2 {
-			outputError("usage: tsk update <id> [--title ...] [--description ...] [--priority N] [--assignee @name] [--project X] [--tag T] [--untag T]")
+			outputError("usage: tsk update <id> [--title ...] [--description ...] [--priority N] [--assignee @name] [--project X] [--path DIR] [--tag T] [--untag T]")
 		}
 		cmdUpdate(args[1:])
 	case "move":
@@ -491,11 +491,11 @@ func cmdProjectUnarchive(name string) {
 
 func cmdAdd(args []string) {
 	if len(args) == 0 {
-		outputError("usage: tsk add <title> --project X [--priority N] [--assignee @name] [--status S] [--tag T]")
+		outputError("usage: tsk add <title> --project X [--priority N] [--assignee @name] [--status S] [--path DIR] [--tag T]")
 	}
 
 	title := args[0]
-	var project, assignee, status string
+	var project, assignee, status, path string
 	var tags []string
 	priority := 0
 	estimate := 0.0
@@ -533,6 +533,10 @@ func cmdAdd(args []string) {
 					estimate = e
 				}
 			}
+		case "--path":
+			if v, ok := s.next(); ok {
+				path = v
+			}
 		case "--tag", "--tags":
 			if v, ok := s.next(); ok {
 				tags = append(tags, model.ParseTags(v)...)
@@ -547,7 +551,7 @@ func cmdAdd(args []string) {
 	database := openDB()
 	defer closeDB(database)
 
-	t, err := database.CreateTaskFull(project, title, "", assignee, priority, status, estimate, tags)
+	t, err := database.CreateTaskWithPath(project, title, "", assignee, priority, status, estimate, tags, path)
 	if err != nil {
 		outputError(err.Error())
 	}
@@ -717,7 +721,7 @@ func cmdAsk(args []string) {
 	if err != nil {
 		outputError(err.Error())
 	}
-	if err := harness.ValidateCommand(cfg.HandoffFor(selected.Name).Command); err != nil {
+	if err := harness.ValidateCommand(cfg.Handoff.Command); err != nil {
 		outputError(err.Error())
 	}
 
@@ -1200,6 +1204,10 @@ func cmdUpdate(args []string) {
 			if v, ok := s.next(); ok {
 				projectName = v
 			}
+		case "--path":
+			if v, ok := s.next(); ok {
+				updates["path"] = v
+			}
 		}
 	}
 
@@ -1462,7 +1470,7 @@ _tsk_completions() {
     commands="project add list show update move start review done cancel delete comment offday gantt stats ask migrate completion help"
 
     if [[ ${cur} == -* ]] ; then
-		COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --estimate --from --weeks --note --workflow --list-order --path --force --archived --name --harness --model --thinking" -- ${cur}) )
+		COMPREPLY=( $(compgen -W "--json --project --priority --assignee --status --estimate --path --from --weeks --note --workflow --list-order --force --archived --name --harness --model --thinking" -- ${cur}) )
         return 0
     fi
 
@@ -1558,10 +1566,10 @@ func cmdHelp() {
 		"tsk project archive <name>":    "archive project (hides tasks, reversible)",
 		"tsk project unarchive <name>":  "restore an archived project",
 		"tsk project list [--archived]": "list active or archived projects",
-		"tsk add <title> --project X [--priority N] [--assignee @name] [--estimate N] [--tag T]": "create a task",
+		"tsk add <title> --project X [--priority N] [--assignee @name] [--estimate N] [--path DIR] [--tag T]": "create a task",
 		"tsk list [--project X] [--status S] [--assignee A] [--tag T]":                           "list tasks",
 		"tsk show <id>": "show task detail",
-		"tsk update <id> [--title] [--description] [--priority N] [--assignee @name] [--project X] [--estimate N] [--tag T] [--untag T] [--tags a,b]": "update task metadata (--tag adds, --untag removes, --tags replaces; --project moves it)",
+		"tsk update <id> [--title] [--description] [--priority N] [--assignee @name] [--project X] [--path DIR] [--estimate N] [--tag T] [--untag T] [--tags a,b]": "update task metadata (--tag adds, --untag removes, --tags replaces; --project moves it)",
 		"tsk move <id> <status>":                               "move task to a specific status",
 		"tsk start <id>":                                       "move task to 2nd workflow status",
 		"tsk review <id>":                                      "move task to review status",

@@ -44,51 +44,10 @@ func TestDetectOnlyInstalledKnownHarnesses(t *testing.T) {
 	}
 }
 
-func TestDetectIncludesConfigDeclaredUnknown(t *testing.T) {
-	withLookPath(t)
-	cfg := config.Defaults()
-	cfg.Harnesses = []config.HarnessConfig{{Name: "my-tool", Binary: "my-tool-bin"}}
-	got := Detect(cfg)
-	if len(got) != 1 || got[0].Name != "my-tool" || got[0].Binary != "my-tool-bin" {
-		t.Errorf("Detect = %+v, want the declared my-tool entry", got)
-	}
-}
-
-func TestDetectConfigDeclaredWithoutBinaryDefaultsToName(t *testing.T) {
-	withLookPath(t)
-	cfg := config.Defaults()
-	cfg.Harnesses = []config.HarnessConfig{{Name: "my-tool"}}
-	got := Detect(cfg)
-	if len(got) != 1 || got[0].Binary != "my-tool" {
-		t.Errorf("Detect = %+v, want binary defaulting to the name", got)
-	}
-}
-
-func TestDetectConfigOverridesDetectedSameName(t *testing.T) {
-	withLookPath(t, "opencode", "claude")
-	cfg := config.Defaults()
-	cfg.Harnesses = []config.HarnessConfig{{Name: "opencode", Binary: "opencode-custom"}}
-	got := Detect(cfg)
-	var opencodes []Harness
-	for _, h := range got {
-		if h.Name == "opencode" {
-			opencodes = append(opencodes, h)
-		}
-	}
-	if len(opencodes) != 1 {
-		t.Fatalf("Detect = %+v, want exactly one opencode entry", got)
-	}
-	if opencodes[0].Binary != "opencode-custom" {
-		t.Errorf("opencode binary = %q, want the config override", opencodes[0].Binary)
-	}
-}
-
 func TestDetectSortedAlphabetically(t *testing.T) {
-	withLookPath(t, "opencode")
-	cfg := config.Defaults()
-	cfg.Harnesses = []config.HarnessConfig{{Name: "zzz"}, {Name: "aaa"}}
-	got := names(Detect(cfg))
-	want := []string{"aaa", "opencode", "zzz"}
+	withLookPath(t, "opencode", "claude", "pi")
+	got := names(Detect(config.Defaults()))
+	want := []string{"claude", "opencode", "pi"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("Detect order = %v, want %v", got, want)
 	}
@@ -151,13 +110,13 @@ func TestComposePromptDoesNotEmbedDescription(t *testing.T) {
 
 func TestExpandTemplateSubstitutesAndQuotes(t *testing.T) {
 	got, err := ExpandTemplate(
-		"run --kind {{harness}} --bin {{harness_binary}} --cwd {{cwd}} --prompt {{prompt_file}}",
+		"run --kind {{harness}} --bin {{harness_binary}} --working-dir {{working_dir}} --prompt {{prompt_file}}",
 		Harness{Name: "my tool", Binary: "/o'pt/oc"}, "/a b", "/tmp/p'q",
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `run --kind 'my tool' --bin '/o'\''pt/oc' --cwd '/a b' --prompt '/tmp/p'\''q'`
+	want := `run --kind 'my tool' --bin '/o'\''pt/oc' --working-dir '/a b' --prompt '/tmp/p'\''q'`
 	if got != want {
 		t.Errorf("ExpandTemplate = %q, want %q", got, want)
 	}
@@ -170,7 +129,7 @@ func TestExpandTemplateInjectsHarnessFlagsAfterWrapperDelimiter(t *testing.T) {
 	}{
 		{"pi", `run -- --model 'provider/model' --thinking 'high' '/tmp/p'`},
 		{"codex", `run -- --model 'provider/model' -c 'model_reasoning_effort=high' '/tmp/p'`},
-		{"opencode", `run -- --model 'provider/model' --variant 'high' '/tmp/p'`},
+		{"opencode", `run -- --model 'provider/model#high' '/tmp/p'`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := ExpandTemplateWithOptions("run -- {{prompt_file}}", Harness{Name: tc.name}, "/work", "/tmp/p", "provider/model", "high")
@@ -212,13 +171,55 @@ func TestExpandTemplateSupportsHerdrStartThenPrompt(t *testing.T) {
 	}
 }
 
+func TestExpandTemplateSessionAndEffort(t *testing.T) {
+	got, err := ExpandTemplateWithSession(
+		"mux --container {{container}} --working-dir {{working_dir}} --session-id {{session_id}} -- ai exec --harness {{harness}} --model {{model}} --effort {{effort}} --prompt-file {{prompt_file}}",
+		Harness{Name: "pi"}, "/work", "/tmp/p", "free", "high", "tsk-projects-92", "tsk",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `mux --container 'tsk' --working-dir '/work' --session-id 'tsk-projects-92' -- ai exec --harness 'pi' --model 'free' --effort 'high' --prompt-file '/tmp/p'`
+	if got != want {
+		t.Errorf("expanded = %q, want %q", got, want)
+	}
+}
+
+func TestContainerNameUsesProjectDirBase(t *testing.T) {
+	task := model.Task{ProjectName: "projects"}
+	if got := ContainerName(task, "/home/buble/dev/projects/tsk"); got != "tsk" {
+		t.Errorf("ContainerName = %q, want tsk", got)
+	}
+	if got := ContainerName(task, "/home/buble/dev/projects/gitdash/"); got != "gitdash" {
+		t.Errorf("ContainerName with trailing slash = %q, want gitdash", got)
+	}
+	if got := ContainerName(model.Task{ProjectName: "fallback"}, "~"); got != "fallback" {
+		t.Errorf("ContainerName fallback = %q, want fallback", got)
+	}
+}
+
+func TestExecutePassesSessionID(t *testing.T) {
+	call := captureSpawn(t)
+	cfg := config.Defaults()
+	cfg.Handoff.Command = "{{session_id}} {{prompt_file}}"
+	task := model.Task{ID: 92, Title: "pilot", ProjectName: "projects"}
+	if err := Execute(cfg, task, model.DefaultWorkflow, Harness{Name: "pi"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(call.args[1], "'tsk-projects-92' ") {
+		t.Errorf("expanded = %q, want session id tsk-projects-92", call.args[1])
+	}
+	path := strings.Trim(strings.TrimPrefix(call.args[1], "'tsk-projects-92' "), "'")
+	_ = os.Remove(path)
+}
+
 func TestExpandTemplateMissingPromptPlaceholder(t *testing.T) {
 	_, err := ExpandTemplate("run {{harness}}", Harness{Name: "opencode", Binary: "opencode"}, "/tmp", "/tmp/p")
 	if !errors.Is(err, ErrMissingPromptPlaceholder) {
 		t.Fatalf("err = %v, want ErrMissingPromptPlaceholder", err)
 	}
-	if !strings.Contains(err.Error(), "ai.ask.handoff.command") || !strings.Contains(err.Error(), "{{prompt_file}}") {
-		t.Errorf("err = %q, want it to name ai.ask.handoff.command and {{prompt_file}}", err)
+	if !strings.Contains(err.Error(), "handoff.command") || !strings.Contains(err.Error(), "{{prompt_file}}") {
+		t.Errorf("err = %q, want it to name handoff.command and {{prompt_file}}", err)
 	}
 }
 
@@ -235,7 +236,7 @@ func TestValidateCommand(t *testing.T) {
 }
 
 func TestNoHandoffMessage(t *testing.T) {
-	if NoHandoffMessage != "No handoff configured: set ai.ask.handoff.command in config.toml" {
+	if NoHandoffMessage != "No handoff configured: set handoff.command in config.toml" {
 		t.Errorf("NoHandoffMessage = %q", NoHandoffMessage)
 	}
 	if ErrNoHandoff.Error() != NoHandoffMessage {
@@ -260,7 +261,7 @@ func TestHandoffDirDefaultsToWorkingDir(t *testing.T) {
 func TestHandoffDirOverride(t *testing.T) {
 	withGetwd(t, "/launch/dir", nil)
 	cfg := config.Defaults()
-	cfg.Handoff.CWD = "/configured"
+	cfg.Handoff.WorkingDir = "/configured"
 	if got := HandoffDir(cfg); got != "/configured" {
 		t.Errorf("HandoffDir = %q, want the configured override", got)
 	}

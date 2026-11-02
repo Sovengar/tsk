@@ -16,6 +16,7 @@ func detailKeybinds() []keybind {
 		{"a", "ask AI"},
 		{"m", "Move status"},
 		{"p", "priority"},
+		{"P", "task path"},
 		{"M", "move project"},
 		{"d", "delete comment"},
 		{"D", "delete task"},

@@ -125,6 +125,11 @@ type Model struct {
 	tagInput      string
 	tagSuggestIdx int // -1 = no suggestion selected
 
+	// Task path modal (opened with "P" from the Detail)
+	pathOpen   bool
+	pathTaskID int64
+	pathInput  string
+
 	// Inline description editor (embedded in the detail's box)
 	descEditOpen      bool
 	descEditTaskID    int64
@@ -606,6 +611,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case pathSavedMsg:
+		if msg.err != nil {
+			return m, m.setToast(msg.err.Error(), "error")
+		}
+		m.tasks = msg.tasks
+		m.invalidateFilterCache()
+		if m.detailTask != nil && m.detailTask.ID == msg.taskID {
+			m.detailTask = msg.task
+		}
+		return m, nil
+
 	case offdaysLoadedMsg:
 		m.offdays = msg.offdays
 		return m, nil
@@ -744,6 +760,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// Tag modal (overlays the detail)
 	if m.tagOpen {
 		return m.handleTagModalKey(key)
+	}
+
+	// Task path modal (overlays the detail)
+	if m.pathOpen {
+		return m.handlePathKey(key)
 	}
 
 	// Ask AI picker (overlays the detail)
@@ -1082,6 +1103,11 @@ func (m Model) handleDetailKey(key string) (tea.Model, tea.Cmd) {
 		if m.detailTask != nil {
 			return m, m.openPriority(m.detailTask)
 		}
+	case "P":
+		// Per-task working directory; empty inherits the project path.
+		if m.detailTask != nil {
+			return m, m.openPath(m.detailTask)
+		}
 	case "M":
 		// Move to another project, then pick its status there.
 		if m.detailTask != nil {
@@ -1201,6 +1227,8 @@ func (m Model) overlayKind() overlayKind {
 		return overlayDescEdit
 	case m.tagOpen:
 		return overlayTag
+	case m.pathOpen:
+		return overlayPath
 	case m.askAIOpen:
 		return overlayAskAI
 	case m.detailOpen:
@@ -1259,6 +1287,10 @@ func (m Model) View() tea.View {
 
 	if m.tagOpen {
 		content = m.renderTagModal(content)
+	}
+
+	if m.pathOpen {
+		content = m.renderPathModal(content)
 	}
 
 	if m.askAIOpen {

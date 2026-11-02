@@ -6,26 +6,29 @@ package harness
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
-	"slices"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/sovengar/ai"
 
 	"tsk/internal/config"
 	"tsk/internal/model"
 )
 
 // Harness is one entry of the picker: a display name and the executable that
-// runs it.
-type Harness struct {
-	Name   string
-	Binary string
-}
+// runs it. It is the shared AI agent contract, not a tsk-only type.
+type Harness = ai.Agent
 
-// NoHandoffMessage is the pinned refusal shown when ai.ask.handoff.command is unset.
-const NoHandoffMessage = "No handoff configured: set ai.ask.handoff.command in config.toml"
+// ModelOptions is the model/effort picker data for one harness.
+type ModelOptions = ai.Options
+
+// NoHandoffMessage is the pinned refusal shown when handoff.command is unset.
+const NoHandoffMessage = "No handoff configured: set handoff.command in config.toml"
 
 // NoHarnessesMessage is the pinned empty state of the picker, shared by the TUI
 // overlay and the CLI.
@@ -38,7 +41,7 @@ var ErrNoHandoff = errors.New(NoHandoffMessage)
 
 // ErrMissingPromptPlaceholder is returned when the handoff command does not
 // carry the required {{prompt_file}} placeholder.
-var ErrMissingPromptPlaceholder = errors.New("ai.ask.handoff.command must contain {{prompt_file}}")
+var ErrMissingPromptPlaceholder = errors.New("handoff.command must contain {{prompt_file}}")
 
 // Template placeholders understood by the handoff command. {{harness}} is the
 // display Name (wrappers key on it, e.g. herdr --kind); {{harness_binary}} is
@@ -46,10 +49,13 @@ var ErrMissingPromptPlaceholder = errors.New("ai.ask.handoff.command must contai
 const (
 	placeholderHarness       = "{{harness}}"
 	placeholderHarnessBinary = "{{harness_binary}}"
-	placeholderCwd           = "{{cwd}}"
+	placeholderWorkingDir    = "{{working_dir}}"
+	placeholderContainer     = "{{container}}"
 	placeholderPrompt        = "{{prompt_file}}"
 	placeholderModel         = "{{model}}"
 	placeholderThinking      = "{{thinking}}"
+	placeholderEffort        = "{{effort}}"
+	placeholderSessionID     = "{{session_id}}"
 	placeholderModelArgs     = "{{model_args}}"
 )
 
@@ -63,24 +69,13 @@ const (
 	placeholderStatuses = "{{statuses}}"
 )
 
-// DefaultPrompt is the built-in handoff prompt, used when [ai.ask.handoff] prompt is
+// DefaultPrompt is the built-in handoff prompt, used when [handoff] prompt is
 // empty. It identifies the task and gives the concrete tsk CLI commands to read
 // it and update its state; the description is not embedded so the harness
 // always reads the current task.
 const DefaultPrompt = "Run this task: Task #{{id}}: {{title}} ({{project}}). " +
 	"Check it with `tsk show {{id}}`. " +
 	"Update its state as you go with `tsk move {{id}} <status>`; valid statuses: {{statuses}}."
-
-// builtinRegistry maps best-known harness display names to their executable.
-// Members of this list are listed only when the binary is on PATH.
-var builtinRegistry = []Harness{
-	{Name: "aider", Binary: "aider"},
-	{Name: "claude", Binary: "claude"},
-	{Name: "codex", Binary: "codex"},
-	{Name: "gemini", Binary: "gemini"},
-	{Name: "opencode", Binary: "opencode"},
-	{Name: "pi", Binary: "pi"},
-}
 
 // lookPath probes the executable on PATH. It is a variable so tests can make
 // detection deterministic without touching the real PATH.
@@ -91,69 +86,20 @@ var lookPath = exec.LookPath
 // ones (additive). A config entry with the same display name replaces the
 // detected one; declared entries are listed even when not on PATH. The result
 // is sorted by display name.
-func Detect(cfg config.Config) []Harness {
-	return merge(detectedBuiltins(), declaredHarnesses(cfg.Harnesses))
+func Detect(_ config.Config) []Harness {
+	return ai.Detect(nil, lookPath)
 }
 
-// Configured returns detected/declared harnesses with a usable per-harness
-// handoff command. It is the list shown by Ask AI and used by `tsk ask`.
+// Configured returns the detected harnesses when the single handoff command is
+// usable. It is the list shown by Ask AI and used by `tsk ask`.
 func Configured(cfg config.Config) []Harness {
-	all := Detect(cfg)
-	out := make([]Harness, 0, len(all))
-	for _, h := range all {
-		if ValidateCommand(cfg.HandoffFor(h.Name).Command) == nil {
-			out = append(out, h)
-		}
+	if ValidateCommand(cfg.Handoff.Command) != nil {
+		return nil
 	}
-	return out
+	return Detect(cfg)
 }
 
-// detectedBuiltins is the registry filtered by PATH availability.
-func detectedBuiltins() []Harness {
-	out := make([]Harness, 0, len(builtinRegistry))
-	for _, h := range builtinRegistry {
-		if _, err := lookPath(h.Binary); err == nil {
-			out = append(out, h)
-		}
-	}
-	return out
-}
-
-// declaredHarnesses turns the config entries into harnesses, defaulting a
-// missing binary to the display name.
-func declaredHarnesses(entries []config.HarnessConfig) []Harness {
-	out := make([]Harness, 0, len(entries))
-	for _, e := range entries {
-		binary := e.Binary
-		if binary == "" {
-			binary = e.Name
-		}
-		out = append(out, Harness{Name: e.Name, Binary: binary})
-	}
-	return out
-}
-
-// merge dedupes by display name (declared wins) and sorts alphabetically.
-func merge(detected, declared []Harness) []Harness {
-	// No capacity hint: len(detected)+len(declared) is a plain size hint whose
-	// only mutant (lengths subtracted) cannot be observed by any test, so it
-	// was an equivalent survivor.
-	byName := make(map[string]Harness)
-	for _, h := range detected {
-		byName[h.Name] = h
-	}
-	for _, h := range declared {
-		byName[h.Name] = h
-	}
-	out := make([]Harness, 0, len(byName))
-	for _, h := range byName {
-		out = append(out, h)
-	}
-	slices.SortFunc(out, func(a, b Harness) int { return strings.Compare(a.Name, b.Name) })
-	return out
-}
-
-// ComposePrompt is the prompt handed to the harness. prompt is the [ai.ask.handoff]
+// ComposePrompt is the prompt handed to the harness. prompt is the [handoff]
 // prompt template; empty selects DefaultPrompt. It identifies the task and
 // gives the concrete tsk CLI commands to read it and update its state; the
 // description is not embedded so the harness always reads the current task. The
@@ -213,33 +159,44 @@ func ValidateCommand(command string) error {
 }
 
 // ExpandTemplate replaces the placeholders with shell-quoted values, so a
-// template uses them bare (e.g. --cwd {{cwd}}). {{harness}} is the display name
+// template uses them bare (e.g. --working-dir {{working_dir}}). {{harness}} is the display name
 // and {{harness_binary}} the executable. It refuses a command without the
 // required {{prompt_file}} placeholder.
 func ExpandTemplate(command string, h Harness, cwd, promptFile string) (string, error) {
 	return ExpandTemplateWithOptions(command, h, cwd, promptFile, "", "")
 }
 
-// ExpandTemplateWithOptions expands command placeholders including model
-// selection controls.
+// ExpandTemplateWithOptions expands command placeholders including model and
+// effort controls. It has no session id; Execute uses ExpandTemplateWithSession.
 func ExpandTemplateWithOptions(command string, h Harness, cwd, promptFile, modelName, thinking string) (string, error) {
+	return ExpandTemplateWithSession(command, h, cwd, promptFile, modelName, thinking, "", "")
+}
+
+// ExpandTemplateWithSession expands the single handoff template. {{session_id}}
+// is stable per task and used by mux to label a tab; {{effort}} is an alias for
+// the existing {{thinking}} placeholder.
+func ExpandTemplateWithSession(command string, h Harness, cwd, promptFile, modelName, thinking, sessionID, container string) (string, error) {
 	if err := ValidateCommand(command); err != nil {
 		return "", err
 	}
 	modelArgs := ModelArgs(h, modelName, thinking)
-	// Keep the old Herdr-style template working. New configurations should put
-	// {{model_args}} exactly where the selected harness expects its arguments.
+	// Keep old templates working. New configurations use {{model}}/{{effort}}
+	// directly and let the ai binary build agent-specific flags.
 	if modelArgs != "" && !strings.Contains(command, placeholderModelArgs) &&
-		!strings.Contains(command, placeholderModel) && !strings.Contains(command, placeholderThinking) {
+		!strings.Contains(command, placeholderModel) && !strings.Contains(command, placeholderThinking) &&
+		!strings.Contains(command, placeholderEffort) {
 		command = injectModelArgs(command, modelArgs)
 	}
 	r := strings.NewReplacer(
 		placeholderHarness, shellQuote(h.Name),
 		placeholderHarnessBinary, shellQuote(h.Binary),
-		placeholderCwd, shellQuote(cwd),
+		placeholderWorkingDir, shellQuote(cwd),
+		placeholderContainer, shellQuote(container),
 		placeholderPrompt, shellQuote(promptFile),
 		placeholderModel, shellQuote(modelName),
 		placeholderThinking, shellQuote(thinking),
+		placeholderEffort, shellQuote(thinking),
+		placeholderSessionID, shellQuote(sessionID),
 		placeholderModelArgs, modelArgs,
 	)
 	return r.Replace(command), nil
@@ -249,34 +206,14 @@ func ExpandTemplateWithOptions(command string, h Harness, cwd, promptFile, model
 // It is intentionally a string because handoff commands are POSIX shell
 // templates and may run the harness inside a wrapper such as herdr.
 func ModelArgs(h Harness, modelName, thinking string) string {
-	if modelName == "" && thinking == "" {
-		return ""
-	}
-	var args []string
-	switch h.Name {
-	case "pi":
-		if modelName != "" {
-			args = append(args, "--model", shellQuote(modelName))
-		}
-		if thinking != "" {
-			args = append(args, "--thinking", shellQuote(thinking))
-		}
-	case "codex":
-		if modelName != "" {
-			args = append(args, "--model", shellQuote(modelName))
-		}
-		if thinking != "" {
-			args = append(args, "-c", shellQuote("model_reasoning_effort="+thinking))
-		}
-	case "opencode":
-		if modelName != "" {
-			args = append(args, "--model", shellQuote(modelName))
-		}
-		if thinking != "" {
-			args = append(args, "--variant", shellQuote(thinking))
-		}
-	}
-	return strings.Join(args, " ")
+	return ai.ModelArgs(h, modelName, thinking)
+}
+
+// Options loads the local model registry used by the selected harness. A
+// missing or malformed registry returns empty options so Ask AI remains usable
+// with configured command templates and custom harnesses.
+func Options(name string) ModelOptions {
+	return ai.OptionsFor(name)
 }
 
 func injectModelArgs(command, modelArgs string) string {
@@ -288,12 +225,6 @@ func injectModelArgs(command, modelArgs string) string {
 	return command
 }
 
-// handoffFor keeps the old global config working while allowing each harness
-// to own a completely independent command and set of defaults.
-func handoffFor(cfg config.Config, h Harness) config.HandoffConfig {
-	return cfg.HandoffFor(h.Name)
-}
-
 // shellQuote wraps a value in single quotes, escaping embedded single quotes,
 // so the value reaches the shell as one literal argument. It is byte-safe for
 // non-ASCII user text.
@@ -301,11 +232,11 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
-// HandoffDir resolves the handoff working directory: ai.ask.handoff.cwd when set,
+// HandoffDir resolves the handoff working directory: handoff.cwd when set,
 // otherwise the directory where tsk was launched.
 func HandoffDir(cfg config.Config) string {
-	if cfg.Handoff.CWD != "" {
-		return cfg.Handoff.CWD
+	if cfg.Handoff.WorkingDir != "" {
+		return cfg.Handoff.WorkingDir
 	}
 	wd, err := getwd()
 	if err != nil {
@@ -314,20 +245,34 @@ func HandoffDir(cfg config.Config) string {
 	return wd
 }
 
-// ResolveCWD selects the project path for a handoff, falling back to the
-// configured directory and finally the user's home shorthand.
-func ResolveCWD(cfg config.Config, projectPath string) string {
-	return resolveCWD(cfg, cfg.Handoff, projectPath)
+// ResolveWorkingDir selects the working directory for a handoff: the task's
+// own path first, then the project path, then the configured handoff directory
+// and finally ~/Tasks.
+func ResolveWorkingDir(cfg config.Config, taskPath, projectPath string) string {
+	return resolveWorkingDir(cfg, cfg.Handoff, taskPath, projectPath)
 }
 
-func resolveCWD(cfg config.Config, handoff config.HandoffConfig, projectPath string) string {
-	if projectPath != "" {
-		return projectPath
+// ContainerName is the multiplexer workspace for a task. It is the project
+// directory's base name (tsk, gitdash, ...), so tasks from the same repository
+// share one workspace; it falls back to the project name when no path is set.
+func ContainerName(task model.Task, workingDir string) string {
+	if workingDir != "" {
+		base := filepath.Base(filepath.Clean(workingDir))
+		if base != "." && base != string(filepath.Separator) && base != "~" {
+			return base
+		}
 	}
-	if handoff.CWD != "" {
-		return handoff.CWD
+	return task.ProjectName
+}
+
+func resolveWorkingDir(cfg config.Config, handoff config.HandoffConfig, taskPath, projectPath string) string {
+	if dir := model.ResolveDir(taskPath, projectPath); dir != "" {
+		return dir
 	}
-	return "~"
+	if handoff.WorkingDir != "" {
+		return handoff.WorkingDir
+	}
+	return model.EffectiveDir("", "")
 }
 
 // getwd is the working directory probe; a variable so the error branch of
@@ -339,14 +284,13 @@ var getwd = os.Getwd
 // launches the command detached. It returns as soon as the process starts
 // (fire-and-forget).
 func Execute(cfg config.Config, task model.Task, statuses []string, h Harness) error {
-	handoff := handoffFor(cfg, h)
-	return ExecuteWithOptions(cfg, task, statuses, h, handoff.Model, handoff.Thinking)
+	return ExecuteWithOptions(cfg, task, statuses, h, cfg.Handoff.Model, cfg.Handoff.Thinking)
 }
 
 // ExecuteWithOptions performs a handoff with optional per-invocation model and
 // thinking values. Empty values inherit the configured defaults.
 func ExecuteWithOptions(cfg config.Config, task model.Task, statuses []string, h Harness, modelName, thinking string) error {
-	handoff := handoffFor(cfg, h)
+	handoff := cfg.Handoff
 	if err := ValidateCommand(handoff.Command); err != nil {
 		return err
 	}
@@ -360,7 +304,10 @@ func ExecuteWithOptions(cfg config.Config, task model.Task, statuses []string, h
 	if thinking == "" {
 		thinking = handoff.Thinking
 	}
-	if err := LaunchWithOptions(handoff.Command, h, resolveCWD(cfg, handoff, task.ProjectPath), promptPath, modelName, thinking); err != nil {
+	sessionID := fmt.Sprintf("tsk-%s-%d", task.ProjectName, task.ID)
+	workingDir := resolveWorkingDir(cfg, handoff, task.Path, task.ProjectPath)
+	container := ContainerName(task, workingDir)
+	if err := LaunchWithSession(handoff.Command, h, workingDir, promptPath, modelName, thinking, sessionID, container); err != nil {
 		// The harness never started, so the prompt file would be orphaned.
 		_ = os.Remove(promptPath)
 		return err
@@ -375,7 +322,13 @@ func Launch(command string, h Harness, cwd, promptFile string) error {
 
 // LaunchWithOptions expands and starts a handoff command with model controls.
 func LaunchWithOptions(command string, h Harness, cwd, promptFile, modelName, thinking string) error {
-	expanded, err := ExpandTemplateWithOptions(command, h, cwd, promptFile, modelName, thinking)
+	return LaunchWithSession(command, h, cwd, promptFile, modelName, thinking, "", "")
+}
+
+// LaunchWithSession expands and starts the single handoff command with a
+// session id available to the template.
+func LaunchWithSession(command string, h Harness, cwd, promptFile, modelName, thinking, sessionID, container string) error {
+	expanded, err := ExpandTemplateWithSession(command, h, cwd, promptFile, modelName, thinking, sessionID, container)
 	if err != nil {
 		return err
 	}
@@ -393,6 +346,13 @@ func realRunDetached(name string, args []string, dir string) error {
 	if dir == "~" {
 		if home, err := os.UserHomeDir(); err == nil {
 			dir = home
+		}
+	}
+	// The default directory may not exist yet: a handoff to ~/Tasks must not
+	// fail on a fresh machine.
+	if dir == model.EffectiveDir("", "") {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
 		}
 	}
 	cmd := exec.Command(name, args...)

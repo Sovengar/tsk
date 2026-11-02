@@ -303,16 +303,44 @@ func withAskEnv(t *testing.T, handoffCommand, extraHarnessTOML string) string {
 	cfgPath := filepath.Join(dir, "config.toml")
 	body := "[database]\npath = \"" + dbPath + "\"\n"
 	if handoffCommand != "" {
-		body += "\n[ai.ask.handoff]\ncommand = '" + handoffCommand + "'\n"
+		body += "\n[handoff]\ncommand = '" + handoffCommand + "'\n"
 	}
 	body += extraHarnessTOML
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("TSK_CONFIG", cfgPath)
-	// No binary is on PATH: detection contributes nothing.
-	t.Setenv("PATH", t.TempDir())
+	// Create fake binaries only for the names the test asks to detect. The
+	// [[harness]] TOML is intentionally ignored by the config now; it is only
+	// the test's way of naming the binaries it wants on PATH.
+	binDir := filepath.Join(dir, "bin")
+	if err := os.Mkdir(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range declaredNames(extraHarnessTOML) {
+		path := filepath.Join(binDir, name)
+		if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", binDir)
 	return dbPath
+}
+
+func declaredNames(tomlText string) []string {
+	var names []string
+	for _, line := range strings.Split(tomlText, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "name = \"") {
+			continue
+		}
+		name := strings.TrimPrefix(line, "name = \"")
+		name = strings.TrimSuffix(name, "\"")
+		if name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 const harnessOpencode = "\n[[harness]]\nname = \"opencode\"\n"
@@ -437,10 +465,10 @@ func TestCmdAskNoHandoffConfigured(t *testing.T) {
 	id := seedTask(t, dbPath)
 	errOut, code := runErr(t, "ask", strconv.FormatInt(id, 10), "--harness", "opencode")
 	if code == 0 {
-		t.Fatal("tsk ask without ai.ask.handoff.command should fail")
+		t.Fatal("tsk ask without handoff.command should fail")
 	}
-	if !strings.Contains(errOut, "ai.ask.handoff.command") {
-		t.Errorf("error must name ai.ask.handoff.command: %s", errOut)
+	if !strings.Contains(errOut, "handoff.command") {
+		t.Errorf("error must name handoff.command: %s", errOut)
 	}
 }
 
@@ -481,12 +509,19 @@ func TestCmdAskSpawnError(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "tsk.db")
 	cfgPath := filepath.Join(dir, "config.toml")
-	body := "[database]\npath = \"" + dbPath + "\"\n\n[ai.ask.handoff]\ncommand = 'true {{prompt_file}}'\ncwd = \"/no/such/tsk-dir-xyz\"\n" + harnessOpencode
+	body := "[database]\npath = \"" + dbPath + "\"\n\n[handoff]\ncommand = 'true {{prompt_file}}'\nworking_dir = \"/no/such/tsk-dir-xyz\"\n"
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	binDir := filepath.Join(dir, "bin")
+	if err := os.Mkdir(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "opencode"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("TSK_CONFIG", cfgPath)
-	t.Setenv("PATH", t.TempDir())
+	t.Setenv("PATH", binDir)
 	id := seedTask(t, dbPath)
 
 	errOut, code := runErr(t, "ask", strconv.FormatInt(id, 10), "--harness", "opencode")

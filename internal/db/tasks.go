@@ -20,6 +20,12 @@ func (db *DB) CreateTaskWithEstimate(projectName, title, description, assignee s
 
 // CreateTaskFull creates a new task with estimate and tags.
 func (db *DB) CreateTaskFull(projectName, title, description, assignee string, priority int, status string, estimate float64, tags []string) (*model.Task, error) {
+	return db.CreateTaskWithPath(projectName, title, description, assignee, priority, status, estimate, tags, "")
+}
+
+// CreateTaskWithPath creates a new task with estimate, tags and an optional
+// per-task working directory. An empty path inherits the project's.
+func (db *DB) CreateTaskWithPath(projectName, title, description, assignee string, priority int, status string, estimate float64, tags []string, path string) (*model.Task, error) {
 	p, err := db.GetProject(projectName)
 	if err != nil {
 		return nil, err
@@ -42,9 +48,9 @@ func (db *DB) CreateTaskFull(projectName, title, description, assignee string, p
 	// does. Adding a task to an archived project is an explicit target, so the
 	// project comes back with its pre-existing tasks.
 	result, err := db.conn.Exec(
-		`INSERT INTO tasks (project_id, title, description, status, priority, assignee, estimate, tags, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.ID, title, description, status, priority, assignee, estimate, model.TagsJSON(tags), now, now,
+		`INSERT INTO tasks (project_id, title, description, status, priority, assignee, estimate, tags, path, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, title, description, status, priority, assignee, estimate, model.TagsJSON(tags), path, now, now,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create task: %w", err)
@@ -62,6 +68,7 @@ func (db *DB) CreateTaskFull(projectName, title, description, assignee string, p
 		Assignee:    assignee,
 		Estimate:    estimate,
 		Tags:        tags,
+		Path:        path,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}, nil
@@ -73,11 +80,11 @@ func (db *DB) GetTask(id int64) (*model.Task, error) {
 	var completedAt sql.NullString
 	var tagsJSON string
 	err := db.conn.QueryRow(`
-		SELECT t.id, t.project_id, p.name, p.path, t.title, t.description, t.status, t.priority, t.assignee,
+		SELECT t.id, t.project_id, p.name, p.path, t.path, t.title, t.description, t.status, t.priority, t.assignee,
 		       t.estimate, t.tags, t.created_at, t.updated_at, t.completed_at
 		FROM tasks t JOIN projects p ON t.project_id = p.id
 		WHERE t.id = ?`, id,
-	).Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.ProjectPath, &t.Title, &t.Description, &t.Status,
+	).Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.ProjectPath, &t.Path, &t.Title, &t.Description, &t.Status,
 		&t.Priority, &t.Assignee, &t.Estimate, &tagsJSON, &t.CreatedAt, &t.UpdatedAt, &completedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("task not found: %d", id)
@@ -94,17 +101,20 @@ func (db *DB) GetTask(id int64) (*model.Task, error) {
 
 // ListTasks lists tasks with optional filters.
 func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, error) {
-	// The status order of the List comes from list_order (presentation
-	// order, independent of the workflow). When empty ('[]') it falls back to the
-	// workflow order. Unlisted statuses come after the listed ones, and those
-	// that do not exist in the workflow (e.g. cancelled) at the end.
+	// The List has two groups: backlog tasks always come last, the rest first.
+	// Inside each group tasks go by priority (high to low). The status order of
+	// the List comes from list_order (presentation order, independent of the
+	// workflow). When empty ('[]') it falls back to the workflow order. Unlisted
+	// statuses come after the listed ones, and those that do not exist in the
+	// workflow (e.g. cancelled) at the end.
 	query := `
 		WITH ranked AS (
-			SELECT t.id, t.project_id, p.name, p.path, t.title, t.description, t.status, t.priority, t.assignee,
+			SELECT t.id, t.project_id, p.name, p.path, t.path AS task_path, t.title, t.description, t.status, t.priority, t.assignee,
 			       t.estimate, t.tags, t.created_at, t.updated_at, t.completed_at,
 			       (SELECT je.key FROM json_each(p.list_order) AS je WHERE je.value = t.status) AS lo_rank,
 			       (SELECT COUNT(*) FROM json_each(p.list_order)) AS lo_len,
-			       (SELECT je.key FROM json_each(p.workflow) AS je WHERE je.value = t.status) AS wf_rank
+			       (SELECT je.key FROM json_each(p.workflow) AS je WHERE je.value = t.status) AS wf_rank,
+			       CASE WHEN t.status = 'backlog' THEN 1 ELSE 0 END AS is_backlog
 			FROM tasks t JOIN projects p ON t.project_id = p.id
 			WHERE p.archived = 0`
 	args := []any{}
@@ -124,10 +134,11 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 
 	query += `
 		)
-		SELECT id, project_id, name, path, title, description, status, priority, assignee,
+		SELECT id, project_id, name, path, task_path, title, description, status, priority, assignee,
 		       estimate, tags, created_at, updated_at, completed_at
 		FROM ranked
-		ORDER BY priority DESC,
+		ORDER BY is_backlog ASC,
+		         priority DESC,
 		         CASE
 		           WHEN lo_rank IS NOT NULL THEN lo_rank
 		           WHEN lo_len > 0 THEN lo_len
@@ -148,7 +159,7 @@ func (db *DB) ListTasks(projectName, status, assignee string) ([]model.Task, err
 		var t model.Task
 		var completedAt sql.NullString
 		var tagsJSON string
-		if err := rows.Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.ProjectPath, &t.Title, &t.Description,
+		if err := rows.Scan(&t.ID, &t.ProjectID, &t.ProjectName, &t.ProjectPath, &t.Path, &t.Title, &t.Description,
 			&t.Status, &t.Priority, &t.Assignee, &t.Estimate, &tagsJSON, &t.CreatedAt, &t.UpdatedAt, &completedAt); err != nil {
 			return nil, err
 		}
