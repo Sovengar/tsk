@@ -52,9 +52,9 @@ Full cycle example:
 # Register a project with its workflow
 tsk project add web --workflow backlog,todo,doing,review,done --list-order todo,doing,review,done --path ~/src/web
 
-# Create a task
+# Create a task (its own --path overrides the project's for the AI handoff)
 tsk add "Fix login redirect" --project web \
-  --priority 3 --assignee @ana --estimate 0.5 --tag bug,auth
+  --priority 3 --assignee @ana --estimate 0.5 --tag bug,auth --path ~/src/web-login
 
 tsk list --project web --status todo   # filter
 tsk start 1                            # move to "doing"
@@ -108,33 +108,33 @@ list_page_size        = 10    # tasks per page in List view
 default_estimate_days = 1.0   # estimate for tasks without estimate (Gantt)
 gantt_weeks           = 6     # default Gantt horizon
 
-# Ask AI: hand a task to an external harness with `a` (TUI) or `tsk ask` (CLI).
-[[harness]]
-name   = "opencode"       # display name; also the default binary and {{harness}}
-binary = "opencode"       # optional executable, exposed as {{harness_binary}}
-
-[harness.handoff]
-command = "agent={{harness}}-$$; pane=$(herdr tab create --cwd {{cwd}} --label \"$agent\" --focus | jq -r '.result.root_pane.pane_id') && herdr agent start \"$agent\" --kind {{harness}} --pane \"$pane\" -- {{model_args}} && herdr agent prompt \"$agent\" \"$(cat {{prompt_file}})\""
-cwd     = ""              # default: ~ (or the task project's path)
+# Ask AI: one handoff for every harness with `a` (TUI) or `tsk ask` (CLI).
+# `ai` builds the agent-specific argv; `mux` only decides where it appears.
+[handoff]
+command = "mux --container {{container}} --layout tab --working-dir {{working_dir}} --session-id {{session_id}} -- ai exec --harness {{harness}} --model {{model}} --effort {{effort}} --prompt-file {{prompt_file}}"
+working_dir = ""          # default: task path, then project path, then ~/Tasks
 prompt  = "Run this task: Task #{{id}}: {{title}} ({{project}}). Check it with `tsk show {{id}}`. Update its state as you go with `tsk move {{id}} <status>`; valid statuses: {{statuses}}."
-model   = ""              # default model in the Ask AI picker and {{model}}
-thinking = ""             # default thinking level and {{thinking}}
+model   = ""              # optional global default for the picker
+thinking = ""             # optional global effort default
 ```
 
-The herdr example needs `jq` on `PATH` (it parses the `tab create` JSON).
+The command is a `/bin/sh` template. Placeholders: `{{harness}}`, `{{working_dir}}`,
+`{{container}}`, `{{model}}`, `{{effort}}`, `{{session_id}}` and `{{prompt_file}}` (required).
+`{{session_id}}` is `tsk-<project>-<task>` (e.g. `tsk-projects-92`); `mux` uses it only
+to label a tab. `{{container}}` is the projectDir basename (e.g. `tsk`, `gitdash`);
+`mux` uses it as the herdr workspace, so one project keeps one workspace. The task text never reaches the command line: it is written to a
+private temp file pointed at by `{{prompt_file}}`.
 
-Each `[[harness]]` owns its complete handoff: `command` is a `/bin/sh` template with `{{harness}}`
-(display name), `{{harness_binary}}` (the harness executable), `{{cwd}}`,
-`{{model}}`, `{{thinking}}`, `{{model_args}}` and `{{prompt_file}}` (required) placeholders; put `{{model_args}}` exactly where that harness expects its flags and add extensions or wrapper arguments directly to the command. The task text never reaches the
-command line — it is written to a private temp file. The prompt comes from
-`prompt` (a template with `{{id}}`, `{{title}}`, `{{project}}` and
-`{{statuses}}` placeholders; empty = the built-in default): it identifies the
-task, tells the harness to read it with `tsk show <id>`, and to update it as
-it goes with `tsk move <id> <status>`, listing the task project's valid
-statuses (an empty workflow drops that clause). With Herdr, start the harness
-first (`herdr agent start … -- {{model_args}}`) and then deliver the task through
-`herdr agent prompt`; `--prompt` is not a portable native CLI argument. The old
-global `[ai.ask.handoff]` form remains as a compatibility fallback.
+The working directory resolves in this order: the task's own `path`
+(`tsk add|update --path`, or `P` in the detail), the project's `path`
+(`tsk project add|update --path`), the configured `handoff.working_dir`, and
+finally `~/Tasks` (created on demand). A leading `~` expands to the home
+directory. This lets a task from a catch-all project such as "Projects" point
+at the real repository.
+
+No per-harness command is needed. `ai exec` knows each agent's flags (`pi`
+positional prompt, `opencode --prompt`, `codex` flags, …). Swapping the
+presenter (pane, tab, tmux, herdr, kitty) is a config/environment change.
 
 A malformed config does not break anything: defaults are applied.
 

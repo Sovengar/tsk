@@ -57,3 +57,6 @@ report.json
 .mutation-budget.txt
 # Local AI runtime state
 .atl/
+
+# Local review-tool state (tuicr/hunk sessions)
+.review/
