@@ -111,7 +111,7 @@ gantt_weeks           = 6     # default Gantt horizon
 # Ask AI: one handoff for every harness with `a` (TUI) or `tsk ask` (CLI).
 # `ai` builds the agent-specific argv; `mux` only decides where it appears.
 [handoff]
-command = "mux --container {{container}} --layout tab --working-dir {{working_dir}} --session-id {{session_id}} -- ai exec --harness {{harness}} --model {{model}} --effort {{effort}} --prompt-file {{prompt_file}}"
+command = "mux --container {{container}} --layout tab --working-dir {{working_dir}} --session-id {{session_id}} -- agentbridge exec --harness {{harness}} --model {{model}} --effort {{effort}} --prompt-file {{prompt_file}}"
 working_dir = ""          # default: task path, then project path, then ~/Tasks
 prompt  = "Run this task: Task #{{id}}: {{title}} ({{project}}). Check it with `tsk show {{id}}`. Update its state as you go with `tsk move {{id}} <status>`; valid statuses: {{statuses}}."
 model   = ""              # optional global default for the picker
@@ -132,7 +132,7 @@ finally `~/Tasks` (created on demand). A leading `~` expands to the home
 directory. This lets a task from a catch-all project such as "Projects" point
 at the real repository.
 
-No per-harness command is needed. `ai exec` knows each agent's flags (`pi`
+No per-harness command is needed. `agentbridge exec` knows each agent's flags (`pi`
 positional prompt, `opencode --prompt`, `codex` flags, …). Swapping the
 presenter (pane, tab, tmux, herdr, kitty) is a config/environment change.
 

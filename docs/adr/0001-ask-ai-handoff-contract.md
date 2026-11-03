@@ -7,13 +7,13 @@
 
 > **Amendment (2026-11-02):** the per-harness `[[harness]]` / `[handoff]`
 > surface and the agent-specific `command` below are superseded. There is now
-> **one** `[handoff]` command for every harness. `ai exec` builds the
+> **one** `[handoff]` command for every harness. `agentbridge exec` builds the
 > agent-specific argv; `mux` only presents it. See
 > [`remaining.md`](../planning/2026-11-02-feature-ai-request/remaining.md).
 >
 > ```toml
 > [handoff]
-> command = "mux --container {{container}} --layout tab --working-dir {{working_dir}} --session-id {{session_id}} -- ai exec --harness {{harness}} --model {{model}} --effort {{effort}} --prompt-file {{prompt_file}}"
+> command = "mux --container {{container}} --layout tab --working-dir {{working_dir}} --session-id {{session_id}} -- agentbridge exec --harness {{harness}} --model {{model}} --effort {{effort}} --prompt-file {{prompt_file}}"
 > ```
 >
 > Placeholders: `{{harness}}`, `{{working_dir}}`, `{{container}}`, `{{model}}`, `{{effort}}`,

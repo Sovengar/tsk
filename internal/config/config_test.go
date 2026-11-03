@@ -94,13 +94,13 @@ func loadFrom(t *testing.T, content string) Config {
 func TestLoadHandoff(t *testing.T) {
 	cfg := loadFrom(t, `
 [handoff]
-command = "mux -- ai exec --harness {{harness}} --prompt-file {{prompt_file}}"
+command = "mux -- agentbridge exec --harness {{harness}} --prompt-file {{prompt_file}}"
 working_dir = "/tmp/work"
 prompt = "Run this task: Task #{{id}}: {{title}} ({{project}}). Statuses: {{statuses}}."
 model = "free"
 thinking = "high"
 `)
-	if cfg.Handoff.Command != "mux -- ai exec --harness {{harness}} --prompt-file {{prompt_file}}" {
+	if cfg.Handoff.Command != "mux -- agentbridge exec --harness {{harness}} --prompt-file {{prompt_file}}" {
 		t.Errorf("Handoff.Command = %q", cfg.Handoff.Command)
 	}
 	if cfg.Handoff.WorkingDir != "/tmp/work" {

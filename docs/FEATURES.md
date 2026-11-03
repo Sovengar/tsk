@@ -94,7 +94,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **`list_page_size`** — tasks per page in List view; default 10.
 - **`default_estimate_days`** — estimate for tasks without one in the Gantt; default 1.0.
 - **`gantt_weeks`** — default Gantt horizon; default 6.
-- **`[handoff] command`** — one shell template for every harness. `{{harness}}`, `{{working_dir}}`, `{{container}}`, `{{model}}`, `{{effort}}`, `{{session_id}}` and `{{prompt_file}}` (required) are expanded by tsk. The shared `ai exec` binary builds the agent-specific argv; `mux` presents the process. `{{container}}` is the projectDir basename and becomes the herdr workspace (one per project).
+- **`[handoff] command`** — one shell template for every harness. `{{harness}}`, `{{working_dir}}`, `{{container}}`, `{{model}}`, `{{effort}}`, `{{session_id}}` and `{{prompt_file}}` (required) are expanded by tsk. The shared `agentbridge exec` binary builds the agent-specific argv; `mux` presents the process. `{{container}}` is the projectDir basename and becomes the herdr workspace (one per project).
 - **`[handoff] working_dir`, `prompt`, `model`, `thinking`** — optional global defaults. The prompt template uses `{{id}}`, `{{title}}`, `{{project}}` and `{{statuses}}`.
 - Malformed config falls back to defaults silently (the "config never fails" pattern). Unknown/legacy sections are ignored without discarding the handoff.
 

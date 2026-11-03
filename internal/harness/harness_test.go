@@ -173,13 +173,13 @@ func TestExpandTemplateSupportsHerdrStartThenPrompt(t *testing.T) {
 
 func TestExpandTemplateSessionAndEffort(t *testing.T) {
 	got, err := ExpandTemplateWithSession(
-		"mux --container {{container}} --working-dir {{working_dir}} --session-id {{session_id}} -- ai exec --harness {{harness}} --model {{model}} --effort {{effort}} --prompt-file {{prompt_file}}",
+		"mux --container {{container}} --working-dir {{working_dir}} --session-id {{session_id}} -- agentbridge exec --harness {{harness}} --model {{model}} --effort {{effort}} --prompt-file {{prompt_file}}",
 		Harness{Name: "pi"}, "/work", "/tmp/p", "free", "high", "tsk-projects-92", "tsk",
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := `mux --container 'tsk' --working-dir '/work' --session-id 'tsk-projects-92' -- ai exec --harness 'pi' --model 'free' --effort 'high' --prompt-file '/tmp/p'`
+	want := `mux --container 'tsk' --working-dir '/work' --session-id 'tsk-projects-92' -- agentbridge exec --harness 'pi' --model 'free' --effort 'high' --prompt-file '/tmp/p'`
 	if got != want {
 		t.Errorf("expanded = %q, want %q", got, want)
 	}
