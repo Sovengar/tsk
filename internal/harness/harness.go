@@ -14,7 +14,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/sovengar/ai"
+	"github.com/sovengar/agentbridge"
 
 	"tsk/internal/config"
 	"tsk/internal/model"
@@ -22,10 +22,10 @@ import (
 
 // Harness is one entry of the picker: a display name and the executable that
 // runs it. It is the shared AI agent contract, not a tsk-only type.
-type Harness = ai.Agent
+type Harness = agentbridge.Agent
 
 // ModelOptions is the model/effort picker data for one harness.
-type ModelOptions = ai.Options
+type ModelOptions = agentbridge.Options
 
 // NoHandoffMessage is the pinned refusal shown when handoff.command is unset.
 const NoHandoffMessage = "No handoff configured: set handoff.command in config.toml"
@@ -87,7 +87,7 @@ var lookPath = exec.LookPath
 // detected one; declared entries are listed even when not on PATH. The result
 // is sorted by display name.
 func Detect(_ config.Config) []Harness {
-	return ai.Detect(nil, lookPath)
+	return agentbridge.Detect(nil, lookPath)
 }
 
 // Configured returns the detected harnesses when the single handoff command is
@@ -206,14 +206,14 @@ func ExpandTemplateWithSession(command string, h Harness, cwd, promptFile, model
 // It is intentionally a string because handoff commands are POSIX shell
 // templates and may run the harness inside a wrapper such as herdr.
 func ModelArgs(h Harness, modelName, thinking string) string {
-	return ai.ModelArgs(h, modelName, thinking)
+	return agentbridge.ModelArgs(h, modelName, thinking)
 }
 
 // Options loads the local model registry used by the selected harness. A
 // missing or malformed registry returns empty options so Ask AI remains usable
 // with configured command templates and custom harnesses.
 func Options(name string) ModelOptions {
-	return ai.OptionsFor(name)
+	return agentbridge.OptionsFor(name)
 }
 
 func injectModelArgs(command, modelArgs string) string {
