@@ -41,7 +41,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
-	github.com/sovengar/ai v0.0.0
+	github.com/sovengar/ai v0.1.0
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
@@ -67,5 +67,3 @@ require (
 )
 
 tool github.com/go-gremlins/gremlins/cmd/gremlins
-
-replace github.com/sovengar/ai => ../ai
