@@ -89,8 +89,8 @@ func TestMigrationV14AddsTheTaskPathColumn(t *testing.T) {
 	if err := db.conn.QueryRow(`SELECT value FROM _meta WHERE key = 'schema_version'`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != "014" {
-		t.Errorf("schema_version = %q, want 014", version)
+	if version != "015" {
+		t.Errorf("schema_version = %q, want 015", version)
 	}
 }
 

@@ -143,10 +143,54 @@ ALTER TABLE tasks ADD COLUMN path TEXT NOT NULL DEFAULT '';
 // The schema statement and the backfill share one run because a migration with
 // a run function ignores its query field.
 func migrateV14(db *DB) error {
-	if _, err := db.conn.Exec(schemaV14); err != nil {
+	if err := ensureTaskPathColumn(db); err != nil {
 		return err
 	}
 	return backfillProjectPaths(db)
+}
+
+// migrateV15 repairs databases that were stamped as 014 without the task path
+// column. The repair is idempotent: the column is added only when missing, and
+// the backfill runs again because the broken 014 never reached it.
+func migrateV15(db *DB) error {
+	if err := ensureTaskPathColumn(db); err != nil {
+		return err
+	}
+	return backfillProjectPaths(db)
+}
+
+// ensureTaskPathColumn adds tasks.path when an interrupted or broken migration
+// left it out. A healthy database keeps its column; the ALTER is skipped.
+func ensureTaskPathColumn(db *DB) error {
+	has, err := hasColumn(db, "tasks", "path")
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	_, err = db.conn.Exec(schemaV14)
+	return err
+}
+
+// hasColumn reports whether table already has the named column.
+func hasColumn(db *DB, table, column string) (bool, error) {
+	rows, err := db.conn.Query(
+		`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, column,
+	)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	if !rows.Next() {
+		return false, rows.Err()
+	}
+	var count int
+	if err := rows.Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, rows.Err()
 }
 
 func backfillProjectPaths(db *DB) error {
@@ -215,6 +259,7 @@ var migrations = []struct {
 	{"012", schemaV12, nil},
 	{"013", schemaV13, nil},
 	{"014", "", migrateV14},
+	{"015", "", migrateV15},
 }
 
 // noopMigration is the run of a reserved slot: it does not touch the schema, it only
