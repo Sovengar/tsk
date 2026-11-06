@@ -83,6 +83,8 @@ func Run(args []string) bool {
 		cmdStats(args[1:])
 	case "ask":
 		cmdAsk(args[1:])
+	case "__ai-worker":
+		cmdAIWorker(args[1:])
 	case "migrate":
 		cmdMigrate()
 	case "completion":
@@ -490,6 +492,12 @@ func cmdProjectUnarchive(name string) {
 // ---- Task commands ----
 
 func cmdAdd(args []string) {
+	for _, arg := range args {
+		if arg == "--ai" {
+			cmdAddAI(args, openDB)
+			return
+		}
+	}
 	if len(args) == 0 {
 		outputError("usage: tsk add <title> --project X [--priority N] [--assignee @name] [--status S] [--path DIR] [--tag T]")
 	}
@@ -1567,7 +1575,7 @@ func cmdHelp() {
 		"tsk project unarchive <name>":  "restore an archived project",
 		"tsk project list [--archived]": "list active or archived projects",
 		"tsk add <title> --project X [--priority N] [--assignee @name] [--estimate N] [--path DIR] [--tag T]": "create a task",
-		"tsk list [--project X] [--status S] [--assignee A] [--tag T]":                           "list tasks",
+		"tsk list [--project X] [--status S] [--assignee A] [--tag T]":                                        "list tasks",
 		"tsk show <id>": "show task detail",
 		"tsk update <id> [--title] [--description] [--priority N] [--assignee @name] [--project X] [--path DIR] [--estimate N] [--tag T] [--untag T] [--tags a,b]": "update task metadata (--tag adds, --untag removes, --tags replaces; --project moves it)",
 		"tsk move <id> <status>":                               "move task to a specific status",
@@ -1584,7 +1592,8 @@ func cmdHelp() {
 		"tsk offday remove <id>":                               "delete an off-day",
 		"tsk gantt [--project X] [--assignee A] [--from DATE] [--weeks N] [--json]": "project the schedule per person (--project/--assignee filter the view, not the dates)",
 		"tsk stats [--project X]": "show statistics",
-		"tsk ask <task-id> [--harness NAME] [--model MODEL] [--thinking LEVEL]": "hand a task off to an AI harness",
+		"tsk ask <task-id> [--harness NAME] [--model MODEL] [--thinking LEVEL]":           "hand a task off to an AI harness",
+		"tsk add --ai [--wait] [--project X] [--assignee @name] [--path DIR] \"request\"": "create a task from a free-form request (background + notification; --wait runs it now)",
 		"tsk migrate": "run pending migrations",
 	}
 

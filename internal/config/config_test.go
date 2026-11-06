@@ -180,3 +180,63 @@ binary = "pi"
 		t.Errorf("cfg = %+v, want scalars and handoff intact", cfg)
 	}
 }
+
+// TestLoadAISection covers the [ai] block of `tsk add --ai`: the typed decode,
+// the harness default and the notify tri-state (absent = on, false = off).
+func TestLoadAISection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := "[ai]\nharness = \"codex\"\nmodel = \"m\"\nthinking = \"high\"\nnotify = false\nprompt = \"/p/ai.md\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TSK_CONFIG", path)
+
+	cfg := Load()
+	if cfg.AI.Harness != "codex" || cfg.AI.Model != "m" || cfg.AI.Thinking != "high" {
+		t.Fatalf("ai = %+v", cfg.AI)
+	}
+	if cfg.AI.Prompt != "/p/ai.md" {
+		t.Fatalf("prompt = %q", cfg.AI.Prompt)
+	}
+	if cfg.AI.NotifyEnabled() {
+		t.Fatal("notify = false must disable it")
+	}
+	if cfg.AI.HarnessName() != "codex" {
+		t.Fatalf("harness = %q", cfg.AI.HarnessName())
+	}
+}
+
+func TestAIDefaults(t *testing.T) {
+	var ai AIConfig
+	if !ai.NotifyEnabled() {
+		t.Fatal("notify must default to on")
+	}
+	if ai.HarnessName() != DefaultHarness {
+		t.Fatalf("harness = %q, want %q", ai.HarnessName(), DefaultHarness)
+	}
+	on := true
+	ai.Notify = &on
+	if !ai.NotifyEnabled() {
+		t.Fatal("notify = true must enable it")
+	}
+}
+
+func TestAIContainerAndFocus(t *testing.T) {
+	var ai AIConfig
+	if ai.ContainerName() != DefaultContainer {
+		t.Fatalf("container = %q, want %q", ai.ContainerName(), DefaultContainer)
+	}
+	if !ai.FocusEnabled() {
+		t.Fatal("focus must default to on")
+	}
+
+	ai.Container = "AI"
+	if ai.ContainerName() != "AI" {
+		t.Fatalf("container = %q, want the configured one", ai.ContainerName())
+	}
+	off := false
+	ai.Focus = &off
+	if ai.FocusEnabled() {
+		t.Fatal("focus = false must disable it")
+	}
+}

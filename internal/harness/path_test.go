@@ -26,7 +26,7 @@ func TestResolveWorkingDirOrder(t *testing.T) {
 	}
 
 	cfg.Handoff.WorkingDir = ""
-	want := filepath.Join("/home/tester", model.DefaultDirName)
+	want := "/home/tester"
 	if got := ResolveWorkingDir(cfg, "", ""); got != want {
 		t.Errorf("ResolveWorkingDir = %q, want %q", got, want)
 	}

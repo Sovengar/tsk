@@ -1,7 +1,6 @@
 package model
 
 import (
-	"path/filepath"
 	"testing"
 )
 
@@ -41,9 +40,9 @@ func TestEffectiveDirPrefersTheResolver(t *testing.T) {
 	}
 }
 
-func TestEffectiveDirFallsBackToTasks(t *testing.T) {
+func TestEffectiveDirFallsBackToHome(t *testing.T) {
 	t.Setenv("HOME", "/home/tester")
-	want := filepath.Join("/home/tester", DefaultDirName)
+	want := "/home/tester"
 	if got := EffectiveDir("", ""); got != want {
 		t.Errorf("EffectiveDir = %q, want %q", got, want)
 	}

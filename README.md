@@ -77,6 +77,7 @@ Available commands:
 | `tsk comment add\|list\|remove` | Task comments |
 | `tsk offday add\|list\|remove` | Non-working days per person |
 | `tsk gantt [--project] [--assignee] [--from] [--weeks] [--json]` | Per-person projection |
+| `tsk add --ai [--wait] ... "<request>"` | Create a task from a free-form request (background + notification) |
 | `tsk stats [--project X]` | Statistics by status and person |
 | `tsk migrate` | Apply pending migrations |
 | `tsk completion bash\|zsh\|fish` | Shell autocompletion |
@@ -117,6 +118,56 @@ prompt  = "Run this task: Task #{{id}}: {{title}} ({{project}}). Check it with `
 model   = ""              # optional global default for the picker
 thinking = ""             # optional global effort default
 ```
+
+### AI task creation
+
+`tsk add --ai` turns a free-form request into a task. The harness investigates
+the working directory, answers with a JSON spec, and tsk validates it
+(project, assignee, title) before inserting the row itself.
+
+```bash
+tsk add --ai "revisar el recovery de voice-gate"     # background + notification
+tsk add --ai --wait --project voice-gate "revisar"   # foreground, prints spec + task
+```
+
+Its settings live in the `[ai]` section of `~/.config/tsk/config.toml`:
+
+```toml
+[ai]
+harness  = "pi"     # pi, codex, opencode, hermes, jcode
+model    = ""       # provider/model, or a category from the Pi catalog (dumb, free, smart)
+thinking = ""       # optional effort override (off, low, medium, high, ...)
+notify   = true     # desktop notification when a background run finishes
+prompt   = ""       # default: ~/.config/tsk/ai.md
+container = "Background"  # mux workspace that hosts every AI run
+focus     = true    # bring that run's pane to the front when it finishes
+```
+
+`model` accepts a Pi model category (`dumb`, `free`, `smart`, ...) from
+`~/.pi/agent/extensions-extras/models-by-category.json`: tsk resolves it to the
+physical model (and its thinking level) before the harness runs, because Pi
+itself rejects a category name passed to `--model`.
+
+The prompt itself is a plain markdown file, `~/.config/tsk/ai.md` (override with
+`$TSK_AI_PROMPT` or `ai.prompt`):
+
+```markdown
+Create exactly one task and reply with JSON. Request: {{text}}
+Projects: {{projects}}. Assignees: {{assignees}}. Tags: {{tags}}.
+```
+
+The body places `{{text}}`, `{{projects}}`, `{{assignees}}`, `{{tags}}`,
+`{{workdir}}`, `{{project_hint}}` and `{{default_assignee}}`; tsk fills them
+with live state, so the harness never runs `tsk` to read it. Missing or blank
+`ai.md` falls back to the embedded prompt.
+
+Background runs open a new tab in the shared mux workspace (`ai.container`,
+`Background` by default) without stealing focus, so closing the shell they were
+started from loses nothing. When a run finishes, the focus moves to its tab
+(`ai.focus`, on by default), the pane keeps the worker's JSON result, the job and
+log stay under `$XDG_STATE_HOME/tsk/ai`, and `notify-send` fires as well. Without
+a multiplexer (no herdr/tmux/kitty/wezterm) the worker falls back to a detached
+process with that log.
 
 The command is a `/bin/sh` template. Placeholders: `{{harness}}`, `{{working_dir}}`,
 `{{container}}`, `{{model}}`, `{{effort}}`, `{{session_id}}` and `{{prompt_file}}` (required).

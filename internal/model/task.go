@@ -60,7 +60,7 @@ func EffectiveDir(taskPath, projectPath string) string {
 	if err != nil || home == "" {
 		return "."
 	}
-	return filepath.Join(home, DefaultDirName)
+	return home
 }
 
 // expandHome expands a leading "~" with the user's home. Empty in, empty out.

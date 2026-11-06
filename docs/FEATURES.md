@@ -19,6 +19,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 | Status overlay | Move a task to any workflow status, backwards included | `m` (List/Kanban/Detail) |
 | Cross-project move | Move a task to another project, then pick its status | `M` (List/Kanban/Detail) |
 | Ask AI handoff | Hand a task to an external AI harness with per-task harness/model/thinking selection | `a` (List/Kanban/Detail); `tsk ask` |
+| AI task creation | Turn a free-form request into a task: the harness investigates, tsk validates its JSON spec and inserts the row | `tsk add --ai`; `--wait` runs it in the foreground |
 | Off-days | Non-working days per person | `m` (Dashboard); `tsk offday` |
 | Project archiving | Reversible soft delete | `d`/`r` (Dashboard); `tsk project archive` |
 | JSON-first CLI | All commands output JSON | `tsk <cmd>` |
@@ -73,6 +74,7 @@ Concise feature inventory of tsk. Details live in `../README.md`.
 - **Task CRUD** — `tsk add`, `tsk list`, `tsk show`, `tsk update`, `tsk move`, `tsk delete`.
 - **Workflow shortcuts** — `tsk start`, `tsk review`, `tsk done`, `tsk cancel`.
 - **Ask AI** — `tsk ask <task-id> [--harness NAME] [--model MODEL] [--thinking LEVEL]` hands a task to a harness and exits without waiting.
+- **AI task creation** — `tsk add --ai [--wait] [--project X] [--assignee @name] [--path DIR] "<request>"` creates a task from a free-form request. The harness investigates the project directory and answers with a JSON spec; tsk validates the project, the assignee and the title, then inserts the task with the same call as `tsk add`. Without `--wait` the parent detaches a worker (`tsk __ai-worker`), returns `{"ok":true,"pending":true,"log":...,"container":"Background","pane":true}`. The worker runs in a new tab of the shared mux workspace (`[ai] container`, default `Background`) created without focus, so the shell that started it can be closed; on finish the focus moves to that tab (`[ai] focus`, default on), the pane shows the JSON result, `notify-send` fires and the job/log stay under `$XDG_STATE_HOME/tsk/ai`. Without a multiplexer it falls back to a detached process with the log. With `--wait` the command blocks and prints the spec plus the task.
 - **Comments** — `tsk comment add|list|remove`.
 - **Off-days** — `tsk offday add|list|remove`.
 - **Gantt** — `tsk gantt [--project] [--assignee] [--from] [--weeks]`.

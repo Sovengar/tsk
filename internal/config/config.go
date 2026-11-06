@@ -31,6 +31,62 @@ type Config struct {
 	// Command disables the handoff. One command serves every harness; the
 	// agent-specific argv is produced by the shared ai binary.
 	Handoff HandoffConfig `toml:"handoff"`
+	// AI configures `tsk add --ai`: the harness that turns a free-form request
+	// into a task, its optional model/effort, and the notification on finish.
+	AI AIConfig `toml:"ai"`
+}
+
+// AIConfig is the [ai] section used by `tsk add --ai`. The prompt itself lives
+// in ai.md next to this file; only its path is configurable here.
+type AIConfig struct {
+	// Harness is the agent to run: pi, codex, opencode, hermes, jcode.
+	Harness string `toml:"harness"`
+	// Model and Thinking are optional overrides for the harness.
+	Model    string `toml:"model"`
+	Thinking string `toml:"thinking"`
+	// Notify sends a desktop notification when a background run finishes.
+	// Nil means on: the command is fire-and-forget, so the notification is the
+	// only completion signal.
+	Notify *bool `toml:"notify"`
+	// Prompt is the prompt file; empty selects ai.md next to config.toml.
+	Prompt string `toml:"prompt"`
+	// Container is the mux workspace that hosts every AI run, so the shell
+	// that started one can be closed without losing the work.
+	Container string `toml:"container"`
+	// Focus moves the focus to a run's pane when it finishes. Nil means on.
+	Focus *bool `toml:"focus"`
+}
+
+// DefaultContainer is the mux workspace used when [ai] container is empty.
+const DefaultContainer = "Background"
+
+// DefaultHarness is the agent used when [ai] harness is empty.
+const DefaultHarness = "pi"
+
+// NotifyEnabled reports whether the desktop notification is on.
+func (a AIConfig) NotifyEnabled() bool {
+	return a.Notify == nil || *a.Notify
+}
+
+// ContainerName returns the shared mux workspace of AI runs.
+func (a AIConfig) ContainerName() string {
+	if a.Container == "" {
+		return DefaultContainer
+	}
+	return a.Container
+}
+
+// FocusEnabled reports whether a finished run steals the focus.
+func (a AIConfig) FocusEnabled() bool {
+	return a.Focus == nil || *a.Focus
+}
+
+// HarnessName returns the configured harness, or DefaultHarness.
+func (a AIConfig) HarnessName() string {
+	if a.Harness == "" {
+		return DefaultHarness
+	}
+	return a.Harness
 }
 
 // HandoffConfig is the single shell template used to launch any harness.
@@ -55,6 +111,7 @@ type scalarConfig struct {
 	DefaultEstimateDays float64        `toml:"default_estimate_days"`
 	GanttWeeks          int            `toml:"gantt_weeks"`
 	Handoff             HandoffConfig  `toml:"handoff"`
+	AI                  AIConfig       `toml:"ai"`
 }
 
 // DatabaseConfig configures the database.
@@ -120,6 +177,7 @@ func Load() Config {
 	cfg.DefaultEstimateDays = scalars.DefaultEstimateDays
 	cfg.GanttWeeks = scalars.GanttWeeks
 	cfg.Handoff = scalars.Handoff
+	cfg.AI = scalars.AI
 
 	// The handoff section is salvaged from the raw tree so the legacy
 	// [ai.ask.handoff] spelling keeps working and a wrong-typed key never
